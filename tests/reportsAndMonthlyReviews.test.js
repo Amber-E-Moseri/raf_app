@@ -12,7 +12,7 @@ import { getFinancialHealthReport } from '../lib/reports/getFinancialHealthRepor
 import { getIncomeAllocationsReport } from '../lib/reports/getIncomeAllocationsReport.js';
 import { getDashboardReport } from '../lib/reports/getDashboardReport.js';
 import { getMonthlyReviewReport } from '../lib/reports/getMonthlyReviewReport.js';
-import { createMonthlyReview, listMonthlyReviews, updateMonthlyReview } from '../lib/monthlyReviews/monthlyReviews.js';
+import { createMonthlyReview } from '../lib/monthlyReviews/monthlyReviews.js';
 
 function createDbDouble({
   incomeEntries = [],

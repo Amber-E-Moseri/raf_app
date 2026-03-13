@@ -1,0 +1,2026 @@
+openapi: 3.1.0
+info:
+  title: RAF API
+  version: 0.1.0
+  summary: Revenue Allocation Framework backend API
+  description: |-
+    OpenAPI documentation for the RAF backend under `/api/v1`.
+
+    This document follows the authoritative contract in `specs/raf_multi_income_debt_spec.md`
+    and also includes compatibility routes that currently exist in the Next.js route tree.
+    Compatibility aliases are marked `deprecated: true`.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Household
+  - name: Income
+  - name: Transactions
+  - name: Debts
+  - name: Imports
+  - name: Merchant Rules
+  - name: Reports
+  - name: Monthly Reviews
+paths:
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get authenticated user context
+      operationId: getAuthMe
+      responses:
+        '200':
+          description: Authenticated user context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+              examples:
+                default:
+                  value:
+                    userId: 3a8ff8c3-f8a9-4ee1-9bd9-e830b4cc0b6b
+                    email: amber@example.com
+                    householdId: cdb6f1ee-4ed7-448d-a5f0-4487c54ec4f9
+                    onboardingStatus: ONBOARDING_COMPLETE
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /household:
+    get:
+      tags: [Household]
+      summary: Get the current household
+      operationId: getHousehold
+      responses:
+        '200':
+          description: Household
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+              examples:
+                default:
+                  value:
+                    id: cdb6f1ee-4ed7-448d-a5f0-4487c54ec4f9
+                    ownerUserId: 3a8ff8c3-f8a9-4ee1-9bd9-e830b4cc0b6b
+                    name: Family RAF
+                    timezone: America/Toronto
+                    activeMonth: '2026-03-01'
+                    periodStartDay: 5
+                    savingsFloor: '500.00'
+                    monthlyEssentialsBaseline: '2400.00'
+                    createdAt: '2026-03-01T12:00:00.000Z'
+                    updatedAt: '2026-03-10T12:00:00.000Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Household]
+      summary: Update household settings
+      operationId: patchHousehold
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdPatchRequest'
+            examples:
+              default:
+                value:
+                  timezone: America/Toronto
+                  periodStartDay: 5
+                  activeMonth: '2026-03-01'
+                  savingsFloor: '500.00'
+                  monthlyEssentialsBaseline: '2400.00'
+      responses:
+        '200':
+          description: Updated household
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/BusinessRule'
+
+  /household/allocation-categories:
+    get:
+      tags: [Household]
+      summary: List allocation categories
+      operationId: listAllocationCategories
+      responses:
+        '200':
+          description: Allocation categories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AllocationCategory'
+    put:
+      tags: [Household]
+      summary: Replace non-system allocation categories
+      description: Full replace of non-system rows. Wrapped in a transaction.
+      operationId: replaceAllocationCategories
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllocationCategoryReplaceRequest'
+            examples:
+              default:
+                value:
+                  items:
+                    - slug: savings
+                      label: Savings
+                      sortOrder: 1
+                      allocationPercent: '0.1000'
+                      isActive: true
+                    - slug: fixed_bills
+                      label: Fixed Bills
+                      sortOrder: 2
+                      allocationPercent: '0.3000'
+                      isActive: true
+                    - slug: personal_spending
+                      label: Personal Spending
+                      sortOrder: 3
+                      allocationPercent: '0.1500'
+                      isActive: true
+                    - slug: buffer
+                      label: Buffer
+                      sortOrder: 9
+                      allocationPercent: '0.0500'
+                      isActive: true
+      responses:
+        '200':
+          description: Replaced categories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AllocationCategory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/BusinessRule'
+
+  /household/surplus-splits:
+    get:
+      tags: [Household]
+      summary: List surplus split rules
+      operationId: listSurplusSplits
+      responses:
+        '200':
+          description: Surplus split rules
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SurplusSplitRule'
+    put:
+      tags: [Household]
+      summary: Replace surplus split rules
+      operationId: replaceSurplusSplits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SurplusSplitRuleReplaceRequest'
+            examples:
+              default:
+                value:
+                  items:
+                    - slug: emergency_fund
+                      label: Emergency Fund
+                      splitPercent: '0.4000'
+                      sortOrder: 1
+                      isActive: true
+                    - slug: extra_debt_payoff
+                      label: Extra Debt Payoff
+                      splitPercent: '0.4000'
+                      sortOrder: 2
+                      isActive: true
+                    - slug: investing
+                      label: Investing
+                      splitPercent: '0.2000'
+                      sortOrder: 3
+                      isActive: true
+      responses:
+        '200':
+          description: Replaced surplus split rules
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SurplusSplitRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /income:
+    get:
+      tags: [Income]
+      summary: List income entries
+      operationId: listIncome
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Income entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomeListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags: [Income]
+      summary: Create an income entry and deterministic allocations
+      operationId: createIncome
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Prevents duplicate deposit writes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncomeCreateRequest'
+            examples:
+              default:
+                value:
+                  sourceName: Payroll
+                  amount: '1000.01'
+                  receivedDate: '2026-03-10'
+                  notes: March deposit
+      responses:
+        '201':
+          description: Income created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomeCreateResponse'
+        '200':
+          description: Existing idempotent response replayed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomeCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /income/{id}:
+    patch:
+      tags: [Income]
+      summary: Update an income entry
+      description: If `amount` or `receivedDate` changes, income allocations are deleted and recreated in the same transaction.
+      operationId: updateIncome
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncomeUpdateRequest'
+      responses:
+        '200':
+          description: Updated income entry and allocations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomeDetailResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Income]
+      summary: Delete an income entry
+      operationId: deleteIncome
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /transactions:
+    get:
+      tags: [Transactions]
+      summary: List transactions
+      operationId: listTransactions
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+        - name: direction
+          in: query
+          schema:
+            $ref: '#/components/schemas/Direction'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags: [Transactions]
+      summary: Create a transaction
+      description: If `linkedDebtId` is present, the backend creates a matching `debt_payments` row in the same transaction.
+      operationId: createTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCreateRequest'
+      responses:
+        '201':
+          description: Created transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /transactions/{id}:
+    patch:
+      tags: [Transactions]
+      summary: Update a transaction
+      operationId: updateTransaction
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionUpdateRequest'
+      responses:
+        '200':
+          description: Updated transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Transactions]
+      summary: Delete a transaction
+      operationId: deleteTransaction
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /debts:
+    get:
+      tags: [Debts]
+      summary: List debts with derived balances
+      operationId: listDebts
+      responses:
+        '200':
+          description: Debt list and summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebtListResponse'
+    post:
+      tags: [Debts]
+      summary: Create a debt
+      operationId: createDebt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebtCreateRequest'
+      responses:
+        '201':
+          description: Created debt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Debt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /debts/{id}:
+    patch:
+      tags: [Debts]
+      summary: Update a debt
+      operationId: updateDebt
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebtUpdateRequest'
+      responses:
+        '200':
+          description: Updated debt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Debt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/BusinessRule'
+    delete:
+      tags: [Debts]
+      summary: Delete a debt
+      operationId: deleteDebt
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/BusinessRule'
+
+  /imports/upload:
+    post:
+      tags: [Imports]
+      summary: Upload an import file
+      operationId: uploadImportBatch
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Uploaded batch metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportUploadResponse'
+              examples:
+                default:
+                  value:
+                    batchId: 7b8efde0-5f82-4f80-ac39-f9061edb3b33
+                    filename: statement.csv
+                    rowCount: 128
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /imports/parse/{batchId}:
+    post:
+      tags: [Imports]
+      summary: Parse an uploaded import batch
+      operationId: parseImportBatch
+      parameters:
+        - $ref: '#/components/parameters/BatchIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportParseRequest'
+            examples:
+              default:
+                value:
+                  columnMap:
+                    date: Date
+                    description: Description
+                    merchant: Merchant
+                    amount: Amount
+      responses:
+        '200':
+          description: Parsed rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportParseResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/BusinessRule'
+
+  /imports/parse:
+    post:
+      tags: [Imports]
+      deprecated: true
+      summary: Compatibility alias for parsing an import batch
+      operationId: parseImportBatchAlias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ImportParseRequest'
+                - type: object
+                  required: [batchId]
+                  properties:
+                    batchId:
+                      type: string
+                      format: uuid
+      responses:
+        '200':
+          description: Parsed rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportParseResponse'
+
+  /imports/rows/{rowId}:
+    patch:
+      tags: [Imports]
+      summary: Update an imported row decision
+      operationId: updateImportedRow
+      parameters:
+        - name: rowId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportedRowPatchRequest'
+      responses:
+        '200':
+          description: Updated row
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportedRow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /imports/approve/{batchId}:
+    post:
+      tags: [Imports]
+      deprecated: true
+      summary: Compatibility alias for approving an import batch
+      operationId: approveImportBatchAlias
+      parameters:
+        - $ref: '#/components/parameters/BatchIdPath'
+      responses:
+        '200':
+          description: Approval summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportApproveResponse'
+
+  /imports/{batchId}/approve:
+    post:
+      tags: [Imports]
+      summary: Approve an import batch
+      operationId: approveImportBatch
+      parameters:
+        - $ref: '#/components/parameters/BatchIdPath'
+      responses:
+        '200':
+          description: Approval summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportApproveResponse'
+              examples:
+                default:
+                  value:
+                    inserted: 12
+                    skipped: 3
+                    duplicates: 4
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/BusinessRule'
+
+  /imports/{batchId}/review:
+    get:
+      tags: [Imports]
+      summary: Review parsed import rows
+      operationId: reviewImportBatch
+      parameters:
+        - $ref: '#/components/parameters/BatchIdPath'
+      responses:
+        '200':
+          description: Batch review payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportBatchReview'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /imports/{batchId}/reject:
+    post:
+      tags: [Imports]
+      summary: Reject an import batch
+      operationId: rejectImportBatch
+      parameters:
+        - $ref: '#/components/parameters/BatchIdPath'
+      responses:
+        '200':
+          description: Rejection summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportRejectResponse'
+              examples:
+                default:
+                  value:
+                    batchId: 7b8efde0-5f82-4f80-ac39-f9061edb3b33
+                    rejected: 128
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/BusinessRule'
+
+  /merchant-rules:
+    get:
+      tags: [Merchant Rules]
+      summary: List merchant rules
+      operationId: listMerchantRules
+      responses:
+        '200':
+          description: Merchant rules
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MerchantRule'
+    post:
+      tags: [Merchant Rules]
+      summary: Create a merchant rule
+      operationId: createMerchantRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantRuleCreateRequest'
+            examples:
+              default:
+                value:
+                  matchType: contains
+                  matchValue: coffee
+                  categoryId: 617ca9ff-bd50-4698-a5dd-a7458930c988
+                  priority: 10
+      responses:
+        '201':
+          description: Created merchant rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /merchant-rules/{id}:
+    patch:
+      tags: [Merchant Rules]
+      summary: Update a merchant rule
+      operationId: updateMerchantRule
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantRuleUpdateRequest'
+      responses:
+        '200':
+          description: Updated merchant rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Merchant Rules]
+      summary: Delete a merchant rule
+      operationId: deleteMerchantRule
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /reports/income-allocations:
+    get:
+      tags: [Reports]
+      summary: Get allocation details for one income entry
+      operationId: getIncomeAllocationsReport
+      parameters:
+        - name: incomeId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Income allocation report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomeAllocationsReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /reports/dashboard:
+    get:
+      tags: [Reports]
+      summary: Get dashboard period aggregates
+      operationId: getDashboardReport
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Dashboard report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /reports/financial-health:
+    get:
+      tags: [Reports]
+      summary: Get live financial health metrics
+      operationId: getFinancialHealthReport
+      responses:
+        '200':
+          description: Financial health report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialHealthReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /reports/surplus-recommendations:
+    get:
+      tags: [Reports]
+      summary: Get computed surplus distribution recommendations
+      operationId: getSurplusRecommendations
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/IsoDate'
+      responses:
+        '200':
+          description: Surplus recommendation report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurplusRecommendationsReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /reports/monthly-review:
+    get:
+      tags: [Reports]
+      deprecated: true
+      summary: Compatibility alias for monthly review report
+      operationId: getMonthlyReviewReportAlias
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/IsoDate'
+      responses:
+        '200':
+          description: Monthly review report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyReviewReport'
+
+  /reports/trajectory:
+    get:
+      tags: [Reports]
+      summary: Get trajectory projections
+      description: Returns the current backend trajectory payload shape.
+      operationId: getTrajectoryReport
+      parameters:
+        - name: months
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 60
+            default: 12
+      responses:
+        '200':
+          description: Trajectory projections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrajectoryReport'
+              examples:
+                default:
+                  value:
+                    debtPayoffProjection:
+                      - debtId: e59cf8dd-b6cf-4b75-b5d9-768e95a0637a
+                        debtName: Visa
+                        payoffMonth: null
+                        timeline:
+                          - month: '2026-03-01'
+                            projectedBalance: '750.00'
+                    savingsGrowthProjection:
+                      - month: '2026-03-01'
+                        projectedSavingsBalance: '350.00'
+                    emergencyFundCoverageProjection:
+                      - month: '2026-03-01'
+                        emergencyFundBalance: '250.00'
+                        coverageMonths: 1.25
+                    assumptions:
+                      projectedMonthlyIncome: '1000.00'
+                      projectedMonthlySpending: '700.00'
+                      projectedMonthlySurplus: '300.00'
+                      projectedMonthlySavingsContribution: '100.00'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /monthly-reviews:
+    get:
+      tags: [Monthly Reviews]
+      summary: List monthly reviews
+      operationId: listMonthlyReviews
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: Monthly reviews
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MonthlyReview'
+    post:
+      tags: [Monthly Reviews]
+      summary: Create a monthly review
+      operationId: createMonthlyReview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonthlyReviewCreateRequest'
+      responses:
+        '201':
+          description: Created monthly review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyReview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /monthly-reviews/{id}:
+    patch:
+      tags: [Monthly Reviews]
+      summary: Update monthly review notes
+      operationId: updateMonthlyReview
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonthlyReviewUpdateRequest'
+      responses:
+        '200':
+          description: Updated monthly review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyReview'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /monthly-reviews/apply:
+    post:
+      tags: [Monthly Reviews]
+      deprecated: true
+      summary: Apply a monthly review and create allocation transactions
+      operationId: applyMonthlyReviewAlias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonthlyReviewApplyRequest'
+      responses:
+        '201':
+          description: Review created and transactions applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyReviewApplyResponse'
+
+  /monthly-review/apply:
+    post:
+      tags: [Monthly Reviews]
+      deprecated: true
+      summary: Legacy compatibility alias for applying a monthly review
+      operationId: applyMonthlyReviewLegacyAlias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonthlyReviewApplyRequest'
+      responses:
+        '201':
+          description: Review created and transactions applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyReviewApplyResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BatchIdPath:
+      name: batchId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    FromDate:
+      name: from
+      in: query
+      required: true
+      schema:
+        $ref: '#/components/schemas/IsoDate'
+    ToDate:
+      name: to
+      in: query
+      required: true
+      schema:
+        $ref: '#/components/schemas/IsoDate'
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BusinessRule:
+      description: Business rule violation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NoContent:
+      description: No content
+  schemas:
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          examples: [VALIDATION_ERROR]
+        message:
+          type: string
+          examples: [Human-readable description]
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/ErrorDetail'
+    UUID:
+      type: string
+      format: uuid
+    IsoDate:
+      type: string
+      format: date
+      examples: ['2026-03-01']
+    Money:
+      type: string
+      pattern: ^-?(?:0|[1-9]\d*)(?:\.\d{2})$
+      examples: ['1250.00']
+    Fraction4:
+      type: string
+      pattern: ^(?:0|[1-9]\d*)(?:\.\d{4})$
+      examples: ['0.1000']
+    Direction:
+      type: string
+      enum: [debit, credit]
+    AlertStatus:
+      type: string
+      enum: [ok, elevated, risky]
+    ImportBatchStatus:
+      type: string
+      enum: [uploaded, parsing, review, approved, failed]
+    ImportRowStatus:
+      type: string
+      enum: [pending, approved, duplicate, skipped, rejected]
+    OnboardingStatus:
+      type: string
+      enum:
+        - NOT_STARTED
+        - HOUSEHOLD_CREATED
+        - ALLOCATIONS_CONFIGURED
+        - BASELINE_SET
+        - ONBOARDING_COMPLETE
+    MatchType:
+      type: string
+      enum: [exact, contains, starts_with, regex]
+    AuthMeResponse:
+      type: object
+      required: [userId, email, householdId, onboardingStatus]
+      properties:
+        userId:
+          $ref: '#/components/schemas/UUID'
+        email:
+          type: string
+          format: email
+        householdId:
+          $ref: '#/components/schemas/UUID'
+        onboardingStatus:
+          $ref: '#/components/schemas/OnboardingStatus'
+    Household:
+      type: object
+      required:
+        - id
+        - ownerUserId
+        - timezone
+        - activeMonth
+        - periodStartDay
+        - savingsFloor
+        - monthlyEssentialsBaseline
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        ownerUserId:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+        activeMonth:
+          $ref: '#/components/schemas/IsoDate'
+        periodStartDay:
+          type: integer
+          minimum: 1
+          maximum: 28
+        savingsFloor:
+          $ref: '#/components/schemas/Money'
+        monthlyEssentialsBaseline:
+          $ref: '#/components/schemas/Money'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    HouseholdPatchRequest:
+      type: object
+      properties:
+        timezone:
+          type: string
+        periodStartDay:
+          type: integer
+          minimum: 1
+          maximum: 28
+        activeMonth:
+          $ref: '#/components/schemas/IsoDate'
+        savingsFloor:
+          $ref: '#/components/schemas/Money'
+        monthlyEssentialsBaseline:
+          $ref: '#/components/schemas/Money'
+        skip:
+          type: string
+          nullable: true
+    AllocationCategory:
+      type: object
+      required: [id, slug, label, sortOrder, allocationPercent, isSystem, isActive]
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        slug:
+          type: string
+        label:
+          type: string
+        sortOrder:
+          type: integer
+        allocationPercent:
+          $ref: '#/components/schemas/Fraction4'
+        isSystem:
+          type: boolean
+        isActive:
+          type: boolean
+    AllocationCategoryReplaceItem:
+      type: object
+      required: [slug, label, sortOrder, allocationPercent, isActive]
+      properties:
+        slug:
+          type: string
+        label:
+          type: string
+        sortOrder:
+          type: integer
+        allocationPercent:
+          $ref: '#/components/schemas/Fraction4'
+        isActive:
+          type: boolean
+    AllocationCategoryReplaceRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllocationCategoryReplaceItem'
+    SurplusSplitRule:
+      type: object
+      required: [id, slug, label, splitPercent, sortOrder, isActive]
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        slug:
+          type: string
+        label:
+          type: string
+        splitPercent:
+          $ref: '#/components/schemas/Fraction4'
+        sortOrder:
+          type: integer
+        isActive:
+          type: boolean
+    SurplusSplitRuleReplaceItem:
+      type: object
+      required: [slug, label, splitPercent, sortOrder, isActive]
+      properties:
+        slug:
+          type: string
+        label:
+          type: string
+        splitPercent:
+          $ref: '#/components/schemas/Fraction4'
+        sortOrder:
+          type: integer
+        isActive:
+          type: boolean
+    SurplusSplitRuleReplaceRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurplusSplitRuleReplaceItem'
+    IncomeAllocationLine:
+      type: object
+      required: [category, slug, amount]
+      properties:
+        category:
+          type: string
+        slug:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+    IncomeCreateRequest:
+      type: object
+      required: [sourceName, amount, receivedDate]
+      properties:
+        sourceName:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        receivedDate:
+          $ref: '#/components/schemas/IsoDate'
+        notes:
+          type: string
+          nullable: true
+    IncomeUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        sourceName:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        receivedDate:
+          $ref: '#/components/schemas/IsoDate'
+        notes:
+          type: string
+          nullable: true
+    IncomeCreateResponse:
+      type: object
+      required: [incomeId, allocations]
+      properties:
+        incomeId:
+          $ref: '#/components/schemas/UUID'
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncomeAllocationLine'
+    IncomeDetailResponse:
+      type: object
+      required: [incomeId, sourceName, amount, receivedDate, notes, allocations]
+      properties:
+        incomeId:
+          $ref: '#/components/schemas/UUID'
+        sourceName:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        receivedDate:
+          $ref: '#/components/schemas/IsoDate'
+        notes:
+          type: string
+          nullable: true
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncomeAllocationLine'
+    IncomeListItem:
+      type: object
+      required: [incomeId, sourceName, amount, receivedDate, notes]
+      properties:
+        incomeId:
+          $ref: '#/components/schemas/UUID'
+        sourceName:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        receivedDate:
+          $ref: '#/components/schemas/IsoDate'
+        notes:
+          type: string
+          nullable: true
+    IncomeListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncomeListItem'
+        total:
+          $ref: '#/components/schemas/Money'
+    Transaction:
+      type: object
+      required: [id, transactionDate, description, merchant, amount, direction, categoryId, linkedDebtId]
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        transactionDate:
+          $ref: '#/components/schemas/IsoDate'
+        description:
+          type: string
+        merchant:
+          type: string
+          nullable: true
+        amount:
+          $ref: '#/components/schemas/Money'
+        direction:
+          $ref: '#/components/schemas/Direction'
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        linkedDebtId:
+          type: string
+          format: uuid
+          nullable: true
+    TransactionCreateRequest:
+      type: object
+      required: [transactionDate, description, amount, direction]
+      properties:
+        transactionDate:
+          $ref: '#/components/schemas/IsoDate'
+        description:
+          type: string
+        merchant:
+          type: string
+          nullable: true
+        amount:
+          $ref: '#/components/schemas/Money'
+        direction:
+          $ref: '#/components/schemas/Direction'
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        linkedDebtId:
+          type: string
+          format: uuid
+          nullable: true
+    TransactionUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        transactionDate:
+          $ref: '#/components/schemas/IsoDate'
+        description:
+          type: string
+        merchant:
+          type: string
+          nullable: true
+        amount:
+          $ref: '#/components/schemas/Money'
+        direction:
+          $ref: '#/components/schemas/Direction'
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        linkedDebtId:
+          type: string
+          format: uuid
+          nullable: true
+    TransactionListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        nextCursor:
+          type: string
+          nullable: true
+    Debt:
+      type: object
+      required: [id, name, startingBalance, currentBalance, apr, minimumPayment, monthlyPayment, status, sortOrder, isActive]
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+        startingBalance:
+          $ref: '#/components/schemas/Money'
+        currentBalance:
+          $ref: '#/components/schemas/Money'
+        apr:
+          type: number
+        minimumPayment:
+          $ref: '#/components/schemas/Money'
+        monthlyPayment:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+        sortOrder:
+          type: integer
+        isActive:
+          type: boolean
+    DebtCreateRequest:
+      type: object
+      required: [name, startingBalance, apr, minimumPayment, monthlyPayment]
+      properties:
+        name:
+          type: string
+        startingBalance:
+          $ref: '#/components/schemas/Money'
+        apr:
+          type: number
+        minimumPayment:
+          $ref: '#/components/schemas/Money'
+        monthlyPayment:
+          $ref: '#/components/schemas/Money'
+        sortOrder:
+          type: integer
+    DebtUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        apr:
+          type: number
+        minimumPayment:
+          $ref: '#/components/schemas/Money'
+        monthlyPayment:
+          $ref: '#/components/schemas/Money'
+        sortOrder:
+          type: integer
+        isActive:
+          type: boolean
+    DebtListResponse:
+      type: object
+      required: [items, summary]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Debt'
+        summary:
+          type: object
+          required: [totalStarting, totalRemaining, totalPaidAllTime]
+          properties:
+            totalStarting:
+              $ref: '#/components/schemas/Money'
+            totalRemaining:
+              $ref: '#/components/schemas/Money'
+            totalPaidAllTime:
+              $ref: '#/components/schemas/Money'
+    ImportUploadResponse:
+      type: object
+      required: [batchId, filename, rowCount]
+      properties:
+        batchId:
+          $ref: '#/components/schemas/UUID'
+        filename:
+          type: string
+        rowCount:
+          type: integer
+    ImportParseRequest:
+      type: object
+      required: [columnMap]
+      properties:
+        columnMap:
+          type: object
+          required: [date, description, amount]
+          properties:
+            date:
+              type: string
+            description:
+              type: string
+            merchant:
+              type: string
+              nullable: true
+            amount:
+              type: string
+            direction:
+              type: string
+              nullable: true
+    ImportedRow:
+      type: object
+      required:
+        - id
+        - rawDate
+        - rawDescription
+        - rawMerchant
+        - rawAmount
+        - rawDirection
+        - parsedDate
+        - parsedDescription
+        - parsedMerchant
+        - parsedAmount
+        - parsedDirection
+        - suggestedCategoryId
+        - suggestedDebtId
+        - suggestedByRuleId
+        - suggestionReason
+        - duplicateOfId
+        - duplicateReason
+        - status
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        rawDate:
+          type: string
+          nullable: true
+        rawDescription:
+          type: string
+          nullable: true
+        rawMerchant:
+          type: string
+          nullable: true
+        rawAmount:
+          type: string
+          nullable: true
+        rawDirection:
+          type: string
+          nullable: true
+        parsedDate:
+          type: string
+          nullable: true
+        parsedDescription:
+          type: string
+          nullable: true
+        parsedMerchant:
+          type: string
+          nullable: true
+        parsedAmount:
+          type: string
+          nullable: true
+        parsedDirection:
+          type: string
+          nullable: true
+        suggestedCategoryId:
+          type: string
+          format: uuid
+          nullable: true
+        suggestedDebtId:
+          type: string
+          format: uuid
+          nullable: true
+        suggestedByRuleId:
+          type: string
+          format: uuid
+          nullable: true
+        suggestionReason:
+          type: string
+          nullable: true
+        duplicateOfId:
+          type: string
+          format: uuid
+          nullable: true
+        duplicateReason:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ImportRowStatus'
+    ImportParseResponse:
+      type: object
+      required: [batchId, rows]
+      properties:
+        batchId:
+          $ref: '#/components/schemas/UUID'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportedRow'
+    ImportedRowPatchRequest:
+      type: object
+      minProperties: 1
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        debtId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ImportRowStatus'
+    ImportApproveResponse:
+      type: object
+      required: [inserted, skipped, duplicates]
+      properties:
+        inserted:
+          type: integer
+        skipped:
+          type: integer
+        duplicates:
+          type: integer
+    ImportRejectResponse:
+      type: object
+      required: [batchId, rejected]
+      properties:
+        batchId:
+          $ref: '#/components/schemas/UUID'
+        rejected:
+          type: integer
+    ImportBatchReview:
+      type: object
+      required: [batchId, filename, status, rowCount, rows]
+      properties:
+        batchId:
+          $ref: '#/components/schemas/UUID'
+        filename:
+          type: string
+        status:
+          $ref: '#/components/schemas/ImportBatchStatus'
+        rowCount:
+          type: integer
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportedRow'
+    MerchantRule:
+      type: object
+      required: [id, matchType, matchValue, categoryId, priority]
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        matchType:
+          $ref: '#/components/schemas/MatchType'
+        matchValue:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          type: integer
+    MerchantRuleCreateRequest:
+      type: object
+      required: [matchType, matchValue, categoryId]
+      properties:
+        matchType:
+          $ref: '#/components/schemas/MatchType'
+        matchValue:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        priority:
+          type: integer
+    MerchantRuleUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        matchType:
+          $ref: '#/components/schemas/MatchType'
+        matchValue:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          type: integer
+    DistributionLine:
+      type: object
+      required: [slug, label, amount]
+      properties:
+        slug:
+          type: string
+        label:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+    IncomeAllocationsReport:
+      type: object
+      required: [sourceName, amount, receivedDate, allocations]
+      properties:
+        sourceName:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        receivedDate:
+          $ref: '#/components/schemas/IsoDate'
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/DistributionLine'
+    DashboardPeriod:
+      type: object
+      required: [month, incomeTotal, spendingTotal, surplusOrDeficit, savingsActual, alertStatus]
+      properties:
+        month:
+          $ref: '#/components/schemas/IsoDate'
+        incomeTotal:
+          $ref: '#/components/schemas/Money'
+        spendingTotal:
+          $ref: '#/components/schemas/Money'
+        surplusOrDeficit:
+          $ref: '#/components/schemas/Money'
+        savingsActual:
+          $ref: '#/components/schemas/Money'
+        alertStatus:
+          $ref: '#/components/schemas/AlertStatus'
+    DashboardReport:
+      type: object
+      required: [periods]
+      properties:
+        periods:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardPeriod'
+    FinancialHealthReport:
+      type: object
+      required:
+        - activeMonthIncome
+        - monthlyDebtPayments
+        - debtRatio
+        - savingsBalance
+        - savingsFloor
+        - availableSavings
+        - emergencyFundBalance
+        - monthlyEssentials
+        - emergencyCoverageMonths
+        - alertStatus
+      properties:
+        activeMonthIncome:
+          $ref: '#/components/schemas/Money'
+        monthlyDebtPayments:
+          $ref: '#/components/schemas/Money'
+        debtRatio:
+          type: string
+          pattern: ^-?(?:0|[1-9]\d*)(?:\.\d{4})$
+        savingsBalance:
+          $ref: '#/components/schemas/Money'
+        savingsFloor:
+          $ref: '#/components/schemas/Money'
+        availableSavings:
+          $ref: '#/components/schemas/Money'
+        emergencyFundBalance:
+          $ref: '#/components/schemas/Money'
+        monthlyEssentials:
+          $ref: '#/components/schemas/Money'
+        emergencyCoverageMonths:
+          type: number
+          nullable: true
+        alertStatus:
+          $ref: '#/components/schemas/AlertStatus'
+    SurplusRecommendationsReport:
+      type: object
+      required: [netSurplus, distributions, alertStatus]
+      properties:
+        netSurplus:
+          $ref: '#/components/schemas/Money'
+        distributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DistributionLine'
+        targetDebtName:
+          type: string
+          nullable: true
+        alertStatus:
+          $ref: '#/components/schemas/AlertStatus'
+    MonthlyReview:
+      type: object
+      required: [id, reviewMonth, netSurplus, splitApplied, distributions, alertStatus, notes]
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        reviewMonth:
+          $ref: '#/components/schemas/IsoDate'
+        netSurplus:
+          $ref: '#/components/schemas/Money'
+        splitApplied:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Fraction4'
+        distributions:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Money'
+        alertStatus:
+          $ref: '#/components/schemas/AlertStatus'
+        notes:
+          type: string
+          nullable: true
+    MonthlyReviewCreateRequest:
+      type: object
+      required: [reviewMonth]
+      properties:
+        reviewMonth:
+          $ref: '#/components/schemas/IsoDate'
+        notes:
+          type: string
+          nullable: true
+    MonthlyReviewUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        notes:
+          type: string
+          nullable: true
+    MonthlyReviewReport:
+      type: object
+      required: [reviewMonth, netSurplus, distributions, alertStatus]
+      properties:
+        reviewMonth:
+          $ref: '#/components/schemas/IsoDate'
+        netSurplus:
+          $ref: '#/components/schemas/Money'
+        distributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DistributionLine'
+        alertStatus:
+          $ref: '#/components/schemas/AlertStatus'
+    MonthlyReviewApplyRequest:
+      type: object
+      required: [reviewMonth]
+      properties:
+        reviewMonth:
+          $ref: '#/components/schemas/IsoDate'
+        notes:
+          type: string
+          nullable: true
+    MonthlyReviewApplyResponse:
+      type: object
+      required: [review, appliedTransactions]
+      properties:
+        review:
+          $ref: '#/components/schemas/MonthlyReview'
+        appliedTransactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+    DebtPayoffTimelinePoint:
+      type: object
+      required: [month, projectedBalance]
+      properties:
+        month:
+          $ref: '#/components/schemas/IsoDate'
+        projectedBalance:
+          $ref: '#/components/schemas/Money'
+    DebtPayoffProjection:
+      type: object
+      required: [debtId, debtName, payoffMonth, timeline]
+      properties:
+        debtId:
+          $ref: '#/components/schemas/UUID'
+        debtName:
+          type: string
+        payoffMonth:
+          type: string
+          format: date
+          nullable: true
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebtPayoffTimelinePoint'
+    SavingsGrowthProjectionPoint:
+      type: object
+      required: [month, projectedSavingsBalance]
+      properties:
+        month:
+          $ref: '#/components/schemas/IsoDate'
+        projectedSavingsBalance:
+          $ref: '#/components/schemas/Money'
+    EmergencyFundCoverageProjectionPoint:
+      type: object
+      required: [month, emergencyFundBalance, coverageMonths]
+      properties:
+        month:
+          $ref: '#/components/schemas/IsoDate'
+        emergencyFundBalance:
+          $ref: '#/components/schemas/Money'
+        coverageMonths:
+          type: number
+          nullable: true
+    TrajectoryAssumptions:
+      type: object
+      required:
+        - projectedMonthlyIncome
+        - projectedMonthlySpending
+        - projectedMonthlySurplus
+        - projectedMonthlySavingsContribution
+      properties:
+        projectedMonthlyIncome:
+          $ref: '#/components/schemas/Money'
+        projectedMonthlySpending:
+          $ref: '#/components/schemas/Money'
+        projectedMonthlySurplus:
+          $ref: '#/components/schemas/Money'
+        projectedMonthlySavingsContribution:
+          $ref: '#/components/schemas/Money'
+    TrajectoryReport:
+      type: object
+      required:
+        - debtPayoffProjection
+        - savingsGrowthProjection
+        - emergencyFundCoverageProjection
+        - assumptions
+      properties:
+        debtPayoffProjection:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebtPayoffProjection'
+        savingsGrowthProjection:
+          type: array
+          items:
+            $ref: '#/components/schemas/SavingsGrowthProjectionPoint'
+        emergencyFundCoverageProjection:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmergencyFundCoverageProjectionPoint'
+        assumptions:
+          $ref: '#/components/schemas/TrajectoryAssumptions'
