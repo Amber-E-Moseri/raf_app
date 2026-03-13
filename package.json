@@ -4,5 +4,16 @@
   "type": "module",
   "scripts": {
     "test": "node --test"
-  }
+  },
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "tests"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
 }
