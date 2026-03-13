@@ -153,6 +153,15 @@ export interface GoalProgress {
   progress_percent: number;
 }
 
+export interface MonthlyBucketProgress {
+  bucket_id: string;
+  bucket_name: string;
+  allocated_this_month: string;
+  used_this_month: string;
+  remaining_this_month: string;
+  percent_used_this_month: number;
+}
+
 export interface DashboardReport {
   periods: DashboardPeriod[];
   upcoming_fixed_bills_this_month: Array<{
@@ -164,6 +173,7 @@ export interface DashboardReport {
   }>;
   total_expected_fixed_bills_this_month: string;
   bucket_balances: BucketBalance[];
+  monthly_bucket_progress: MonthlyBucketProgress[];
   goal_progress: GoalProgress[];
 }
 

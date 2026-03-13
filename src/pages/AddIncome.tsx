@@ -170,18 +170,37 @@ export function AddIncome() {
         </Card>
 
         <div className="space-y-6">
-          <Card title="Current Allocation Preferences" subtitle="Loaded from the allocation category API when available.">
+          <Card
+            title={success ? "Current Allocation Preferences + Deposit Allocation" : "Current Allocation Preferences"}
+            subtitle={success ? `Income ID: ${success.incomeId}` : "Loaded from the allocation category API when available."}
+          >
+            {success ? (
+              <div className="mb-4">
+                <SuccessNotice
+                  title="Deposit recorded"
+                  message="Allocated amounts below come from the persisted backend response for this deposit."
+                />
+              </div>
+            ) : null}
             {categoriesLoading ? <LoadingState label="Loading allocation preferences..." /> : null}
             {!categoriesLoading && categoriesError ? <ErrorState title="Failed to load allocation preferences" message={categoriesError} onRetry={() => void reloadCategories()} /> : null}
             {!categoriesLoading && !categoriesError && categories?.length ? (
-              <Table headers={["Category", "Percentage", "Status"]}>
-                {categories.map((category) => (
+              <Table headers={success ? ["Category", "Percentage", "Allocated Amount", "Status"] : ["Category", "Percentage", "Status"]}>
+                {categories.map((category) => {
+                  const allocation = success?.allocations.find((item) => item.slug === category.slug);
+                  return (
                   <tr key={category.id}>
                     <td className="px-4 py-3 text-sm font-medium text-raf-ink">{category.label}</td>
                     <td className="px-4 py-3 text-sm text-stone-600">{(Number(category.allocationPercent) * 100).toFixed(2)}%</td>
+                    {success ? (
+                      <td className="px-4 py-3 text-sm text-stone-600">
+                        {allocation ? formatCurrency(allocation.amount) : "Not allocated in this deposit"}
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3 text-sm text-stone-600">{category.isActive ? "Active" : "Inactive"}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </Table>
             ) : null}
             {!categoriesLoading && !categoriesError && !categories?.length ? (
@@ -192,24 +211,7 @@ export function AddIncome() {
             ) : null}
           </Card>
           {error ? <ErrorState title="Failed to record income" message={error} /> : null}
-          {success ? (
-            <Card title="Deposit Recorded" subtitle={`Income ID: ${success.incomeId}`}>
-              <SuccessNotice
-                title="Backend accepted the deposit"
-                message="The allocation breakdown below is the persisted split returned by the API."
-              />
-              <div className="mt-4">
-                <Table headers={["Category", "Allocated amount"]}>
-                  {success.allocations.map((allocation) => (
-                    <tr key={allocation.slug}>
-                      <td className="px-4 py-3 text-sm font-medium text-raf-ink">{allocation.category}</td>
-                      <td className="px-4 py-3 text-sm text-stone-600">{formatCurrency(allocation.amount)}</td>
-                    </tr>
-                  ))}
-                </Table>
-              </div>
-            </Card>
-          ) : (
+          {!success ? (
             <Card title="What happens next" subtitle="The frontend does not compute any splits itself.">
               <ul className="space-y-3 text-sm text-stone-600">
                 <li>The backend validates the payload and records the deposit.</li>
@@ -218,7 +220,7 @@ export function AddIncome() {
                 <li>Use today&apos;s date in ISO format, for example {formatIsoDate(new Date().toISOString())}.</li>
               </ul>
             </Card>
-          )}
+          ) : null}
         </div>
       </section>
     </PageShell>
