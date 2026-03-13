@@ -17,9 +17,17 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Table } from "../components/ui/Table";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { formatCurrency, formatIsoDate, formatPercentWithDigits, monthRange } from "../lib/format";
-import type { AllocationCategory, DashboardPeriod, FinancialHealthReport, IncomeAllocationReport, Transaction } from "../lib/types";
+import type {
+  AllocationCategory,
+  DashboardPeriod,
+  DashboardReport,
+  FinancialHealthReport,
+  IncomeAllocationReport,
+  Transaction,
+} from "../lib/types";
 
 interface DashboardViewModel {
+  dashboard: DashboardReport;
   categories: AllocationCategory[];
   latestAllocationReport: IncomeAllocationReport | null;
   latestPeriod: DashboardPeriod | null;
@@ -69,6 +77,7 @@ export function Dashboard() {
     const latestPeriod = [...dashboard.periods].sort((left, right) => right.month.localeCompare(left.month))[0] ?? null;
 
     return {
+      dashboard,
       categories,
       latestAllocationReport,
       latestPeriod,
@@ -108,23 +117,38 @@ export function Dashboard() {
   const activeCategoryCount = activeCategories.length || data.latestAllocationReport?.allocations.length || 0;
   const latestPeriodIncome = data.latestPeriod?.incomeTotal ?? "0.00";
   const latestSurplus = data.latestPeriod?.surplusOrDeficit ?? "0.00";
+  const bucketBalancesBySlug = new Map(
+    data.dashboard.bucket_balances.map((bucket) => [bucket.slug, bucket.balance]),
+  );
+  const monthlyProgressByBucketName = new Map(
+    data.dashboard.monthly_bucket_progress.map((progress) => [progress.bucket_id, progress]),
+  );
+  const goalProgressByBucketName = new Map(
+    data.dashboard.goal_progress.map((progress) => [progress.bucket_id, progress]),
+  );
   const latestAllocationAmounts = new Map(
     (data.latestAllocationReport?.allocations ?? []).map((allocation) => [allocation.slug, allocation.amount]),
   );
   const allocationRows = activeCategories.length
     ? activeCategories.map((category) => ({
+      bucketId: category.id,
       slug: category.slug,
       label: category.label,
       percent: category.allocationPercent,
       allocatedAmount: latestAllocationAmounts.get(category.slug) ?? null,
-      currentBalance: null,
+      currentBalance: bucketBalancesBySlug.get(category.slug) ?? null,
+      monthlyProgress: monthlyProgressByBucketName.get(category.id) ?? null,
+      goalProgress: goalProgressByBucketName.get(category.id) ?? null,
     }))
     : (data.latestAllocationReport?.allocations.map((allocation) => ({
+      bucketId: allocation.slug,
       slug: allocation.slug,
       label: allocation.label,
       percent: null,
       allocatedAmount: allocation.amount,
       currentBalance: null,
+      monthlyProgress: null,
+      goalProgress: null,
     })) ?? []);
 
   return (
@@ -181,7 +205,7 @@ export function Dashboard() {
                 ))}
               </Table>
               <p className="mt-4 text-xs text-stone-500">
-                Allocation percentages now reflect the current backend bucket settings. Allocated amounts come from the latest deposit only.
+                Current balance is reserved money in RAF. The monthly usage view on the right shows how much is left this month.
               </p>
             </>
           ) : (
@@ -195,9 +219,17 @@ export function Dashboard() {
         <div className="space-y-6">
           <AllocationBarChart
             items={allocationRows.map((row) => ({
-              slug: row.slug,
+              bucketId: row.bucketId,
               label: row.label,
-              percent: row.percent,
+              allocationPercent: row.percent,
+              allocatedThisMonth: row.monthlyProgress?.allocated_this_month ?? null,
+              usedThisMonth: row.monthlyProgress?.used_this_month ?? null,
+              remainingThisMonth: row.monthlyProgress?.remaining_this_month ?? null,
+              percentUsedThisMonth: row.monthlyProgress?.percent_used_this_month ?? null,
+              goalName: row.goalProgress?.goal_name ?? null,
+              goalTargetAmount: row.goalProgress?.target_amount ?? null,
+              goalReservedAmount: row.goalProgress?.reserved_amount ?? null,
+              goalProgressPercent: row.goalProgress?.progress_percent ?? null,
             }))}
           />
           <FinancialHealthIndicator report={data.financialHealth} />
