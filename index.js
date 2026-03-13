@@ -32,6 +32,13 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+app.use(express.raw({
+  type: (req) => {
+    const contentType = String(req.headers['content-type'] ?? '').toLowerCase();
+    return contentType.startsWith('multipart/form-data') || contentType.startsWith('application/pdf');
+  },
+  limit: '10mb',
+}));
 
 app.use((req, _res, next) => {
   if (!req.headers['x-household-id']) {
