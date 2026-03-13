@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { applyMonthlyReview } from "../api/monthlyReviewApi";
+import { applyMonthlyReview, applyMonthlyReviewsInRange } from "../api/monthlyReviewApi";
 import { getSurplusRecommendations } from "../api/reportsApi";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
@@ -34,17 +34,47 @@ function alertTone(status: "ok" | "elevated" | "risky") {
   return "success";
 }
 
+function incrementMonth(reviewMonth: string) {
+  const value = new Date(`${reviewMonth}T00:00:00.000Z`);
+  value.setUTCMonth(value.getUTCMonth() + 1);
+  return value.toISOString().slice(0, 10);
+}
+
+function buildReviewMonthRange(startMonth: string, endMonth: string) {
+  if (startMonth > endMonth) {
+    return [];
+  }
+
+  const reviewMonths = [];
+  let currentMonth = startMonth;
+
+  while (currentMonth <= endMonth) {
+    reviewMonths.push(currentMonth);
+    currentMonth = incrementMonth(currentMonth);
+  }
+
+  return reviewMonths;
+}
+
 export function MonthlyReview() {
   const initialMonth = useMemo(() => defaultReviewMonth(), []);
   const [reviewMonth, setReviewMonth] = useState(initialMonth);
+  const [batchStartMonth, setBatchStartMonth] = useState(initialMonth);
+  const [batchEndMonth, setBatchEndMonth] = useState(initialMonth);
   const [notes, setNotes] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
   const [preview, setPreview] = useState<SurplusRecommendationsReport | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<ApplyMonthlyReviewResponse | null>(null);
+  const [batchResult, setBatchResult] = useState<{
+    reviewMonths: string[];
+    appliedCount: number;
+    totalTransactions: number;
+  } | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -102,6 +132,53 @@ export function MonthlyReview() {
       setResult(null);
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleBatchSubmit() {
+    const startError = validateFirstDayOfMonth(batchStartMonth, "Start month");
+    const endError = validateFirstDayOfMonth(batchEndMonth, "End month");
+    const rangeError = !startError && !endError && batchStartMonth > batchEndMonth
+      ? "End month must be the same as or after the start month."
+      : null;
+    const nextErrors = {
+      ...fieldErrors,
+      batchStartMonth: startError,
+      batchEndMonth: endError ?? rangeError,
+    };
+
+    setFieldErrors(nextErrors);
+
+    if (startError || endError || rangeError) {
+      setSubmitError(null);
+      setBatchResult(null);
+      return;
+    }
+
+    const reviewMonths = buildReviewMonthRange(batchStartMonth, batchEndMonth);
+
+    setIsBatchSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const responses = await applyMonthlyReviewsInRange(
+        reviewMonths,
+        notes.trim() || undefined,
+      );
+      setBatchResult({
+        reviewMonths,
+        appliedCount: responses.length,
+        totalTransactions: responses.reduce(
+          (sum, response) => sum + response.appliedTransactions.length,
+          0,
+        ),
+      });
+      setResult(responses[responses.length - 1] ?? null);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Mass monthly review failed.");
+      setBatchResult(null);
+    } finally {
+      setIsBatchSubmitting(false);
     }
   }
 
@@ -180,6 +257,59 @@ export function MonthlyReview() {
           ) : null}
         </Card>
       </section>
+
+      <Card title="Mass Apply Review" subtitle="Apply the monthly review across a month range using the same backend apply endpoint.">
+        <div className="grid gap-4 lg:grid-cols-[1fr,1fr,auto]">
+          <Input
+            label="Start month"
+            name="batchStartMonth"
+            type="date"
+            value={batchStartMonth}
+            error={fieldErrors.batchStartMonth}
+            onBlur={() => setFieldErrors((current) => ({ ...current, batchStartMonth: validateFirstDayOfMonth(batchStartMonth, "Start month") }))}
+            onChange={(event) => {
+              setBatchStartMonth(event.target.value);
+              setFieldErrors((current) => ({ ...current, batchStartMonth: null, batchEndMonth: null }));
+            }}
+          />
+          <Input
+            label="End month"
+            name="batchEndMonth"
+            type="date"
+            value={batchEndMonth}
+            error={fieldErrors.batchEndMonth}
+            onBlur={() => setFieldErrors((current) => ({ ...current, batchEndMonth: validateFirstDayOfMonth(batchEndMonth, "End month") }))}
+            onChange={(event) => {
+              setBatchEndMonth(event.target.value);
+              setFieldErrors((current) => ({ ...current, batchStartMonth: null, batchEndMonth: null }));
+            }}
+          />
+          <div className="flex items-end">
+            <Button
+              disabled={isBatchSubmitting || isSubmitting}
+              onClick={() => void handleBatchSubmit()}
+              type="button"
+            >
+              {isBatchSubmitting ? <LoadingSpinner inline size="sm" label="Applying reviews..." /> : "Mass Apply Review"}
+            </Button>
+          </div>
+        </div>
+        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
+          This applies each month sequentially. If a month already has a saved review, the batch stops on that month and
+          returns the backend error.
+        </div>
+        {batchResult ? (
+          <div className="mt-4">
+            <SuccessNotice
+              title="Mass review applied"
+              message={`Applied ${batchResult.appliedCount} month${batchResult.appliedCount === 1 ? "" : "s"} and created ${batchResult.totalTransactions} allocation transaction${batchResult.totalTransactions === 1 ? "" : "s"}.`}
+            />
+            <p className="mt-3 text-sm text-stone-500">
+              Months applied: {batchResult.reviewMonths.join(", ")}
+            </p>
+          </div>
+        ) : null}
+      </Card>
 
       {submitError ? <ErrorState title="Failed to apply monthly review" message={submitError} /> : null}
       {result ? (
