@@ -96,7 +96,7 @@ function createDbDouble({
 
 test('merchant rules CRUD supports list, create, patch, and delete', async () => {
   const db = createDbDouble({
-    merchantRules: [{ id: 'rule_1', merchantPattern: 'coffee', categoryId: 'cat_food', priority: 2, enabled: true }],
+    merchantRules: [{ id: 'rule_1', matchType: 'contains', matchValue: 'coffee', categoryId: 'cat_food', priority: 2 }],
   });
 
   const listed = await listMerchantRules({ db, householdId: 'household_1' });
@@ -105,10 +105,11 @@ test('merchant rules CRUD supports list, create, patch, and delete', async () =>
   const created = await createMerchantRule({
     db,
     householdId: 'household_1',
-    input: { merchantPattern: 'Hydro One', categoryId: 'cat_bills', priority: 5, enabled: true },
+    input: { matchType: 'starts_with', matchValue: 'Hydro One', categoryId: 'cat_bills', priority: 5 },
   });
   assert.equal(created.id, 'rule_2');
-  assert.equal(created.enabled, true);
+  assert.equal(created.matchType, 'starts_with');
+  assert.equal(created.matchValue, 'Hydro One');
 
   const updated = await updateMerchantRule({
     db,
@@ -124,19 +125,32 @@ test('merchant rules CRUD supports list, create, patch, and delete', async () =>
 
 test('merchant rule matching prefers higher priority, ignores disabled rules, and is case-insensitive', () => {
   const rules = [
-    { id: 'rule_1', merchantPattern: 'coffee', categoryId: 'cat_food', priority: 1, enabled: true, createdAt: '2026-03-01T00:00:00.000Z' },
-    { id: 'rule_2', merchantPattern: 'COFFEE SHOP', categoryId: 'cat_premium', priority: 10, enabled: true, createdAt: '2026-03-02T00:00:00.000Z' },
-    { id: 'rule_3', merchantPattern: 'coffee', categoryId: 'cat_disabled', priority: 100, enabled: false, createdAt: '2026-03-03T00:00:00.000Z' },
+    { id: 'rule_1', matchType: 'contains', matchValue: 'coffee', categoryId: 'cat_food', priority: 1, enabled: true, createdAt: '2026-03-01T00:00:00.000Z' },
+    { id: 'rule_2', matchType: 'exact', matchValue: 'COFFEE SHOP TORONTO', categoryId: 'cat_exact', priority: 10, enabled: true, createdAt: '2026-03-04T00:00:00.000Z' },
+    { id: 'rule_3', matchType: 'starts_with', matchValue: 'COFFEE SHOP', categoryId: 'cat_premium', priority: 10, enabled: true, createdAt: '2026-03-02T00:00:00.000Z' },
+    { id: 'rule_4', matchType: 'contains', matchValue: 'coffee', categoryId: 'cat_disabled', priority: 100, enabled: false, createdAt: '2026-03-03T00:00:00.000Z' },
   ];
 
   const matched = matchMerchantRule(rules, 'Coffee Shop Toronto');
   assert.equal(matched.id, 'rule_2');
-  assert.equal(matched.categoryId, 'cat_premium');
+  assert.equal(matched.categoryId, 'cat_exact');
+});
+
+test('merchant rule matching supports regex patterns', () => {
+  const matched = matchMerchantRule(
+    [
+      { id: 'rule_1', matchType: 'regex', matchValue: '^uber\\s+trip$', categoryId: 'cat_transport', priority: 1, createdAt: '2026-03-01T00:00:00.000Z' },
+    ],
+    'Uber Trip',
+  );
+
+  assert.equal(matched.id, 'rule_1');
+  assert.equal(matched.categoryId, 'cat_transport');
 });
 
 test('merchant rules, trajectory, and monthly review apply routes expose payloads', async () => {
   const db = createDbDouble({
-    merchantRules: [{ id: 'rule_1', merchantPattern: 'coffee', categoryId: 'cat_food', priority: 2, enabled: true }],
+    merchantRules: [{ id: 'rule_1', matchType: 'contains', matchValue: 'coffee', categoryId: 'cat_food', priority: 2 }],
     incomeEntries: [{ receivedDate: '2026-03-10', amount: '1000.00' }],
     transactions: [{ transactionDate: '2026-03-12', amount: '500.00', direction: 'debit' }],
     surplusSplitRules: [{ slug: 'emergency_fund', splitPercent: '1.0000', sortOrder: 1, isActive: true }],
@@ -152,7 +166,7 @@ test('merchant rules, trajectory, and monthly review apply routes expose payload
     new Request('http://localhost/api/v1/merchant-rules', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-household-id': 'household_1' },
-      body: JSON.stringify({ merchantPattern: 'Hydro', categoryId: 'cat_bills', enabled: true }),
+      body: JSON.stringify({ matchType: 'contains', matchValue: 'Hydro', categoryId: 'cat_bills' }),
     }),
     { db },
   );

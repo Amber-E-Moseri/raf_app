@@ -5,6 +5,7 @@ import { GET as getDashboardRoute } from '../app/api/v1/reports/dashboard/route.
 import { GET as getFinancialHealthRoute } from '../app/api/v1/reports/financial-health/route.js';
 import { GET as getIncomeAllocationsRoute } from '../app/api/v1/reports/income-allocations/route.js';
 import { GET as getMonthlyReviewReportRoute } from '../app/api/v1/reports/monthly-review/route.js';
+import { GET as getSurplusRecommendationsRoute } from '../app/api/v1/reports/surplus-recommendations/route.js';
 import { GET as listMonthlyReviewsRoute, POST as createMonthlyReviewRoute } from '../app/api/v1/monthly-reviews/route.js';
 import { PATCH as patchMonthlyReviewRoute } from '../app/api/v1/monthly-reviews/[id]/route.js';
 import { getFinancialHealthReport } from '../lib/reports/getFinancialHealthReport.js';
@@ -147,6 +148,33 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
       },
     ],
   });
+});
+
+test('getDashboardReport accepts paginated transaction results from the DB adapter', async () => {
+  const db = createDbDouble({
+    incomeEntries: [{ receivedDate: '2026-03-10', amount: '1000.00' }],
+    incomeAllocations: [{ receivedDate: '2026-03-10', slug: 'savings', allocatedAmount: '100.00' }],
+    transactions: [{ transactionDate: '2026-03-12', amount: '700.00', direction: 'debit' }],
+    debtPayments: [{ paymentDate: '2026-03-15', amount: '100.00' }],
+  });
+
+  const originalListTransactions = db.transaction;
+  db.transaction = async (callback) => originalListTransactions.call(db, async (tx) => callback({
+    ...tx,
+    async listTransactions({ from, to }) {
+      const items = await tx.listTransactions({ from, to });
+      return { items, nextCursor: null };
+    },
+  }));
+
+  const result = await getDashboardReport({
+    db,
+    householdId: 'household_1',
+    from: '2026-03-01',
+    to: '2026-03-01',
+  });
+
+  assert.equal(result.periods[0].spendingTotal, '700.00');
 });
 
 test('createMonthlyReview computes surplus distributions with remainder routed to emergency_fund', async () => {
@@ -345,6 +373,23 @@ test('report services handle empty-state data without persisting derived results
     alertStatus: 'ok',
   });
   assert.equal(db.state.monthlyReviews.length, 0);
+});
+
+test('surplus recommendations route exposes the spec-compatible alias', async () => {
+  const db = createDbDouble({
+    surplusSplitRules: [
+      { slug: 'emergency_fund', label: 'Emergency Fund', splitPercent: '1.0000', sortOrder: 1, isActive: true },
+    ],
+  });
+
+  const response = await getSurplusRecommendationsRoute(
+    new Request('http://localhost/api/v1/reports/surplus-recommendations?month=2026-03-01', {
+      headers: { 'x-household-id': 'household_1' },
+    }),
+    { db },
+  );
+
+  assert.equal(response.status, 200);
 });
 
 test('createMonthlyReview rejects duplicate review months', async () => {
