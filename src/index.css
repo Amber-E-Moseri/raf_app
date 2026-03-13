@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #1f2d2b;
+  background:
+    radial-gradient(circle at top left, rgba(216, 230, 221, 0.8), transparent 36%),
+    linear-gradient(180deg, #f3f1eb 0%, #f7f5ef 52%, #ece7dd 100%);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: #11211c;
+  font-feature-settings: "tnum" 1, "liga" 1;
+  line-height: 1.5;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Iowan Old Style", "Georgia", serif;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(41, 89, 72, 0.18);
+}
+
+@layer base {
+  * {
+    @apply focus-visible:outline-none;
+  }
+
+  a,
+  button,
+  input,
+  textarea,
+  select {
+    @apply focus-visible:ring-4 focus-visible:ring-raf-moss/15 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent;
+  }
+
+  th {
+    letter-spacing: 0.08em;
+  }
+}
+
+@layer components {
+  .ui-card {
+    @apply rounded-[1.75rem] border border-white/70 bg-white/90 shadow-panel backdrop-blur transition duration-200;
+  }
+
+  .ui-card-hover {
+    @apply hover:-translate-y-0.5 hover:shadow-lift;
+  }
+
+  .ui-field {
+    @apply w-full rounded-2xl border border-stone-300/90 bg-white px-4 py-3 text-sm text-raf-ink shadow-sm outline-none transition duration-150 placeholder:text-stone-400 focus:border-raf-moss focus:shadow-focus;
+  }
+
+  .ui-table {
+    @apply overflow-hidden rounded-[1.75rem] border border-stone-200/90 bg-white shadow-panel;
+  }
+
+  .ui-table thead {
+    @apply bg-stone-50/90;
+  }
+
+  .ui-table tbody tr {
+    @apply transition-colors duration-150 hover:bg-stone-50/80;
+  }
+}
+
+.progress-track {
+  background:
+    linear-gradient(90deg, rgba(54, 84, 72, 0.15) 0%, rgba(54, 84, 72, 0.08) 100%);
+}

@@ -1,0 +1,10 @@
+import type { MonthlyReviewListResponse, MonthlyReviewRequest, MonthlyReviewResponse } from "../lib/types";
+import { getJson, postJson } from "./client";
+
+export function createMonthlyReview(payload: MonthlyReviewRequest) {
+  return postJson<MonthlyReviewResponse>("/monthly-reviews", payload);
+}
+
+export function getMonthlyReviews(params: { from: string; to: string }) {
+  return getJson<MonthlyReviewListResponse>("/monthly-reviews", params);
+}
