@@ -2,11 +2,11 @@
   "name": "raf-app",
   "private": true,
   "type": "module",
+  "version": "1.0.0",
+  "main": "index.js",
   "scripts": {
     "test": "node --test"
   },
-  "version": "1.0.0",
-  "main": "index.js",
   "directories": {
     "doc": "docs",
     "lib": "lib",
@@ -15,5 +15,8 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
 }
