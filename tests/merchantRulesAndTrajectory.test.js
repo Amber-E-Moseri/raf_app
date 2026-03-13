@@ -18,11 +18,13 @@ function createDbDouble({
   incomeEntries = [],
   transactions = [],
   debtPayments = [],
+  allocationCategories = [],
   monthlyReviews = [],
   surplusSplitRules = [],
 } = {}) {
   const state = {
     merchantRules: merchantRules.map((rule) => ({ ...rule })),
+    transactions: transactions.map((transaction) => ({ ...transaction })),
     monthlyReviews: monthlyReviews.map((review) => ({ ...review })),
     deletedRuleId: null,
   };
@@ -55,10 +57,13 @@ function createDbDouble({
       return incomeEntries;
     },
     async listTransactions() {
-      return transactions;
+      return state.transactions;
     },
     async listDebtPayments() {
       return debtPayments;
+    },
+    async listAllocationCategories() {
+      return allocationCategories;
     },
     async listMonthlyReviews() {
       return state.monthlyReviews;
@@ -73,6 +78,11 @@ function createDbDouble({
       const review = { id: `review_${state.monthlyReviews.length + 1}`, ...payload };
       state.monthlyReviews.push(review);
       return review;
+    },
+    async insertTransaction(payload) {
+      const transaction = { id: `txn_${state.transactions.length + 1}`, ...payload };
+      state.transactions.push(transaction);
+      return transaction;
     },
   };
 
