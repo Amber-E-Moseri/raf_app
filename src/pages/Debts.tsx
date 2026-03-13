@@ -90,7 +90,7 @@ export function Debts() {
       title="Debts"
       description="Current balances come straight from the backend. The client only renders what the API provides."
     >
-      <section className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
+      <section className="grid gap-4 xl:grid-cols-[0.95fr,1.05fr]">
         <Card title="Add Debt" subtitle="Client-side validation checks format only and leaves derived balances to the backend.">
           <form className="space-y-4" onSubmit={handleSubmit}>
             <Input
@@ -191,7 +191,7 @@ export function Debts() {
       {!isLoading && error ? <ErrorState title="Failed to fetch debts" message={error} onRetry={() => void reload()} /> : null}
       {!isLoading && !error && data ? (
         <>
-          <section className="grid gap-4 md:grid-cols-3">
+          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Card title="Total starting" subtitle="Original starting balances">
               <p className="text-3xl font-semibold text-raf-ink">{formatCurrency(data.summary.totalStarting)}</p>
             </Card>

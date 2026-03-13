@@ -62,7 +62,7 @@ export function AppearanceSettings() {
       )}
     >
       {saveMessage ? <SuccessNotice title="Profile updated" message={saveMessage} /> : null}
-      <section className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
+      <section className="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
         <Card title="Appearance Settings" subtitle="Choose a curated accent, font, and viewing mode, then confirm with Save Appearance.">
           <div className="grid gap-3 sm:grid-cols-2">
             {THEME_OPTIONS.map((option) => {
@@ -137,7 +137,7 @@ export function AppearanceSettings() {
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
+      <section className="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
         <Card title="Font Family" subtitle="Pick a display language that suits how you read financial information.">
           <div className="space-y-3">
             {FONT_OPTIONS.map((option) => {

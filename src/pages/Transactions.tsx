@@ -179,6 +179,7 @@ export function Transactions() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("transactionDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [quickFilter, setQuickFilter] = useState<"all" | "spend" | "income" | "transfer" | "debt">("all");
   const [form, setForm] = useState({
     transactionDate: initialTo,
     description: "",
@@ -453,6 +454,32 @@ export function Transactions() {
     } finally {
       setReviewPendingId(null);
     }
+  }
+
+  function applyQuickFilter(nextFilter: "all" | "spend" | "income" | "transfer" | "debt") {
+    setQuickFilter(nextFilter);
+
+    if (nextFilter === "all") {
+      setSearchTerm("");
+      return;
+    }
+
+    if (nextFilter === "spend") {
+      setSearchTerm("shop");
+      return;
+    }
+
+    if (nextFilter === "income") {
+      setSearchTerm("income");
+      return;
+    }
+
+    if (nextFilter === "transfer") {
+      setSearchTerm("transfer");
+      return;
+    }
+
+    setSearchTerm("debt");
   }
 
   return (
@@ -761,7 +788,7 @@ export function Transactions() {
                       key={item.id}
                       className="border border-stone-200 bg-white/90"
                       title={item.description}
-                      subtitle={`${formatIsoDate(item.date)} • ${item.source}`}
+                      subtitle={`${formatIsoDate(item.date)} | ${item.source}`}
                       actions={<Badge tone={importedStatusTone(item)}>{importedStatusLabel(item)}</Badge>}
                     >
                       <div className="grid gap-4 lg:grid-cols-[0.9fr,1.1fr]">
@@ -985,13 +1012,37 @@ export function Transactions() {
         {!isLoading && error ? <ErrorState title="Failed to fetch transactions" message={error} onRetry={() => void reload()} /> : null}
         {!isLoading && !error && data ? (
           visibleTransactions.length ? (
-            <Table
+            <>
+              <div className="mb-4 flex flex-wrap gap-2">
+                {[
+                  ["all", "All"],
+                  ["spend", "Spend"],
+                  ["income", "Income"],
+                  ["transfer", "Transfer"],
+                  ["debt", "Debt Payoff"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
+                      quickFilter === value
+                        ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
+                        : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
+                    }`}
+                    onClick={() => applyQuickFilter(value as "all" | "spend" | "income" | "transfer" | "debt")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <Table
+                tableClassName="table-fixed"
               headers={[
-                sortableHeader("Date", "transactionDate"),
+                <span className="inline-block w-20">Date</span>,
                 sortableHeader("Description", "description"),
-                sortableHeader("Bucket", "category"),
-                sortableHeader("Amount", "amount"),
-                sortableHeader("Direction", "direction"),
+                <span className="inline-block w-[120px]">Category</span>,
+                <span className="inline-block w-[100px]">Type</span>,
+                <span className="inline-block w-[88px]">Amount</span>,
               ]}
               footer={(
                 <div className="flex items-center justify-between gap-4 text-sm text-stone-500">
@@ -1007,21 +1058,24 @@ export function Transactions() {
 
                 return (
                   <tr key={transaction.id} className="hover:bg-stone-50/80">
-                    <td className="px-4 py-3 text-sm text-stone-600">{formatIsoDate(transaction.transactionDate)}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-raf-ink">{transaction.description}</td>
-                    <td className="px-4 py-3 text-sm">
+                    <td className="w-20 px-4 py-3 text-sm text-stone-600">{formatIsoDate(transaction.transactionDate)}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-raf-ink">
+                      <div className="truncate">{transaction.description}</div>
+                    </td>
+                    <td className="w-[120px] px-4 py-3 text-sm">
                       <Badge tone={categoryTone(categoryLabel)}>{categoryLabel}</Badge>
                     </td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${amountClassName(transaction.direction)}`}>
-                      {formatCurrency(transaction.amount)}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
+                    <td className="w-[100px] px-4 py-3 text-sm">
                       <Badge tone={directionTone(transaction.direction)}>{transaction.direction}</Badge>
+                    </td>
+                    <td className={`w-[88px] px-4 py-3 text-right text-sm font-semibold ${amountClassName(transaction.direction)}`}>
+                      {formatCurrency(transaction.amount)}
                     </td>
                   </tr>
                 );
               })}
-            </Table>
+              </Table>
+            </>
           ) : (
             <EmptyState
               title="No transactions match these filters"

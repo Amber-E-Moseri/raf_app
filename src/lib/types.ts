@@ -317,6 +317,22 @@ export interface MonthlyReviewListResponse {
   items: MonthlyReviewResponse[];
 }
 
+export interface AppliedMonthlyReviewTransaction {
+  id: string;
+  transactionDate: string;
+  description: string;
+  merchant: string | null;
+  amount: string;
+  direction: "debit" | "credit";
+  categoryId: string | null;
+  linkedDebtId: string | null;
+}
+
+export interface ApplyMonthlyReviewResponse {
+  review: MonthlyReviewResponse;
+  appliedTransactions: AppliedMonthlyReviewTransaction[];
+}
+
 export interface IncomeAllocationReport {
   sourceName: string;
   amount: string;

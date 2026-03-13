@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
@@ -6,7 +7,6 @@ import { getIncome, getIncomeAllocations } from "../api/incomeApi";
 import { getDashboardReport, getFinancialHealthReport } from "../api/reportsApi";
 import { getTransactions } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
-import { FinancialHealthIndicator } from "../components/dashboard/FinancialHealthIndicator";
 import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
@@ -14,26 +14,27 @@ import { PageShell } from "../components/layout/PageShell";
 import { Badge } from "../components/ui/Badge";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
-import { Table } from "../components/ui/Table";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatCurrency, formatIsoDate, formatPercentWithDigits, monthRange } from "../lib/format";
+import { formatCurrency, formatIsoDate, monthRange } from "../lib/format";
 import type {
   AllocationCategory,
   DashboardPeriod,
-  DashboardReport,
-  FinancialHealthReport,
   IncomeAllocationReport,
   Transaction,
 } from "../lib/types";
 
 interface DashboardViewModel {
-  dashboard: DashboardReport;
+  dashboard: DashboardViewModelReport;
   categories: AllocationCategory[];
   latestAllocationReport: IncomeAllocationReport | null;
   latestPeriod: DashboardPeriod | null;
-  financialHealth: FinancialHealthReport;
+  financialHealth: DashboardHealthReport;
   recentTransactions: Transaction[];
+  incomeCount: number;
 }
+
+type DashboardViewModelReport = Awaited<ReturnType<typeof getDashboardReport>>;
+type DashboardHealthReport = Awaited<ReturnType<typeof getFinancialHealthReport>>;
 
 function alertTone(status: "ok" | "elevated" | "risky" | undefined) {
   if (status === "risky") {
@@ -49,6 +50,10 @@ function alertTone(status: "ok" | "elevated" | "risky" | undefined) {
   }
 
   return "neutral";
+}
+
+function transactionTone(transaction: Transaction) {
+  return transaction.direction === "credit" ? "success" : "warning";
 }
 
 export function Dashboard() {
@@ -82,17 +87,14 @@ export function Dashboard() {
       latestAllocationReport,
       latestPeriod,
       financialHealth,
-      recentTransactions: transactionsResponse.items,
+      recentTransactions: transactionsResponse.items.slice(0, 5),
+      incomeCount: incomeResponse.items.length,
     };
   }, [from, to]);
 
   if (isLoading) {
     return (
-      <PageShell
-        eyebrow="Overview"
-        title="Dashboard"
-        description="A current snapshot of income, allocation posture, and recent movement."
-      >
+      <PageShell eyebrow="Overview" title="Dashboard" description="Monthly financial snapshot.">
         <LoadingState label="Loading the current financial snapshot..." />
       </PageShell>
     );
@@ -100,11 +102,7 @@ export function Dashboard() {
 
   if (error || !data) {
     return (
-      <PageShell
-        eyebrow="Overview"
-        title="Dashboard"
-        description="A current snapshot of income, allocation posture, and recent movement."
-      >
+      <PageShell eyebrow="Overview" title="Dashboard" description="Monthly financial snapshot.">
         <ErrorState title="Failed to load dashboard" message={error ?? "We could not load the current dashboard data. Please try again."} onRetry={() => void reload()} />
       </PageShell>
     );
@@ -117,18 +115,10 @@ export function Dashboard() {
   const activeCategoryCount = activeCategories.length || data.latestAllocationReport?.allocations.length || 0;
   const latestPeriodIncome = data.latestPeriod?.incomeTotal ?? "0.00";
   const latestSurplus = data.latestPeriod?.surplusOrDeficit ?? "0.00";
-  const bucketBalancesBySlug = new Map(
-    data.dashboard.bucket_balances.map((bucket) => [bucket.slug, bucket.balance]),
-  );
-  const monthlyProgressByBucketName = new Map(
-    data.dashboard.monthly_bucket_progress.map((progress) => [progress.bucket_id, progress]),
-  );
-  const goalProgressByBucketName = new Map(
-    data.dashboard.goal_progress.map((progress) => [progress.bucket_id, progress]),
-  );
-  const latestAllocationAmounts = new Map(
-    (data.latestAllocationReport?.allocations ?? []).map((allocation) => [allocation.slug, allocation.amount]),
-  );
+  const bucketBalancesBySlug = new Map(data.dashboard.bucket_balances.map((bucket) => [bucket.slug, bucket.balance]));
+  const monthlyProgressByBucketId = new Map(data.dashboard.monthly_bucket_progress.map((progress) => [progress.bucket_id, progress]));
+  const goalProgressByBucketId = new Map(data.dashboard.goal_progress.map((progress) => [progress.bucket_id, progress]));
+  const latestAllocationAmounts = new Map((data.latestAllocationReport?.allocations ?? []).map((allocation) => [allocation.slug, allocation.amount]));
   const allocationRows = activeCategories.length
     ? activeCategories.map((category) => ({
       bucketId: category.id,
@@ -137,94 +127,55 @@ export function Dashboard() {
       percent: category.allocationPercent,
       allocatedAmount: latestAllocationAmounts.get(category.slug) ?? null,
       currentBalance: bucketBalancesBySlug.get(category.slug) ?? null,
-      monthlyProgress: monthlyProgressByBucketName.get(category.id) ?? null,
-      goalProgress: goalProgressByBucketName.get(category.id) ?? null,
+      monthlyProgress: monthlyProgressByBucketId.get(category.id) ?? null,
+      goalProgress: goalProgressByBucketId.get(category.id) ?? null,
     }))
-    : (data.latestAllocationReport?.allocations.map((allocation) => ({
-      bucketId: allocation.slug,
-      slug: allocation.slug,
-      label: allocation.label,
-      percent: null,
-      allocatedAmount: allocation.amount,
-      currentBalance: null,
-      monthlyProgress: null,
-      goalProgress: null,
-    })) ?? []);
+    : [];
+
+  const savingsBalance = Number(data.financialHealth.savingsBalance);
+  const savingsFloor = Number(data.financialHealth.savingsFloor);
+  const emergencyFundBalance = Number(data.financialHealth.emergencyFundBalance);
+  const availableSavings = Number(data.financialHealth.availableSavings);
+  const savingsMax = Math.max(savingsBalance, emergencyFundBalance, savingsFloor, 1);
+  const savingsPercent = Math.max(0, Math.min(100, (savingsBalance / savingsMax) * 100));
+  const floorPercent = Math.max(0, Math.min(100, (savingsFloor / savingsMax) * 100));
 
   return (
-    <PageShell
-      eyebrow="Overview"
-      title="Dashboard"
-      description="A clearer operating view of income, allocations, financial health, and recent movement, using backend responses as the source of truth."
-    >
-      <section className="grid gap-4 xl:grid-cols-3">
+    <PageShell eyebrow="Overview" title="Dashboard" description="Monthly financial snapshot.">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryMetricCard
-          title="Total Income This Month"
+          title="Income this month"
           value={formatCurrency(latestPeriodIncome)}
-          subtitle="Reported by the dashboard endpoint for the current month."
-          badge="income"
-          tone="success"
-        />
-        <SummaryMetricCard
-          title="Net Surplus"
-          value={formatCurrency(latestSurplus)}
-          subtitle="Latest monthly surplus or deficit from backend reporting."
-          badge={data.latestPeriod?.alertStatus ?? "unknown"}
+          subtitle={`${data.incomeCount} deposit${data.incomeCount === 1 ? "" : "s"}`}
+          badge={data.latestPeriod?.alertStatus ?? "ok"}
           tone={alertTone(data.latestPeriod?.alertStatus)}
         />
         <SummaryMetricCard
-          title="Active Categories"
+          title="Net surplus"
+          value={formatCurrency(latestSurplus)}
+          subtitle={`${data.dashboard.monthly_bucket_progress.length} buckets tracked`}
+          badge={data.latestPeriod?.alertStatus ?? "ok"}
+          tone={alertTone(data.latestPeriod?.alertStatus)}
+        />
+        <SummaryMetricCard
+          title="Active categories"
           value={String(activeCategoryCount)}
-          subtitle="Count of currently exposed allocation categories."
-          badge={activeCategoryCount ? "configured" : "unavailable"}
+          subtitle={activeCategoryCount ? "Configuration ready" : "Awaiting setup"}
+          badge={activeCategoryCount ? "configured" : "empty"}
           tone={activeCategoryCount ? "success" : "warning"}
         />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.45fr,0.95fr]">
-        <Card
-          title="Allocation Breakdown"
-          subtitle="Current allocation bucket configuration from the backend, with the latest deposit snapshot shown when available."
-        >
-          {allocationRows.length ? (
-            <>
-              <Table headers={["Category", "Percent Allocation", "Allocated Amount", "Current Balance"]}>
-                {allocationRows.map((row) => (
-                  <tr key={row.slug}>
-                    <td className="px-4 py-3 text-sm font-medium text-raf-ink">{row.label}</td>
-                    <td className="px-4 py-3 text-sm text-stone-600">
-                      {row.percent ? formatPercentWithDigits(row.percent, 2) : "N/A"}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-stone-600">
-                      {row.allocatedAmount == null ? "No recent deposit snapshot" : formatCurrency(row.allocatedAmount)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-stone-500">
-                      {row.currentBalance == null ? "Not exposed by API" : formatCurrency(row.currentBalance)}
-                    </td>
-                  </tr>
-                ))}
-              </Table>
-              <p className="mt-4 text-xs text-stone-500">
-                Current balance is reserved money in RAF. The monthly usage view on the right shows how much is left this month.
-              </p>
-            </>
-          ) : (
-            <EmptyState
-              title="No allocation buckets available"
-              message="Configure allocation preferences or create the first deposit to populate this view."
-            />
-          )}
-        </Card>
-
-        <div className="space-y-6">
+      <section className="grid gap-4 lg:grid-cols-[1.6fr,1fr]">
+        <div className="space-y-4">
           <AllocationBarChart
             items={allocationRows.map((row) => ({
               bucketId: row.bucketId,
               label: row.label,
               allocationPercent: row.percent,
-              allocatedThisMonth: row.monthlyProgress?.allocated_this_month ?? null,
+              allocatedThisMonth: row.monthlyProgress?.allocated_this_month ?? row.allocatedAmount ?? null,
               usedThisMonth: row.monthlyProgress?.used_this_month ?? null,
-              remainingThisMonth: row.monthlyProgress?.remaining_this_month ?? null,
+              remainingThisMonth: row.monthlyProgress?.remaining_this_month ?? row.currentBalance ?? null,
               percentUsedThisMonth: row.monthlyProgress?.percent_used_this_month ?? null,
               goalName: row.goalProgress?.goal_name ?? null,
               goalTargetAmount: row.goalProgress?.target_amount ?? null,
@@ -232,29 +183,76 @@ export function Dashboard() {
               goalProgressPercent: row.goalProgress?.progress_percent ?? null,
             }))}
           />
-          <FinancialHealthIndicator report={data.financialHealth} />
+        </div>
+
+        <div className="space-y-4">
+          <Card
+            title="Savings floor"
+            actions={<Badge tone={alertTone(data.financialHealth.alertStatus)}>{data.financialHealth.alertStatus === "ok" ? "Protected" : "At risk"}</Badge>}
+          >
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-[24px] font-bold leading-none text-raf-ink">{formatCurrency(data.financialHealth.savingsBalance)}</div>
+                <div className="text-[11px] font-medium text-stone-500">{data.financialHealth.alertStatus === "ok" ? "Protected" : "At risk"}</div>
+              </div>
+              <div className="relative">
+                <div className="progress-track h-2 overflow-hidden rounded-full">
+                  <div className="h-full rounded-full bg-raf-moss" style={{ width: `${savingsPercent}%` }} />
+                </div>
+                <div
+                  className="absolute top-[-3px] h-4 w-[2px] rounded-full bg-amber-500"
+                  style={{ left: `calc(${floorPercent}% - 1px)` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-medium text-stone-500">
+                <span>$0</span>
+                <span>{formatCurrency(data.financialHealth.savingsFloor)} floor</span>
+                <span>{formatCurrency(String(savingsMax.toFixed(2)))} max</span>
+              </div>
+              <p className="text-[13px] text-stone-500">
+                Available savings: {formatCurrency(data.financialHealth.availableSavings)}
+              </p>
+            </div>
+          </Card>
+
+          <Card
+            title="Recent activity"
+            actions={(
+              <Link className="text-[11px] font-medium text-stone-500" to="/transactions">
+                See all -&gt;
+              </Link>
+            )}
+          >
+            {data.recentTransactions.length ? (
+              <div className="divide-y divide-stone-200">
+                {data.recentTransactions.map((transaction) => {
+                  const categoryLabel = transaction.categoryId
+                    ? activeCategories.find((category) => category.id === transaction.categoryId)?.label ?? transaction.categoryId
+                    : "Unassigned";
+
+                  return (
+                    <div key={transaction.id} className="flex min-h-9 items-center gap-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-medium text-raf-ink">{transaction.description}</div>
+                        <div className="mt-1 text-[10px] text-stone-500">{formatIsoDate(transaction.transactionDate)}</div>
+                      </div>
+                      <Badge tone={transactionTone(transaction)}>{categoryLabel}</Badge>
+                      <div className={`w-20 text-right text-[13px] font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
+                        {formatCurrency(transaction.amount)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                title="No activity yet"
+                message="Recorded transactions will show up here."
+              />
+            )}
+          </Card>
         </div>
       </section>
-
-      <Card title="Recent Transactions" subtitle="Latest 10 transactions from the backend ledger.">
-        {data.recentTransactions.length ? (
-          <Table headers={["Date", "Description", "Category", "Amount"]}>
-            {data.recentTransactions.map((transaction) => (
-              <tr key={transaction.id}>
-                <td className="px-4 py-3 text-sm text-stone-600">{formatIsoDate(transaction.transactionDate)}</td>
-                <td className="px-4 py-3 text-sm font-medium text-raf-ink">{transaction.description}</td>
-                <td className="px-4 py-3 text-sm text-stone-600">{transaction.categoryId ?? "Unassigned"}</td>
-                <td className="px-4 py-3 text-sm text-stone-600">{formatCurrency(transaction.amount)}</td>
-              </tr>
-            ))}
-          </Table>
-        ) : (
-          <EmptyState
-            title="No transactions recorded"
-            message="Transaction history will appear here once money starts moving through categories."
-          />
-        )}
-      </Card>
     </PageShell>
   );
 }

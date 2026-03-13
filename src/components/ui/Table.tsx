@@ -3,13 +3,14 @@ import type { PropsWithChildren, ReactNode } from "react";
 interface TableProps {
   headers: ReactNode[];
   footer?: ReactNode;
+  tableClassName?: string;
 }
 
-export function Table({ headers, footer, children }: PropsWithChildren<TableProps>) {
+export function Table({ headers, footer, tableClassName = "", children }: PropsWithChildren<TableProps>) {
   return (
     <div className="ui-table">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-stone-200/90">
+        <table className={`min-w-full divide-y divide-stone-200/90 ${tableClassName}`.trim()}>
           <thead>
             <tr>
               {headers.map((header, index) => (

@@ -241,7 +241,7 @@ export function AllocationPreferences() {
         </div>
       )}
     >
-      <section className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
+      <section className="grid gap-4 xl:grid-cols-[1.15fr,0.85fr]">
         <Card title="Categories" subtitle="Every category is edited the same way. Future rounding is handled by the backend.">
           {isLoading ? <LoadingState label="Loading allocation categories..." /> : null}
           {!isLoading && loadError ? <ErrorState title="Failed to load allocation preferences" message={loadError} onRetry={() => void loadCategories()} /> : null}
@@ -350,7 +350,7 @@ export function AllocationPreferences() {
           ) : null}
         </Card>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <Card title="Validation" subtitle="The editor only validates shape and totals. The backend remains the source of truth for allocation logic.">
             <div className="space-y-4">
               <div className="rounded-2xl bg-stone-50 p-4">

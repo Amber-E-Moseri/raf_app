@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { createMonthlyReview } from "../api/monthlyReviewApi";
+import { applyMonthlyReview } from "../api/monthlyReviewApi";
 import { getSurplusRecommendations } from "../api/reportsApi";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
@@ -15,7 +15,7 @@ import { Input } from "../components/ui/Input";
 import { Table } from "../components/ui/Table";
 import { formatCurrency } from "../lib/format";
 import { validateFirstDayOfMonth } from "../lib/validation";
-import type { MonthlyReviewResponse, SurplusRecommendationsReport } from "../lib/types";
+import type { ApplyMonthlyReviewResponse, SurplusRecommendationsReport } from "../lib/types";
 
 function defaultReviewMonth() {
   const now = new Date();
@@ -44,7 +44,7 @@ export function MonthlyReview() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [result, setResult] = useState<MonthlyReviewResponse | null>(null);
+  const [result, setResult] = useState<ApplyMonthlyReviewResponse | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -92,7 +92,7 @@ export function MonthlyReview() {
     setSubmitError(null);
 
     try {
-      const response = await createMonthlyReview({
+      const response = await applyMonthlyReview({
         reviewMonth,
         notes: notes.trim() || undefined,
       });
@@ -111,8 +111,8 @@ export function MonthlyReview() {
       title="Monthly Review"
       description="Review the backend's surplus recommendation first, then apply the monthly review with a deliberate confirmation step."
     >
-      <section className="grid gap-6 xl:grid-cols-[1fr,1.1fr]">
-        <Card title="Apply Monthly Review" subtitle="This posts to the backend monthly review create endpoint.">
+      <section className="grid gap-4 xl:grid-cols-[1fr,1.1fr]">
+        <Card title="Apply Monthly Review" subtitle="This posts to the backend monthly review apply endpoint.">
           <div className="space-y-4">
             <Input
               label="Review month"
@@ -183,21 +183,21 @@ export function MonthlyReview() {
 
       {submitError ? <ErrorState title="Failed to apply monthly review" message={submitError} /> : null}
       {result ? (
-        <Card title="Review Applied" subtitle={`Review month ${result.reviewMonth}`}>
+        <Card title="Review Applied" subtitle={`Review month ${result.review.reviewMonth}`}>
           <SuccessNotice
-            title="Monthly review created"
-            message="The backend returned the persisted distribution set below."
+            title="Monthly review applied"
+            message={`The backend persisted the review and created ${result.appliedTransactions.length} allocation transaction${result.appliedTransactions.length === 1 ? "" : "s"}.`}
           />
           <div className="mt-4 grid gap-4 lg:grid-cols-[0.7fr,1fr]">
             <div className="rounded-2xl bg-stone-50 p-4">
               <p className="text-sm text-stone-500">Net surplus</p>
-              <p className="mt-1 text-2xl font-semibold text-raf-ink">{formatCurrency(result.netSurplus)}</p>
+              <p className="mt-1 text-2xl font-semibold text-raf-ink">{formatCurrency(result.review.netSurplus)}</p>
               <div className="mt-3">
-                <Badge tone={alertTone(result.alertStatus)}>{result.alertStatus}</Badge>
+                <Badge tone={alertTone(result.review.alertStatus)}>{result.review.alertStatus}</Badge>
               </div>
             </div>
             <Table headers={["Distribution key", "Amount"]}>
-              {Object.entries(result.distributions).map(([key, amount]) => (
+              {Object.entries(result.review.distributions).map(([key, amount]) => (
                 <tr key={key}>
                   <td className="px-4 py-3 text-sm font-medium text-raf-ink">{key}</td>
                   <td className="px-4 py-3 text-sm text-stone-600">{formatCurrency(amount)}</td>

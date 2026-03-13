@@ -10,14 +10,20 @@ interface PageShellProps {
 
 export function PageShell({ eyebrow, title, description, actions, children }: PageShellProps) {
   return (
-    <div className="space-y-7">
-      <header className="ui-card flex flex-col gap-4 px-6 py-7 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          {eyebrow ? <p className="text-xs font-semibold uppercase tracking-[0.25em] text-stone-500">{eyebrow}</p> : null}
-          <h2 className="mt-2 font-display text-4xl font-semibold text-raf-ink sm:text-[2.5rem]">{title}</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500 sm:text-[0.95rem]">{description}</p>
+    <div className="space-y-4">
+      <header className="ui-card px-6 py-5">
+        <div className="flex flex-col gap-3 sm:gap-2">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              {eyebrow ? <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-stone-500">{eyebrow}</p> : null}
+            </div>
+            {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-[22px] font-bold tracking-tight text-raf-ink">{title}</h2>
+            <p className="mt-1 max-w-[60ch] truncate text-[13px] leading-5 text-stone-500">{description}</p>
+          </div>
         </div>
-        {actions}
       </header>
       {children}
     </div>

@@ -2,7 +2,8 @@ import type { ApiErrorPayload } from "../lib/types";
 
 const DEFAULT_API_BASE_PATH = "/api/v1";
 const FALLBACK_ORIGIN = "http://localhost:3000";
-const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_PATH;
+const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+const rawApiBaseUrl = viteEnv?.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_PATH;
 const runtimeOrigin = typeof window !== "undefined" ? window.location.origin : FALLBACK_ORIGIN;
 const API_BASE_URL = new URL(rawApiBaseUrl, runtimeOrigin).toString();
 const API_ORIGIN = new URL(API_BASE_URL).origin;
