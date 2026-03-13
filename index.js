@@ -47,6 +47,12 @@ app.get('/health', (_req, res) => {
   });
 });
 
+app.get('/api/v1/health', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+  });
+});
+
 const apiRootDir = path.join(__dirname, 'app', 'api', 'v1');
 const aliases = [
   {
