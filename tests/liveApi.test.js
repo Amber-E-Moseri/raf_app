@@ -292,6 +292,111 @@ test('fixed bill validation rejects invalid category_slug and due_day_of_month',
   assert.equal(invalidCategory.response.status, 422);
 });
 
+test('goals endpoints create, update, soft-delete, and expose dashboard goal progress', async () => {
+  const savingsBucket = await request('/api/v1/household/allocation-categories');
+  assert.equal(savingsBucket.response.status, 200);
+  const bucket = savingsBucket.data.items.find((item) => item.slug === 'savings');
+  assert.equal(bucket != null, true);
+
+  const created = await request('/api/v1/goals', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      bucket_id: bucket.id,
+      name: 'Emergency Fund',
+      target_amount: '5000.00',
+      target_date: '2026-12-31',
+    }),
+  });
+  assert.equal(created.response.status, 201);
+
+  const savingsCredit = await request('/api/v1/transactions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      transactionDate: '2026-03-12',
+      description: 'Savings transfer in',
+      amount: '-2000.00',
+      direction: 'credit',
+      categoryId: bucket.id,
+    }),
+  });
+  assert.equal(savingsCredit.response.status, 201);
+
+  const savingsDebit = await request('/api/v1/transactions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      transactionDate: '2026-03-13',
+      description: 'Savings withdrawal',
+      amount: '200.00',
+      direction: 'debit',
+      categoryId: bucket.id,
+    }),
+  });
+  assert.equal(savingsDebit.response.status, 201);
+
+  const listed = await request('/api/v1/goals');
+  assert.equal(listed.response.status, 200);
+  assert.equal(listed.data.items.some((item) => item.id === created.data.id), true);
+
+  const updated = await request(`/api/v1/goals/${created.data.id}`, {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      notes: 'Six months of expenses',
+    }),
+  });
+  assert.equal(updated.response.status, 200);
+  assert.equal(updated.data.notes, 'Six months of expenses');
+
+  const dashboard = await request('/api/v1/reports/dashboard?from=2026-03-01&to=2026-03-01');
+  assert.equal(dashboard.response.status, 200);
+  assert.deepEqual(dashboard.data.goal_progress.find((item) => item.goal_id === created.data.id), {
+    goal_id: created.data.id,
+    goal_name: 'Emergency Fund',
+    bucket_id: bucket.id,
+    bucket_name: 'Savings',
+    target_amount: '5000.00',
+    current_amount: '1800.00',
+    remaining_amount: '3200.00',
+    progress_percent: 36,
+  });
+
+  const deleted = await request(`/api/v1/goals/${created.data.id}`, {
+    method: 'DELETE',
+  });
+  assert.equal(deleted.response.status, 204);
+
+  const afterDelete = await request('/api/v1/goals');
+  assert.equal(afterDelete.response.status, 200);
+  assert.equal(afterDelete.data.items.find((item) => item.id === created.data.id).active, false);
+});
+
+test('goal validation rejects invalid bucket linkage', async () => {
+  const created = await request('/api/v1/goals', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      bucket_id: 'does_not_exist',
+      name: 'Invalid Goal',
+      target_amount: '100.00',
+    }),
+  });
+
+  assert.equal(created.response.status, 422);
+});
+
 test('POST /api/v1/income creates deterministic allocations and GET /api/v1/income lists the deposit', async () => {
   const listedCategories = await request('/api/v1/household/allocation-categories');
   assert.equal(listedCategories.response.status, 200);
@@ -520,6 +625,49 @@ test('debts endpoints create, list, update, and enforce delete guardrails', asyn
   });
 
   assert.equal(deleteAttempt.response.status, 204);
+});
+
+test('debt adjustment endpoints create auditable adjustments and affect derived balance', async () => {
+  const created = await request('/api/v1/debts', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'Mastercard',
+      startingBalance: '1000.00',
+      apr: 19,
+      minimumPayment: '50.00',
+      monthlyPayment: '100.00',
+      sortOrder: 2,
+    }),
+  });
+  assert.equal(created.response.status, 201);
+
+  const adjustment = await request(`/api/v1/debts/${created.data.id}/adjustments`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      amount: '25.00',
+      adjustment_type: 'interest',
+      effective_date: '2026-03-20',
+      note: 'Monthly interest',
+    }),
+  });
+  assert.equal(adjustment.response.status, 201);
+  assert.equal(adjustment.data.adjustment_type, 'interest');
+
+  const adjustments = await request(`/api/v1/debts/${created.data.id}/adjustments`);
+  assert.equal(adjustments.response.status, 200);
+  assert.equal(adjustments.data.items.length, 1);
+
+  const debts = await request('/api/v1/debts');
+  assert.equal(debts.response.status, 200);
+  const adjustedDebt = debts.data.items.find((item) => item.id === created.data.id);
+  assert.equal(adjustedDebt.currentBalance, '1025.00');
+  assert.equal(adjustedDebt.totalAdjustments, '25.00');
 });
 
 test('monthly review create endpoint computes surplus distributions deterministically', async () => {

@@ -3,17 +3,21 @@ import assert from 'node:assert/strict';
 
 import { GET, POST } from '../app/api/v1/debts/route.js';
 import { DELETE, PATCH } from '../app/api/v1/debts/[id]/route.js';
+import { GET as getAdjustmentsRoute, POST as postAdjustmentRoute } from '../app/api/v1/debts/[id]/adjustments/route.js';
 import {
+  createDebtAdjustment,
   createDebt,
   deleteDebt,
+  listDebtAdjustments,
   listDebts,
   updateDebt,
 } from '../lib/debts/debts.js';
 
-function createDbDouble({ debts = [], debtPayments = [] } = {}) {
+function createDbDouble({ debts = [], debtPayments = [], debtAdjustments = [] } = {}) {
   const state = {
     debts: debts.map((debt) => ({ ...debt })),
     debtPayments: debtPayments.map((payment) => ({ ...payment })),
+    debtAdjustments: debtAdjustments.map((adjustment) => ({ ...adjustment })),
     insertedDebt: null,
     updatedDebt: null,
     deletedDebtId: null,
@@ -41,6 +45,18 @@ function createDbDouble({ debts = [], debtPayments = [] } = {}) {
       }
 
       return [...state.debtPayments];
+    },
+    async insertDebtAdjustment(payload) {
+      const adjustment = { id: `adj_${state.debtAdjustments.length + 1}`, createdAt: '2026-03-13T00:00:00.000Z', ...payload };
+      state.debtAdjustments.push(adjustment);
+      return adjustment;
+    },
+    async listDebtAdjustments({ debtId }) {
+      if (debtId) {
+        return state.debtAdjustments.filter((adjustment) => adjustment.debtId === debtId);
+      }
+
+      return [...state.debtAdjustments];
     },
     async getDebtById({ debtId }) {
       return state.debts.find((debt) => debt.id === debtId) ?? null;
@@ -118,6 +134,18 @@ test('updateDebt patches editable fields and keeps currentBalance derived from p
         amount: '250.00',
       },
     ],
+    debtAdjustments: [
+      {
+        id: 'adj_1',
+        debtId: 'debt_1',
+        householdId: 'household_1',
+        amount: '50.00',
+        adjustmentType: 'interest',
+        effectiveDate: '2026-03-13',
+        note: 'Monthly interest',
+        createdAt: '2026-03-13T00:00:00.000Z',
+      },
+    ],
   });
 
   const result = await updateDebt({
@@ -132,7 +160,7 @@ test('updateDebt patches editable fields and keeps currentBalance derived from p
 
   assert.equal(result.monthlyPayment, '300.00');
   assert.equal(result.isActive, false);
-  assert.equal(result.currentBalance, '4750.00');
+  assert.equal(result.currentBalance, '4800.00');
 });
 
 test('listDebts derives currentBalance and returns summary totals from live payment rows', async () => {
@@ -166,6 +194,9 @@ test('listDebts derives currentBalance and returns summary totals from live paym
       { debtId: 'debt_1', paymentDate: '2026-03-26', amount: '300.00' },
       { debtId: 'debt_2', paymentDate: '2026-03-15', amount: '2000.00' },
     ],
+    debtAdjustments: [
+      { debtId: 'debt_1', householdId: 'household_1', amount: '100.00', adjustmentType: 'interest', effectiveDate: '2026-03-18', note: 'interest', createdAt: '2026-03-18T00:00:00.000Z' },
+    ],
   });
 
   const result = await listDebts({
@@ -175,12 +206,96 @@ test('listDebts derives currentBalance and returns summary totals from live paym
 
   assert.deepEqual(result.summary, {
     totalStarting: '7000.00',
-    totalRemaining: '4500.00',
+    totalRemaining: '4600.00',
     totalPaidAllTime: '2500.00',
   });
-  assert.equal(result.items[0].currentBalance, '4500.00');
+  assert.equal(result.items[0].currentBalance, '4600.00');
   assert.equal(result.items[1].currentBalance, '0.00');
   assert.equal(result.items[1].status, 'paid_off');
+});
+
+test('createDebtAdjustment records an auditable balance adjustment and updates derived balance', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Visa',
+        startingBalance: '5000.00',
+        apr: 19.99,
+        minimumPayment: '100.00',
+        monthlyPayment: '200.00',
+        sortOrder: 1,
+        isActive: true,
+      },
+    ],
+  });
+
+  const adjustment = await createDebtAdjustment({
+    db,
+    householdId: 'household_1',
+    debtId: 'debt_1',
+    input: {
+      amount: '75.00',
+      adjustment_type: 'interest',
+      effective_date: '2026-03-15',
+      note: 'March interest',
+    },
+  });
+
+  assert.deepEqual(adjustment, {
+    id: 'adj_1',
+    debt_id: 'debt_1',
+    household_id: 'household_1',
+    amount: '75.00',
+    adjustment_type: 'interest',
+    effective_date: '2026-03-15',
+    note: 'March interest',
+    created_at: '2026-03-13T00:00:00.000Z',
+  });
+
+  const debts = await listDebts({ db, householdId: 'household_1' });
+  assert.equal(debts.items[0].currentBalance, '5075.00');
+  assert.equal(debts.items[0].totalAdjustments, '75.00');
+});
+
+test('listDebtAdjustments returns adjustment history for a debt', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Visa',
+        startingBalance: '5000.00',
+        apr: 19.99,
+        minimumPayment: '100.00',
+        monthlyPayment: '200.00',
+        sortOrder: 1,
+        isActive: true,
+      },
+    ],
+    debtAdjustments: [
+      {
+        id: 'adj_1',
+        debtId: 'debt_1',
+        householdId: 'household_1',
+        amount: '75.00',
+        adjustmentType: 'interest',
+        effectiveDate: '2026-03-15',
+        note: 'March interest',
+        createdAt: '2026-03-13T00:00:00.000Z',
+      },
+    ],
+  });
+
+  const listed = await listDebtAdjustments({
+    db,
+    householdId: 'household_1',
+    debtId: 'debt_1',
+  });
+
+  assert.equal(listed.items.length, 1);
+  assert.equal(listed.items[0].adjustment_type, 'interest');
 });
 
 test('deleteDebt blocks deletion when linked payments exist and suggests soft disable', async () => {
@@ -340,4 +455,49 @@ test('debt routes cover POST, GET, PATCH, and DELETE', async () => {
   );
 
   assert.equal(deleteResponse.status, 204);
+});
+
+test('debt adjustment routes cover POST and GET', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_existing',
+        householdId: 'household_1',
+        name: 'Visa',
+        startingBalance: '5000.00',
+        apr: 19.99,
+        minimumPayment: '100.00',
+        monthlyPayment: '200.00',
+        sortOrder: 1,
+        isActive: true,
+      },
+    ],
+  });
+
+  const postResponse = await postAdjustmentRoute(
+    new Request('http://localhost/api/v1/debts/debt_existing/adjustments', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-household-id': 'household_1',
+      },
+      body: JSON.stringify({
+        amount: '45.00',
+        adjustment_type: 'fee',
+        effective_date: '2026-03-20',
+        note: 'Late fee',
+      }),
+    }),
+    { db, params: { id: 'debt_existing' } },
+  );
+  assert.equal(postResponse.status, 201);
+
+  const getResponse = await getAdjustmentsRoute(
+    new Request('http://localhost/api/v1/debts/debt_existing/adjustments', {
+      headers: { 'x-household-id': 'household_1' },
+    }),
+    { db, params: { id: 'debt_existing' } },
+  );
+  assert.equal(getResponse.status, 200);
+  assert.equal((await getResponse.json()).items.length, 1);
 });
