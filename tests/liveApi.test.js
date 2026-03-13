@@ -12,6 +12,18 @@ const baseUrl = `http://localhost:${port}`;
 
 let serverProcess;
 
+function createPdfFixture(textLines) {
+  const body = textLines.map((line) => `(${line}) Tj`).join('\n');
+  return `%PDF-1.4
+1 0 obj
+<< /Length ${body.length} >>
+stream
+${body}
+endstream
+endobj
+%%EOF`;
+}
+
 function wait(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -680,6 +692,78 @@ test('debt adjustment endpoints create auditable adjustments and affect derived 
   const adjustedDebt = debts.data.items.find((item) => item.id === created.data.id);
   assert.equal(adjustedDebt.currentBalance, '1025.00');
   assert.equal(adjustedDebt.totalAdjustments, '25.00');
+});
+
+test('import review flow lists imported rows, classifies them, and prevents duplicate review', async () => {
+  const imported = await request('/api/v1/imports/bank-statement', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/pdf',
+      'x-filename': 'statement.pdf',
+    },
+    body: createPdfFixture(['2026-03-22 COFFEE SHOP (12.99) 980.00']),
+  });
+  assert.equal(imported.response.status, 201);
+  assert.equal(imported.data.extracted, 1);
+
+  const listed = await request('/api/v1/imports');
+  assert.equal(listed.response.status, 200);
+  const importedRow = listed.data.items.find((item) => item.description === 'COFFEE SHOP');
+  assert.equal(importedRow.status, 'unreviewed');
+
+  const classified = await request(`/api/v1/imports/${importedRow.id}/classify`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      classification_type: 'transaction',
+      review_note: 'Coffee expense',
+    }),
+  });
+  assert.equal(classified.response.status, 200);
+  assert.equal(classified.data.status, 'classified');
+  assert.equal(classified.data.classification_type, 'transaction');
+  assert.equal(typeof classified.data.linked_transaction_id, 'string');
+
+  const fetched = await request(`/api/v1/imports/${importedRow.id}`);
+  assert.equal(fetched.response.status, 200);
+  assert.equal(fetched.data.review_note, 'Coffee expense');
+
+  const duplicate = await request(`/api/v1/imports/${importedRow.id}/classify`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      classification_type: 'transaction',
+    }),
+  });
+  assert.equal(duplicate.response.status, 409);
+
+  const ignoredImport = await request('/api/v1/imports/bank-statement', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/pdf',
+      'x-filename': 'statement.pdf',
+    },
+    body: createPdfFixture(['2026-03-23 TEST IGNORE (9.99) 970.01']),
+  });
+  assert.equal(ignoredImport.response.status, 201);
+  const ignoreRowId = ignoredImport.data.items[0].id;
+
+  const ignored = await request(`/api/v1/imports/${ignoreRowId}/ignore`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      review_note: 'Ignore this row',
+    }),
+  });
+  assert.equal(ignored.response.status, 200);
+  assert.equal(ignored.data.status, 'ignored');
+  assert.equal(ignored.data.classification_type, 'ignore');
 });
 
 test('monthly review create endpoint computes surplus distributions deterministically', async () => {

@@ -41,6 +41,7 @@ export async function POST(request, context = {}) {
     const result = await importBankStatement({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
+      pdfTextExtractor: context?.pdfTextExtractor,
       input: {
         filename: file.name,
         contentType: file.type,
@@ -51,7 +52,10 @@ export async function POST(request, context = {}) {
     return json(result, 201);
   } catch (error) {
     if (error instanceof ImportHttpError) {
-      return json({ error: error.message }, error.status);
+      return json({
+        error: error.message,
+        ...(error.details ? error.details : {}),
+      }, error.status);
     }
 
     return json({ error: 'Internal Server Error' }, 500);

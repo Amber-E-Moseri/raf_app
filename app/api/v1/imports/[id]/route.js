@@ -1,5 +1,5 @@
-import { listReviewedImportedTransactions } from '../../../../lib/imports/reviewImportedTransactions.js';
-import { ImportHttpError } from '../../../../lib/imports/shared.js';
+import { getImportedTransaction } from '../../../../../lib/imports/reviewImportedTransactions.js';
+import { ImportHttpError } from '../../../../../lib/imports/shared.js';
 
 function json(body, status) {
   return Response.json(body, { status });
@@ -15,9 +15,10 @@ function getDb(context) {
 
 export async function GET(request, context = {}) {
   try {
-    const result = await listReviewedImportedTransactions({
+    const result = await getImportedTransaction({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
+      importedTransactionId: context?.params?.id,
     });
 
     return json(result, 200);

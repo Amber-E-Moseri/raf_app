@@ -1,5 +1,5 @@
-import { listReviewedImportedTransactions } from '../../../../lib/imports/reviewImportedTransactions.js';
-import { ImportHttpError } from '../../../../lib/imports/shared.js';
+import { classifyImportedTransaction } from '../../../../../../lib/imports/reviewImportedTransactions.js';
+import { ImportHttpError } from '../../../../../../lib/imports/shared.js';
 
 function json(body, status) {
   return Response.json(body, { status });
@@ -13,11 +13,14 @@ function getDb(context) {
   return context?.db ?? globalThis.__RAF_DB__;
 }
 
-export async function GET(request, context = {}) {
+export async function POST(request, context = {}) {
   try {
-    const result = await listReviewedImportedTransactions({
+    const input = await request.json();
+    const result = await classifyImportedTransaction({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
+      importedTransactionId: context?.params?.id,
+      input,
     });
 
     return json(result, 200);
