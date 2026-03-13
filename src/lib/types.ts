@@ -132,8 +132,39 @@ export interface DashboardPeriod {
   alertStatus: "ok" | "elevated" | "risky";
 }
 
+export interface BucketBalance {
+  bucket_id: string;
+  bucket_name: string;
+  slug: string;
+  balance: string;
+  percent_of_total: number;
+}
+
+export interface GoalProgress {
+  goal_id: string;
+  goal_name: string;
+  bucket_id: string;
+  bucket?: string;
+  bucket_name: string;
+  reserved_amount: string;
+  current_amount: string;
+  target_amount: string;
+  remaining_amount: string;
+  progress_percent: number;
+}
+
 export interface DashboardReport {
   periods: DashboardPeriod[];
+  upcoming_fixed_bills_this_month: Array<{
+    id: string;
+    name: string;
+    category_slug: string;
+    expected_amount: string;
+    due_day_of_month: number;
+  }>;
+  total_expected_fixed_bills_this_month: string;
+  bucket_balances: BucketBalance[];
+  goal_progress: GoalProgress[];
 }
 
 export interface FinancialHealthReport {

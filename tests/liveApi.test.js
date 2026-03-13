@@ -360,12 +360,15 @@ test('goals endpoints create, update, soft-delete, and expose dashboard goal pro
 
   const dashboard = await request('/api/v1/reports/dashboard?from=2026-03-01&to=2026-03-01');
   assert.equal(dashboard.response.status, 200);
+  assert.equal(Array.isArray(dashboard.data.bucket_balances), true);
   assert.deepEqual(dashboard.data.goal_progress.find((item) => item.goal_id === created.data.id), {
     goal_id: created.data.id,
     goal_name: 'Emergency Fund',
     bucket_id: bucket.id,
+    bucket: 'Savings',
     bucket_name: 'Savings',
     target_amount: '5000.00',
+    reserved_amount: '1800.00',
     current_amount: '1800.00',
     remaining_amount: '3200.00',
     progress_percent: 36,

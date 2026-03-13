@@ -101,6 +101,10 @@ function createDbDouble({
         return incomeAllocations.filter((entry) => entry.incomeEntryId === incomeEntryId);
       }
 
+      if (!from || !to) {
+        return incomeAllocations;
+      }
+
       return incomeAllocations.filter((entry) => entry.receivedDate >= from && entry.receivedDate < incrementMonth(to));
     },
   };
@@ -168,6 +172,22 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
     ],
     upcoming_fixed_bills_this_month: [],
     total_expected_fixed_bills_this_month: '0.00',
+    bucket_balances: [
+      {
+        bucket_id: 'cat_fixed_bills',
+        bucket_name: 'fixed_bills',
+        slug: 'fixed_bills',
+        balance: '0.00',
+        percent_of_total: 0,
+      },
+      {
+        bucket_id: 'cat_personal_spending',
+        bucket_name: 'personal_spending',
+        slug: 'personal_spending',
+        balance: '0.00',
+        percent_of_total: 0,
+      },
+    ],
     goal_progress: [],
   });
 });
@@ -198,6 +218,7 @@ test('getDashboardReport accepts paginated transaction results from the DB adapt
 
   assert.equal(result.periods[0].spendingTotal, '700.00');
   assert.equal(result.total_expected_fixed_bills_this_month, '0.00');
+  assert.equal(Array.isArray(result.bucket_balances), true);
   assert.deepEqual(result.goal_progress, []);
 });
 
@@ -263,12 +284,14 @@ test('dashboard totals include only active fixed bills', async () => {
 test('dashboard reporting includes goal progress derived from bucket transactions', async () => {
   const db = createDbDouble({
     allocationCategories: [
-      { id: 'bucket_savings', label: 'Savings', slug: 'savings', isActive: true },
-      { id: 'bucket_giving', label: 'Giving', slug: 'giving', isActive: true },
+      { id: 'bucket_savings', label: 'Savings', slug: 'savings', isActive: true, sortOrder: 1 },
+      { id: 'bucket_giving', label: 'Giving', slug: 'giving', isActive: true, sortOrder: 2 },
+    ],
+    incomeAllocations: [
+      { allocationCategoryId: 'bucket_savings', receivedDate: '2026-03-01', allocatedAmount: '2000.00' },
+      { allocationCategoryId: 'bucket_giving', receivedDate: '2026-03-01', allocatedAmount: '500.00' },
     ],
     transactions: [
-      { id: 'txn_0', transactionDate: '2025-12-31', amount: '1000.00', direction: 'credit', categoryId: 'bucket_savings' },
-      { id: 'txn_1', transactionDate: '2026-03-10', amount: '2000.00', direction: 'credit', categoryId: 'bucket_savings' },
       { id: 'txn_2', transactionDate: '2026-03-12', amount: '200.00', direction: 'debit', categoryId: 'bucket_savings' },
       { id: 'txn_3', transactionDate: '2026-03-12', amount: '100.00', direction: 'credit', categoryId: 'bucket_giving' },
     ],
@@ -301,9 +324,26 @@ test('dashboard reporting includes goal progress derived from bucket transaction
       bucket: 'Savings',
       bucket_name: 'Savings',
       target_amount: '5000.00',
+      reserved_amount: '1800.00',
       current_amount: '1800.00',
       remaining_amount: '3200.00',
       progress_percent: 36,
+    },
+  ]);
+  assert.deepEqual(result.bucket_balances, [
+    {
+      bucket_id: 'bucket_savings',
+      bucket_name: 'Savings',
+      slug: 'savings',
+      balance: '1800.00',
+      percent_of_total: 75,
+    },
+    {
+      bucket_id: 'bucket_giving',
+      bucket_name: 'Giving',
+      slug: 'giving',
+      balance: '600.00',
+      percent_of_total: 25,
     },
   ]);
 });
@@ -484,6 +524,22 @@ test('report services handle empty-state data without persisting derived results
     ],
     upcoming_fixed_bills_this_month: [],
     total_expected_fixed_bills_this_month: '0.00',
+    bucket_balances: [
+      {
+        bucket_id: 'cat_fixed_bills',
+        bucket_name: 'fixed_bills',
+        slug: 'fixed_bills',
+        balance: '0.00',
+        percent_of_total: 0,
+      },
+      {
+        bucket_id: 'cat_personal_spending',
+        bucket_name: 'personal_spending',
+        slug: 'personal_spending',
+        balance: '0.00',
+        percent_of_total: 0,
+      },
+    ],
     goal_progress: [],
   });
   assert.deepEqual(financialHealth, {
@@ -633,6 +689,7 @@ test('dashboard and monthly review routes expose report payloads', async () => {
   const dashboardPayload = await dashboardResponse.json();
   assert.equal(Array.isArray(dashboardPayload.upcoming_fixed_bills_this_month), true);
   assert.equal(typeof dashboardPayload.total_expected_fixed_bills_this_month, 'string');
+  assert.equal(Array.isArray(dashboardPayload.bucket_balances), true);
   assert.equal(Array.isArray(dashboardPayload.goal_progress), true);
 
   const incomeAllocationsResponse = await getIncomeAllocationsRoute(

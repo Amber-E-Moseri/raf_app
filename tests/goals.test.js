@@ -13,14 +13,16 @@ import {
 
 function createDbDouble({
   allocationCategories = [
-    { id: 'bucket_savings', label: 'Savings', slug: 'savings', isActive: true },
-    { id: 'bucket_giving', label: 'Giving', slug: 'giving', isActive: true },
+    { id: 'bucket_savings', label: 'Savings', slug: 'savings', isActive: true, sortOrder: 1 },
+    { id: 'bucket_giving', label: 'Giving', slug: 'giving', isActive: true, sortOrder: 2 },
   ],
+  incomeAllocations = [],
   transactions = [],
   goals = [],
 } = {}) {
   const state = {
     allocationCategories: allocationCategories.map((row) => ({ ...row })),
+    incomeAllocations: incomeAllocations.map((row) => ({ ...row })),
     transactions: transactions.map((row) => ({ ...row })),
     goals: goals.map((row) => ({ ...row })),
   };
@@ -31,6 +33,9 @@ function createDbDouble({
     },
     async listTransactions() {
       return state.transactions.map((row) => ({ ...row }));
+    },
+    async listIncomeAllocations() {
+      return state.incomeAllocations.map((row) => ({ ...row }));
     },
     async listGoals() {
       return state.goals.map((row) => ({ ...row }));
@@ -181,13 +186,15 @@ test('bucket linkage validation requires an active allocation bucket', async () 
   );
 });
 
-test('goal progress is derived from bucket-linked transactions', async () => {
+test('goal progress is derived from the current reserved bucket balance', async () => {
   const db = createDbDouble({
+    incomeAllocations: [
+      { allocationCategoryId: 'bucket_savings', allocatedAmount: '2000.00' },
+      { allocationCategoryId: 'bucket_giving', allocatedAmount: '500.00' },
+    ],
     transactions: [
-      { id: 'txn_0', categoryId: 'bucket_savings', transactionDate: '2025-12-31', amount: '999.00', direction: 'credit' },
-      { id: 'txn_1', categoryId: 'bucket_savings', transactionDate: '2026-03-10', amount: '2000.00', direction: 'credit' },
-      { id: 'txn_2', categoryId: 'bucket_savings', transactionDate: '2026-04-01', amount: '200.00', direction: 'debit' },
-      { id: 'txn_3', categoryId: 'bucket_giving', transactionDate: '2026-03-12', amount: '100.00', direction: 'credit' },
+      { id: 'txn_1', categoryId: 'bucket_savings', transactionDate: '2026-03-10', amount: '200.00', direction: 'debit' },
+      { id: 'txn_2', categoryId: 'bucket_giving', transactionDate: '2026-04-01', amount: '50.00', direction: 'debit' },
     ],
     goals: [
       {
@@ -218,6 +225,7 @@ test('goal progress is derived from bucket-linked transactions', async () => {
       bucket: 'Savings',
       bucket_name: 'Savings',
       target_amount: '5000.00',
+      reserved_amount: '1800.00',
       current_amount: '1800.00',
       remaining_amount: '3200.00',
       progress_percent: 36,
@@ -225,13 +233,14 @@ test('goal progress is derived from bucket-linked transactions', async () => {
   ]);
 });
 
-test('goal progress without a target date uses the current calendar year only', async () => {
+test('goal progress ignores target date windows and uses current reserved balance', async () => {
   const db = createDbDouble({
+    incomeAllocations: [
+      { allocationCategoryId: 'bucket_savings', allocatedAmount: '600.00' },
+    ],
     transactions: [
-      { id: 'txn_1', categoryId: 'bucket_savings', transactionDate: '2025-06-10', amount: '400.00', direction: 'credit' },
-      { id: 'txn_2', categoryId: 'bucket_savings', transactionDate: '2026-01-15', amount: '600.00', direction: 'credit' },
-      { id: 'txn_3', categoryId: 'bucket_savings', transactionDate: '2026-02-15', amount: '100.00', direction: 'debit' },
-      { id: 'txn_4', categoryId: 'bucket_savings', transactionDate: '2027-01-01', amount: '700.00', direction: 'credit' },
+      { id: 'txn_1', categoryId: 'bucket_savings', transactionDate: '2025-06-10', amount: '50.00', direction: 'debit' },
+      { id: 'txn_2', categoryId: 'bucket_savings', transactionDate: '2027-01-15', amount: '50.00', direction: 'credit' },
     ],
     goals: [
       {
@@ -254,9 +263,10 @@ test('goal progress without a target date uses the current calendar year only', 
     householdId: 'household_1',
   });
 
-  assert.equal(result[0].current_amount, '500.00');
-  assert.equal(result[0].remaining_amount, '500.00');
-  assert.equal(result[0].progress_percent, 50);
+  assert.equal(result[0].reserved_amount, '600.00');
+  assert.equal(result[0].current_amount, '600.00');
+  assert.equal(result[0].remaining_amount, '400.00');
+  assert.equal(result[0].progress_percent, 60);
 });
 
 test('goal routes expose GET, POST, PUT, and DELETE', async () => {

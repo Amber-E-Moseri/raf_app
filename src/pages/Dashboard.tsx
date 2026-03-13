@@ -101,20 +101,31 @@ export function Dashboard() {
     );
   }
 
-  const activeCategoryCount = data.categories.length || data.latestAllocationReport?.allocations.length || 0;
+  const activeCategories = data.categories
+    .filter((category) => category.isActive !== false)
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug));
+
+  const activeCategoryCount = activeCategories.length || data.latestAllocationReport?.allocations.length || 0;
   const latestPeriodIncome = data.latestPeriod?.incomeTotal ?? "0.00";
   const latestSurplus = data.latestPeriod?.surplusOrDeficit ?? "0.00";
-  const allocationRows = data.latestAllocationReport?.allocations.map((allocation) => {
-    const category = data.categories.find((item) => item.slug === allocation.slug);
-
-    return {
+  const latestAllocationAmounts = new Map(
+    (data.latestAllocationReport?.allocations ?? []).map((allocation) => [allocation.slug, allocation.amount]),
+  );
+  const allocationRows = activeCategories.length
+    ? activeCategories.map((category) => ({
+      slug: category.slug,
+      label: category.label,
+      percent: category.allocationPercent,
+      allocatedAmount: latestAllocationAmounts.get(category.slug) ?? null,
+      currentBalance: null,
+    }))
+    : (data.latestAllocationReport?.allocations.map((allocation) => ({
       slug: allocation.slug,
       label: allocation.label,
-      percent: category?.allocationPercent ?? null,
+      percent: null,
       allocatedAmount: allocation.amount,
       currentBalance: null,
-    };
-  }) ?? [];
+    })) ?? []);
 
   return (
     <PageShell
@@ -149,7 +160,7 @@ export function Dashboard() {
       <section className="grid gap-6 xl:grid-cols-[1.45fr,0.95fr]">
         <Card
           title="Allocation Breakdown"
-          subtitle="Latest allocation snapshot from the backend, enriched with configured percentages when available."
+          subtitle="Current allocation bucket configuration from the backend, with the latest deposit snapshot shown when available."
         >
           {allocationRows.length ? (
             <>
@@ -160,7 +171,9 @@ export function Dashboard() {
                     <td className="px-4 py-3 text-sm text-stone-600">
                       {row.percent ? formatPercentWithDigits(row.percent, 2) : "N/A"}
                     </td>
-                    <td className="px-4 py-3 text-sm text-stone-600">{formatCurrency(row.allocatedAmount)}</td>
+                    <td className="px-4 py-3 text-sm text-stone-600">
+                      {row.allocatedAmount == null ? "No recent deposit snapshot" : formatCurrency(row.allocatedAmount)}
+                    </td>
                     <td className="px-4 py-3 text-sm text-stone-500">
                       {row.currentBalance == null ? "Not exposed by API" : formatCurrency(row.currentBalance)}
                     </td>
@@ -168,13 +181,13 @@ export function Dashboard() {
                 ))}
               </Table>
               <p className="mt-4 text-xs text-stone-500">
-                The live backend currently returns allocation snapshots, but not per-category current balances.
+                Allocation percentages now reflect the current backend bucket settings. Allocated amounts come from the latest deposit only.
               </p>
             </>
           ) : (
             <EmptyState
-              title="No allocations yet"
-              message="Create the first income deposit to populate the allocation breakdown."
+              title="No allocation buckets available"
+              message="Configure allocation preferences or create the first deposit to populate this view."
             />
           )}
         </Card>
