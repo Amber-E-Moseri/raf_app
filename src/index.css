@@ -2,24 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url("https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Libre+Franklin:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap");
+
 :root {
-  color: #1f2d2b;
-  background:
+  --font-inter: "Inter", sans-serif;
+  --font-barlow: "Barlow", sans-serif;
+  --font-playfair-display: "Playfair Display", serif;
+  --font-libre-franklin: "Libre Franklin", sans-serif;
+
+  --font-family: var(--font-inter);
+  --font-display: var(--font-playfair-display);
+
+  --primary-color: #1f7a4f;
+  --primary-color-strong: #15583a;
+  --primary-contrast: #ffffff;
+  --primary-soft: rgba(31, 122, 79, 0.14);
+
+  --background-base:
     radial-gradient(circle at top left, rgba(216, 230, 221, 0.8), transparent 36%),
     linear-gradient(180deg, #f3f1eb 0%, #f7f5ef 52%, #ece7dd 100%);
-  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  --background-solid: #f7f5ef;
+  --surface-color: rgba(255, 255, 255, 0.9);
+  --surface-elevated: rgba(248, 247, 243, 0.92);
+  --text-color: #1f2d2b;
+  --text-strong: #11211c;
+  --text-muted: #57534e;
+  --border-color: rgba(214, 211, 209, 0.95);
+  --shadow-panel: 0 18px 45px -24px rgba(17, 33, 28, 0.28);
+  --shadow-lift: 0 20px 55px -28px rgba(17, 33, 28, 0.24);
+  --shadow-focus: 0 0 0 4px rgba(31, 122, 79, 0.18);
+  --badge-neutral-bg: rgba(245, 245, 244, 0.95);
+  --badge-neutral-text: #57534e;
+  --badge-neutral-ring: rgba(214, 211, 209, 0.95);
+  --badge-success-bg: rgba(216, 230, 221, 0.92);
+  --badge-success-text: #11211c;
+  --badge-success-ring: rgba(196, 216, 204, 1);
+
+  background:
+    var(--background-base);
+  color: var(--text-color);
+  font-family: var(--font-family);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  color: #11211c;
+  color: var(--text-strong);
   font-feature-settings: "tnum" 1, "liga" 1;
   line-height: 1.5;
+  background: var(--background-base);
 }
 
 #root {
@@ -30,7 +70,7 @@ h1,
 h2,
 h3,
 h4 {
-  font-family: "Iowan Old Style", "Georgia", serif;
+  font-family: var(--font-display);
   letter-spacing: -0.02em;
   line-height: 1.08;
 }
@@ -43,7 +83,88 @@ select {
 }
 
 ::selection {
-  background: rgba(41, 89, 72, 0.18);
+  background: var(--primary-soft);
+}
+
+[data-theme="green"] {
+  --primary-color: #1f7a4f;
+  --primary-color-strong: #15583a;
+  --primary-soft: rgba(31, 122, 79, 0.14);
+  --background-base:
+    radial-gradient(circle at top left, rgba(216, 230, 221, 0.8), transparent 36%),
+    linear-gradient(180deg, #f3f1eb 0%, #f7f5ef 52%, #ece7dd 100%);
+  --background-solid: #f7f5ef;
+}
+
+[data-theme="pink"] {
+  --primary-color: #d14d8b;
+  --primary-color-strong: #a83a6e;
+  --primary-soft: rgba(209, 77, 139, 0.16);
+  --background-base:
+    radial-gradient(circle at top left, rgba(252, 219, 235, 0.82), transparent 38%),
+    linear-gradient(180deg, #fff7fb 0%, #fff1f7 54%, #f6e3eb 100%);
+  --background-solid: #fff1f7;
+}
+
+[data-theme="blue"] {
+  --primary-color: #2563eb;
+  --primary-color-strong: #1d4ed8;
+  --primary-soft: rgba(37, 99, 235, 0.16);
+  --background-base:
+    radial-gradient(circle at top left, rgba(214, 228, 255, 0.84), transparent 38%),
+    linear-gradient(180deg, #f5f9ff 0%, #eef4ff 54%, #dde7fb 100%);
+  --background-solid: #eef4ff;
+}
+
+[data-theme="black"] {
+  --primary-color: #111111;
+  --primary-color-strong: #000000;
+  --primary-soft: rgba(17, 17, 17, 0.12);
+  --background-base:
+    radial-gradient(circle at top left, rgba(214, 214, 214, 0.46), transparent 36%),
+    linear-gradient(180deg, #f6f6f6 0%, #efefef 54%, #dddddd 100%);
+  --background-solid: #efefef;
+}
+
+[data-font="inter"] {
+  --font-family: var(--font-inter);
+  --font-display: var(--font-inter);
+}
+
+[data-font="barlow"] {
+  --font-family: var(--font-barlow);
+  --font-display: var(--font-barlow);
+}
+
+[data-font="playfair-display"] {
+  --font-family: var(--font-inter);
+  --font-display: var(--font-playfair-display);
+}
+
+[data-font="libre-franklin"] {
+  --font-family: var(--font-libre-franklin);
+  --font-display: var(--font-libre-franklin);
+}
+
+[data-mode="dark"] {
+  --background-base:
+    radial-gradient(circle at top left, rgba(51, 65, 85, 0.35), transparent 35%),
+    linear-gradient(180deg, #111827 0%, #111827 45%, #0f172a 100%);
+  --background-solid: #111827;
+  --surface-color: rgba(17, 24, 39, 0.84);
+  --surface-elevated: rgba(30, 41, 59, 0.82);
+  --text-color: #e7e5e4;
+  --text-strong: #fafaf9;
+  --text-muted: #cbd5e1;
+  --border-color: rgba(71, 85, 105, 0.8);
+  --shadow-panel: 0 18px 45px -24px rgba(0, 0, 0, 0.55);
+  --shadow-lift: 0 20px 55px -28px rgba(0, 0, 0, 0.6);
+  --badge-neutral-bg: rgba(51, 65, 85, 0.8);
+  --badge-neutral-text: #e2e8f0;
+  --badge-neutral-ring: rgba(71, 85, 105, 0.85);
+  --badge-success-bg: rgba(31, 122, 79, 0.22);
+  --badge-success-text: #ecfdf5;
+  --badge-success-ring: rgba(31, 122, 79, 0.45);
 }
 
 @layer base {
@@ -56,7 +177,8 @@ select {
   input,
   textarea,
   select {
-    @apply focus-visible:ring-4 focus-visible:ring-raf-moss/15 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent;
+    @apply focus-visible:ring-4 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent;
+    --tw-ring-color: var(--primary-soft);
   }
 
   th {
@@ -66,27 +188,73 @@ select {
 
 @layer components {
   .ui-card {
-    @apply rounded-[1.75rem] border border-white/70 bg-white/90 shadow-panel backdrop-blur transition duration-200;
+    @apply rounded-[1.75rem] backdrop-blur transition duration-200;
+    border-color: rgba(255, 255, 255, 0.7);
+    background: var(--surface-color);
+    box-shadow: var(--shadow-panel);
   }
 
   .ui-card-hover {
-    @apply hover:-translate-y-0.5 hover:shadow-lift;
+    @apply hover:-translate-y-0.5;
+    box-shadow: var(--shadow-panel);
+  }
+
+  .ui-card-hover:hover {
+    box-shadow: var(--shadow-lift);
   }
 
   .ui-field {
-    @apply w-full rounded-2xl border border-stone-300/90 bg-white px-4 py-3 text-sm text-raf-ink shadow-sm outline-none transition duration-150 placeholder:text-stone-400 focus:border-raf-moss focus:shadow-focus;
+    @apply w-full rounded-2xl px-4 py-3 text-sm shadow-sm outline-none transition duration-150 placeholder:text-stone-400;
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    color: var(--text-strong);
+  }
+
+  .ui-field:focus {
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-focus);
   }
 
   .ui-table {
-    @apply overflow-hidden rounded-[1.75rem] border border-stone-200/90 bg-white shadow-panel;
+    @apply overflow-hidden rounded-[1.75rem];
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    box-shadow: var(--shadow-panel);
   }
 
   .ui-table thead {
-    @apply bg-stone-50/90;
+    background: var(--surface-elevated);
   }
 
   .ui-table tbody tr {
-    @apply transition-colors duration-150 hover:bg-stone-50/80;
+    @apply transition-colors duration-150;
+  }
+
+  .ui-table tbody tr:hover {
+    background: var(--surface-elevated);
+  }
+
+.theme-shell {
+    background: var(--background-base);
+    background-color: var(--background-solid);
+    color: var(--text-color);
+  }
+
+  .nav-link {
+    @apply rounded-2xl px-4 py-3 text-sm font-medium transition duration-150;
+    color: var(--text-muted);
+  }
+
+  .nav-link:hover {
+    background: var(--surface-color);
+    color: var(--text-strong);
+    box-shadow: 0 8px 24px -18px rgba(15, 23, 42, 0.45);
+  }
+
+  .nav-link-active {
+    background: var(--primary-color);
+    color: var(--primary-contrast);
+    box-shadow: 0 14px 35px -22px color-mix(in srgb, var(--primary-color) 55%, black);
   }
 }
 
