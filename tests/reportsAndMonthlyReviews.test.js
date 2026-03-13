@@ -19,6 +19,11 @@ function createDbDouble({
   incomeAllocations = [],
   transactions = [],
   debtPayments = [],
+  fixedBills = [],
+  allocationCategories = [
+    { id: 'cat_fixed_bills', slug: 'fixed_bills', isActive: true },
+    { id: 'cat_personal_spending', slug: 'personal_spending', isActive: true },
+  ],
   surplusSplitRules = [],
   monthlyReviews = [],
   household = {
@@ -45,6 +50,12 @@ function createDbDouble({
     },
     async listDebtPayments({ from, to }) {
       return debtPayments.filter((entry) => entry.paymentDate >= from && entry.paymentDate < incrementMonth(to));
+    },
+    async listFixedBills() {
+      return fixedBills;
+    },
+    async listAllocationCategories() {
+      return allocationCategories;
     },
     async listIncomeAllocationsBySlug({ slug }) {
       return incomeAllocations.filter((entry) => entry.slug === slug);
@@ -147,6 +158,8 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
         alertStatus: 'risky',
       },
     ],
+    upcoming_fixed_bills_this_month: [],
+    total_expected_fixed_bills_this_month: '0.00',
   });
 });
 
@@ -175,6 +188,66 @@ test('getDashboardReport accepts paginated transaction results from the DB adapt
   });
 
   assert.equal(result.periods[0].spendingTotal, '700.00');
+  assert.equal(result.total_expected_fixed_bills_this_month, '0.00');
+});
+
+test('dashboard totals include only active fixed bills', async () => {
+  const db = createDbDouble({
+    fixedBills: [
+      {
+        id: 'bill_1',
+        householdId: 'household_1',
+        name: 'Rent',
+        categorySlug: 'fixed_bills',
+        expectedAmount: '1800.00',
+        dueDayOfMonth: 1,
+        active: true,
+      },
+      {
+        id: 'bill_2',
+        householdId: 'household_1',
+        name: 'Phone',
+        categorySlug: 'fixed_bills',
+        expectedAmount: '80.00',
+        dueDayOfMonth: 12,
+        active: true,
+      },
+      {
+        id: 'bill_3',
+        householdId: 'household_1',
+        name: 'Streaming',
+        categorySlug: 'personal_spending',
+        expectedAmount: '19.99',
+        dueDayOfMonth: 20,
+        active: false,
+      },
+    ],
+  });
+
+  const result = await getDashboardReport({
+    db,
+    householdId: 'household_1',
+    from: '2026-03-01',
+    to: '2026-03-01',
+  });
+
+  assert.deepEqual(result.upcoming_fixed_bills_this_month, [
+    {
+      id: 'bill_1',
+      name: 'Rent',
+      category_slug: 'fixed_bills',
+      expected_amount: '1800.00',
+      due_day_of_month: 1,
+    },
+    {
+      id: 'bill_2',
+      name: 'Phone',
+      category_slug: 'fixed_bills',
+      expected_amount: '80.00',
+      due_day_of_month: 12,
+    },
+  ]);
+  assert.equal(result.total_expected_fixed_bills_this_month, '1880.00');
 });
 
 test('createMonthlyReview computes surplus distributions with remainder routed to emergency_fund', async () => {
@@ -351,6 +424,8 @@ test('report services handle empty-state data without persisting derived results
         alertStatus: 'ok',
       },
     ],
+    upcoming_fixed_bills_this_month: [],
+    total_expected_fixed_bills_this_month: '0.00',
   });
   assert.deepEqual(financialHealth, {
     activeMonthIncome: '0.00',
@@ -496,6 +571,9 @@ test('dashboard and monthly review routes expose report payloads', async () => {
   );
 
   assert.equal(dashboardResponse.status, 200);
+  const dashboardPayload = await dashboardResponse.json();
+  assert.equal(Array.isArray(dashboardPayload.upcoming_fixed_bills_this_month), true);
+  assert.equal(typeof dashboardPayload.total_expected_fixed_bills_this_month, 'string');
 
   const incomeAllocationsResponse = await getIncomeAllocationsRoute(
     new Request('http://localhost/api/v1/reports/income-allocations?incomeId=income_1', {

@@ -113,13 +113,76 @@ test('household allocation category endpoints expose current configuration and a
         allocationPercent: item.allocationPercent,
         sortOrder: item.sortOrder,
         isActive: item.isActive,
-        isBuffer: item.isBuffer,
       })),
     }),
   });
 
   assert.equal(updated.response.status, 200);
   assert.equal(updated.data.items.find((item) => item.slug === 'buffer').label, 'Operating Buffer');
+});
+
+test('household allocation category endpoints accept valid updates without a buffer category', async () => {
+  const updated = await request('/api/v1/household/allocation-categories', {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      items: [
+        { slug: 'savings', label: 'Savings', allocationPercent: '0.2000', sortOrder: 1, isActive: true },
+        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.3500', sortOrder: 2, isActive: true },
+        { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
+        { slug: 'investment', label: 'Investment', allocationPercent: '0.1500', sortOrder: 4, isActive: true },
+        { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1500', sortOrder: 5, isActive: true },
+      ],
+    }),
+  });
+
+  assert.equal(updated.response.status, 200);
+  assert.equal(updated.data.items.some((item) => item.slug === 'buffer'), false);
+});
+
+test('household allocation category endpoints allow adding a new non-system category', async () => {
+  const listed = await request('/api/v1/household/allocation-categories');
+  assert.equal(listed.response.status, 200);
+
+  const updated = await request('/api/v1/household/allocation-categories', {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      items: [
+        ...listed.data.items
+          .filter((item) => item.slug !== 'investment')
+          .map((item) => ({
+            slug: item.slug,
+            label: item.label,
+            allocationPercent: item.allocationPercent,
+            sortOrder: item.sortOrder,
+            isActive: item.isActive,
+          })),
+        {
+          slug: 'travel',
+          label: 'Travel Fund',
+          allocationPercent: '0.1000',
+          sortOrder: 6,
+          isActive: true,
+        },
+        {
+          slug: 'investment',
+          label: 'Investment',
+          allocationPercent: '0.0500',
+          sortOrder: 4,
+          isActive: true,
+        },
+      ],
+    }),
+  });
+
+  assert.equal(updated.response.status, 200);
+  assert.equal(updated.data.items.some((item) => item.slug === 'travel'), true);
+  assert.equal(updated.data.items.find((item) => item.slug === 'travel').label, 'Travel Fund');
 });
 
 test('allocation category compatibility aliases support the existing frontend endpoint shape', async () => {
@@ -139,7 +202,6 @@ test('allocation category compatibility aliases support the existing frontend en
         allocationPercent: item.allocationPercent,
         sortOrder: item.sortOrder,
         isActive: item.isActive,
-        isBuffer: item.isBuffer,
       })),
     }),
   });
@@ -148,7 +210,119 @@ test('allocation category compatibility aliases support the existing frontend en
   assert.equal(Array.isArray(updated.data.items), true);
 });
 
+test('fixed bills endpoints create, update, list, soft-delete, and surface dashboard totals', async () => {
+  const created = await request('/api/v1/household/fixed-bills', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'Rent',
+      category_slug: 'fixed_bills',
+      expected_amount: '1800.00',
+      due_day_of_month: 1,
+      active: true,
+    }),
+  });
+
+  assert.equal(created.response.status, 201);
+  assert.equal(created.data.category_slug, 'fixed_bills');
+
+  const updated = await request(`/api/v1/household/fixed-bills/${created.data.id}`, {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      expected_amount: '1850.00',
+    }),
+  });
+  assert.equal(updated.response.status, 200);
+  assert.equal(updated.data.expected_amount, '1850.00');
+
+  const listed = await request('/api/v1/household/fixed-bills');
+  assert.equal(listed.response.status, 200);
+  assert.equal(Array.isArray(listed.data.items), true);
+  assert.equal(listed.data.items.some((item) => item.id === created.data.id), true);
+
+  const dashboardBeforeDelete = await request('/api/v1/reports/dashboard?from=2026-03-01&to=2026-03-01');
+  assert.equal(dashboardBeforeDelete.response.status, 200);
+  assert.equal(dashboardBeforeDelete.data.total_expected_fixed_bills_this_month, '1850.00');
+  assert.equal(dashboardBeforeDelete.data.upcoming_fixed_bills_this_month.length >= 1, true);
+
+  const deleted = await request(`/api/v1/household/fixed-bills/${created.data.id}`, {
+    method: 'DELETE',
+  });
+  assert.equal(deleted.response.status, 204);
+
+  const dashboardAfterDelete = await request('/api/v1/reports/dashboard?from=2026-03-01&to=2026-03-01');
+  assert.equal(dashboardAfterDelete.response.status, 200);
+  assert.equal(dashboardAfterDelete.data.total_expected_fixed_bills_this_month, '0.00');
+});
+
+test('fixed bill validation rejects invalid category_slug and due_day_of_month', async () => {
+  const invalidDay = await request('/api/v1/household/fixed-bills', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'Bad Bill',
+      category_slug: 'fixed_bills',
+      expected_amount: '100.00',
+      due_day_of_month: 32,
+      active: true,
+    }),
+  });
+  assert.equal(invalidDay.response.status, 400);
+
+  const invalidCategory = await request('/api/v1/household/fixed-bills', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'Bad Category',
+      category_slug: 'does_not_exist',
+      expected_amount: '100.00',
+      due_day_of_month: 15,
+      active: true,
+    }),
+  });
+  assert.equal(invalidCategory.response.status, 422);
+});
+
 test('POST /api/v1/income creates deterministic allocations and GET /api/v1/income lists the deposit', async () => {
+  const listedCategories = await request('/api/v1/household/allocation-categories');
+  assert.equal(listedCategories.response.status, 200);
+
+  const restoredCategories = await request('/api/v1/household/allocation-categories', {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      items: [
+        { slug: 'savings', label: 'Savings', allocationPercent: '0.1000', sortOrder: 1, isActive: true },
+        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.3000', sortOrder: 2, isActive: true },
+        { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
+        { slug: 'investment', label: 'Investment', allocationPercent: '0.1000', sortOrder: 4, isActive: true },
+        { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isActive: true },
+        { slug: 'buffer', label: 'Operating Buffer', allocationPercent: '0.2500', sortOrder: 9, isActive: true },
+        ...listedCategories.data.items
+          .filter((item) => !['savings', 'fixed_bills', 'personal_spending', 'investment', 'debt_payoff', 'buffer'].includes(item.slug))
+          .map((item) => ({
+            slug: item.slug,
+            label: item.label,
+            allocationPercent: '0.0000',
+            sortOrder: item.sortOrder,
+            isActive: false,
+          })),
+      ],
+    }),
+  });
+  assert.equal(restoredCategories.response.status, 200);
+
   const create = await request('/api/v1/income', {
     method: 'POST',
     headers: {
