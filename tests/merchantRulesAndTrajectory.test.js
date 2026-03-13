@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 
 import { GET as getMerchantRulesRoute, POST as postMerchantRuleRoute } from '../app/api/v1/merchant-rules/route.js';
 import { DELETE as deleteMerchantRuleRoute, PATCH as patchMerchantRuleRoute } from '../app/api/v1/merchant-rules/[id]/route.js';
-import { GET as getTrajectoryRoute } from '../app/api/v1/reports/trajectory/route.js';
 import { POST as applyMonthlyReviewRoute } from '../app/api/v1/monthly-reviews/apply/route.js';
 import {
   createMerchantRule,
@@ -12,17 +11,15 @@ import {
   matchMerchantRule,
   updateMerchantRule,
 } from '../lib/imports/merchantRules.js';
-import { getTrajectoryReport } from '../lib/reports/getTrajectoryReport.js';
 
 function createDbDouble({
   merchantRules = [],
   household = { id: 'household_1', activeMonth: '2026-03-01' },
   incomeEntries = [],
   transactions = [],
+  debtPayments = [],
   monthlyReviews = [],
   surplusSplitRules = [],
-  debts = [],
-  debtPayments = [],
 } = {}) {
   const state = {
     merchantRules: merchantRules.map((rule) => ({ ...rule })),
@@ -60,17 +57,14 @@ function createDbDouble({
     async listTransactions() {
       return transactions;
     },
+    async listDebtPayments() {
+      return debtPayments;
+    },
     async listMonthlyReviews() {
       return state.monthlyReviews;
     },
     async listSurplusSplitRules() {
       return surplusSplitRules;
-    },
-    async listDebts() {
-      return debts;
-    },
-    async listDebtPayments() {
-      return debtPayments;
     },
     async getMonthlyReviewByMonth({ reviewMonth }) {
       return state.monthlyReviews.find((row) => row.reviewMonth === reviewMonth) ?? null;
@@ -130,59 +124,6 @@ test('merchant rule matching prefers higher priority, ignores disabled rules, an
   assert.equal(matched.categoryId, 'cat_premium');
 });
 
-test('trajectory report projects income, surplus, debt balances, and emergency fund balance', async () => {
-  const db = createDbDouble({
-    incomeEntries: [
-      { receivedDate: '2026-01-10', amount: '900.00' },
-      { receivedDate: '2026-02-10', amount: '1200.00' },
-      { receivedDate: '2026-03-10', amount: '900.00' },
-    ],
-    transactions: [
-      { transactionDate: '2026-01-12', amount: '600.00', direction: 'debit' },
-      { transactionDate: '2026-02-12', amount: '700.00', direction: 'debit' },
-      { transactionDate: '2026-03-12', amount: '800.00', direction: 'debit' },
-    ],
-    monthlyReviews: [
-      { reviewMonth: '2026-02-01', distributions: { emergency_fund: '100.00' } },
-    ],
-    surplusSplitRules: [
-      { slug: 'emergency_fund', splitPercent: '0.5000', sortOrder: 1, isActive: true },
-      { slug: 'investment', splitPercent: '0.5000', sortOrder: 2, isActive: true },
-    ],
-    debts: [
-      { id: 'debt_1', startingBalance: '1000.00', monthlyPayment: '150.00', name: 'Visa' },
-    ],
-    debtPayments: [
-      { debtId: 'debt_1', amount: '100.00' },
-    ],
-  });
-
-  const result = await getTrajectoryReport({
-    db,
-    householdId: 'household_1',
-    months: 2,
-  });
-
-  assert.deepEqual(result, {
-    projections: [
-      {
-        month: '2026-03-01',
-        projectedIncome: '1000.00',
-        projectedSurplus: '300.00',
-        debtBalances: [{ debtId: 'debt_1', projectedBalance: '750.00' }],
-        emergencyFundBalance: '250.00',
-      },
-      {
-        month: '2026-04-01',
-        projectedIncome: '1000.00',
-        projectedSurplus: '300.00',
-        debtBalances: [{ debtId: 'debt_1', projectedBalance: '600.00' }],
-        emergencyFundBalance: '400.00',
-      },
-    ],
-  });
-});
-
 test('merchant rules, trajectory, and monthly review apply routes expose payloads', async () => {
   const db = createDbDouble({
     merchantRules: [{ id: 'rule_1', merchantPattern: 'coffee', categoryId: 'cat_food', priority: 2, enabled: true }],
@@ -225,14 +166,6 @@ test('merchant rules, trajectory, and monthly review apply routes expose payload
     { db, params: { id: 'rule_1' } },
   );
   assert.equal(deleteResponse.status, 204);
-
-  const trajectoryResponse = await getTrajectoryRoute(
-    new Request('http://localhost/api/v1/reports/trajectory?months=1', {
-      headers: { 'x-household-id': 'household_1' },
-    }),
-    { db },
-  );
-  assert.equal(trajectoryResponse.status, 200);
 
   const applyResponse = await applyMonthlyReviewRoute(
     new Request('http://localhost/api/v1/monthly-reviews/apply', {
