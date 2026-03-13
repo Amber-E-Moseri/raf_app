@@ -108,8 +108,24 @@ export interface ImportedTransaction {
   linked_transaction_id: string | null;
   linked_debt_id: string | null;
   linked_fixed_bill_id: string | null;
+  linked_goal_id?: string | null;
+  normalized_description?: string | null;
+  suggestion?: ImportReviewSuggestion | null;
   reviewed_at: string | null;
   review_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportReviewSuggestion {
+  id: string;
+  normalized_description: string;
+  classification_type: string;
+  category_id: string | null;
+  linked_debt_id: string | null;
+  linked_fixed_bill_id: string | null;
+  linked_goal_id: string | null;
+  auto_apply: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -122,6 +138,20 @@ export interface BankStatementImportResponse {
   extracted: number;
   currency: string;
   items: ImportedTransaction[];
+}
+
+export interface ImportClassificationPayload {
+  classification_type: "transaction" | "debt_payment" | "fixed_bill_payment" | "goal_funding" | "duplicate" | "transfer" | "ignore";
+  transaction_date?: string;
+  description?: string;
+  merchant?: string | null;
+  category_id?: string | null;
+  debt_id?: string | null;
+  fixed_bill_id?: string | null;
+  goal_id?: string | null;
+  remember_choice?: boolean;
+  auto_apply_rule?: boolean;
+  review_note?: string | null;
 }
 
 export interface Debt {
@@ -153,6 +183,39 @@ export interface DebtListResponse {
     totalRemaining: string;
     totalPaidAllTime: string;
   };
+}
+
+export interface FixedBill {
+  id: string;
+  household_id: string;
+  name: string;
+  category_slug: string;
+  expected_amount: string;
+  due_day_of_month: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FixedBillListResponse {
+  items: FixedBill[];
+}
+
+export interface Goal {
+  id: string;
+  household_id: string;
+  bucket_id: string;
+  name: string;
+  target_amount: string;
+  target_date: string | null;
+  notes: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GoalListResponse {
+  items: Goal[];
 }
 
 export interface DashboardPeriod {

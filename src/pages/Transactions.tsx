@@ -4,7 +4,13 @@ import type { FormEvent, ReactNode } from "react";
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
 import { getDebts } from "../api/debtsApi";
-import { getImportedTransactions, ignoreImportedTransaction, importBankStatement } from "../api/importsApi";
+import { getFixedBills } from "../api/fixedBillsApi";
+import { getGoals } from "../api/goalsApi";
+import {
+  classifyImportedTransaction,
+  getImportedTransactions,
+  importBankStatement,
+} from "../api/importsApi";
 import { createTransaction, getTransactions } from "../api/transactionsApi";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
@@ -21,14 +27,41 @@ import { Table } from "../components/ui/Table";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { DEFAULT_PAGE_SIZE } from "../lib/constants";
 import { formatCurrency, formatIsoDate, monthRange } from "../lib/format";
-import { normalizeMoneyInput, validateIsoDate, validatePositiveMoney, validateRequiredText } from "../lib/validation";
-import type { AllocationCategory, Debt, ImportedTransaction, Transaction, TransactionListResponse } from "../lib/types";
+import {
+  normalizeMoneyInput,
+  validateIsoDate,
+  validatePositiveMoney,
+  validateRequiredText,
+} from "../lib/validation";
+import type {
+  AllocationCategory,
+  Debt,
+  FixedBill,
+  Goal,
+  ImportedTransaction,
+  ImportClassificationPayload,
+  Transaction,
+  TransactionListResponse,
+} from "../lib/types";
 
 interface TransactionsViewModel {
   transactions: TransactionListResponse;
   debts: Debt[];
   categories: AllocationCategory[];
+  fixedBills: FixedBill[];
+  goals: Goal[];
   imports: ImportedTransaction[];
+}
+
+interface ImportReviewDraft {
+  classificationType: ImportClassificationPayload["classification_type"];
+  categoryId: string;
+  debtId: string;
+  fixedBillId: string;
+  goalId: string;
+  reviewNote: string;
+  rememberChoice: boolean;
+  autoApplyRule: boolean;
 }
 
 type SortKey = "transactionDate" | "description" | "category" | "amount" | "direction";
@@ -48,20 +81,48 @@ function categoryTone(label: string) {
   return tones[hash % tones.length];
 }
 
-function importedStatusTone(status: string) {
-  if (status === "unreviewed") {
+function importedStatusTone(item: ImportedTransaction) {
+  if (item.status === "unreviewed") {
     return "warning";
   }
 
-  if (status === "classified") {
-    return "success";
-  }
-
-  if (status === "ignored") {
+  if (item.classification_type === "duplicate" || item.classification_type === "transfer") {
     return "neutral";
   }
 
-  return "neutral";
+  if (item.status === "ignored") {
+    return "neutral";
+  }
+
+  return "success";
+}
+
+function importedStatusLabel(item: ImportedTransaction) {
+  if (item.status === "unreviewed") {
+    return "Needs review";
+  }
+  if (item.classification_type === "ignore") {
+    return "Ignored";
+  }
+  if (item.classification_type === "duplicate") {
+    return "Duplicate";
+  }
+  if (item.classification_type === "transfer") {
+    return "Transfer";
+  }
+  if (item.classification_type === "goal_funding") {
+    return "Goal linked";
+  }
+  if (item.classification_type === "debt_payment") {
+    return "Debt payment";
+  }
+  if (item.classification_type === "fixed_bill_payment") {
+    return "Fixed bill";
+  }
+  if (item.classification_type === "transaction") {
+    return "Approved";
+  }
+  return item.status;
 }
 
 function sortIndicator(active: boolean, direction: SortDirection) {
@@ -78,6 +139,35 @@ function compareValues(left: string | number, right: string | number, direction:
     : String(left).localeCompare(String(right));
 
   return direction === "asc" ? normalized : -normalized;
+}
+
+function buildDraftFromImportedRow(item: ImportedTransaction): ImportReviewDraft {
+  return {
+    classificationType: (item.suggestion?.classification_type as ImportClassificationPayload["classification_type"]) ?? "transaction",
+    categoryId: item.suggestion?.category_id ?? "",
+    debtId: item.suggestion?.linked_debt_id ?? "",
+    fixedBillId: item.suggestion?.linked_fixed_bill_id ?? "",
+    goalId: item.suggestion?.linked_goal_id ?? "",
+    reviewNote: "",
+    rememberChoice: item.suggestion != null,
+    autoApplyRule: item.suggestion?.auto_apply ?? false,
+  };
+}
+
+function requiresCategorySelection(classificationType: ImportClassificationPayload["classification_type"]) {
+  return classificationType === "transaction";
+}
+
+function requiresDebtSelection(classificationType: ImportClassificationPayload["classification_type"]) {
+  return classificationType === "debt_payment";
+}
+
+function requiresFixedBillSelection(classificationType: ImportClassificationPayload["classification_type"]) {
+  return classificationType === "fixed_bill_payment";
+}
+
+function requiresGoalSelection(classificationType: ImportClassificationPayload["classification_type"]) {
+  return classificationType === "goal_funding";
 }
 
 export function Transactions() {
@@ -107,13 +197,14 @@ export function Transactions() {
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isImportsExpanded, setIsImportsExpanded] = useState(false);
+  const [reviewDrafts, setReviewDrafts] = useState<Record<string, ImportReviewDraft>>({});
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
   const [reviewPendingId, setReviewPendingId] = useState<string | null>(null);
   const cursor = cursorHistory[cursorHistory.length - 1];
 
   const { data, error, isLoading, reload } = useAsyncData<TransactionsViewModel>(async () => {
-    const [transactions, debts, imports] = await Promise.all([
+    const [transactions, debts, imports, fixedBills, goals] = await Promise.all([
       getTransactions({
         from: fromDate,
         to: toDate,
@@ -123,6 +214,8 @@ export function Transactions() {
       }),
       getDebts(),
       getImportedTransactions(),
+      getFixedBills(),
+      getGoals(),
     ]);
 
     let categories: AllocationCategory[] = [];
@@ -139,12 +232,16 @@ export function Transactions() {
       transactions,
       debts: debts.items,
       categories,
+      fixedBills: fixedBills.items,
+      goals: goals.items,
       imports: imports.items,
     };
   }, [categoryFilter, cursor, fromDate, toDate]);
 
   const debtLookup = new Map(data?.debts.map((debt) => [debt.id, debt.name]) ?? []);
   const categoryLookup = new Map(data?.categories.map((category) => [category.id, category.label]) ?? []);
+  const fixedBillLookup = new Map(data?.fixedBills.map((bill) => [bill.id, bill.name]) ?? []);
+  const goalLookup = new Map(data?.goals.map((goal) => [goal.id, goal.name]) ?? []);
 
   const visibleTransactions = useMemo(() => {
     const filtered = (data?.transactions.items ?? []).filter((transaction) => (
@@ -178,6 +275,31 @@ export function Transactions() {
       latestDate: dates.at(-1) ?? null,
     };
   }, [data?.imports]);
+
+  function getReviewDraft(item: ImportedTransaction) {
+    return reviewDrafts[item.id] ?? buildDraftFromImportedRow(item);
+  }
+
+  function updateReviewDraft(item: ImportedTransaction, patch: Partial<ImportReviewDraft>) {
+    setReviewDrafts((current) => ({
+      ...current,
+      [item.id]: {
+        ...(current[item.id] ?? buildDraftFromImportedRow(item)),
+        ...patch,
+      },
+    }));
+  }
+
+  function applySuggestion(item: ImportedTransaction) {
+    if (!item.suggestion) {
+      return;
+    }
+
+    setReviewDrafts((current) => ({
+      ...current,
+      [item.id]: buildDraftFromImportedRow(item),
+    }));
+  }
 
   function setSort(nextKey: SortKey) {
     if (sortKey === nextKey) {
@@ -293,14 +415,38 @@ export function Transactions() {
     }
   }
 
-  async function handleIgnoreImportedRow(importId: string) {
-    setReviewPendingId(importId);
+  async function handleReviewImportedRow(item: ImportedTransaction) {
+    const draft = getReviewDraft(item);
+    const payload: ImportClassificationPayload = {
+      classification_type: draft.classificationType,
+      review_note: draft.reviewNote.trim() || null,
+      remember_choice: draft.rememberChoice,
+      auto_apply_rule: draft.rememberChoice ? draft.autoApplyRule : false,
+    };
+
+    if (requiresCategorySelection(draft.classificationType)) {
+      payload.category_id = draft.categoryId || null;
+    }
+
+    if (requiresDebtSelection(draft.classificationType)) {
+      payload.debt_id = draft.debtId || null;
+    }
+
+    if (requiresFixedBillSelection(draft.classificationType)) {
+      payload.fixed_bill_id = draft.fixedBillId || null;
+    }
+
+    if (requiresGoalSelection(draft.classificationType)) {
+      payload.goal_id = draft.goalId || null;
+    }
+
+    setReviewPendingId(item.id);
     setReviewError(null);
     setReviewSuccess(null);
 
     try {
-      await ignoreImportedTransaction(importId, "Reviewed in Transactions");
-      setReviewSuccess("Imported row marked ignored.");
+      await classifyImportedTransaction(item.id, payload);
+      setReviewSuccess("Imported row reviewed and saved.");
       await reload();
     } catch (requestError) {
       setReviewError(requestError instanceof Error ? requestError.message : "Imported row review failed.");
@@ -313,7 +459,7 @@ export function Transactions() {
     <PageShell
       eyebrow="Ledger"
       title="Transactions"
-      description="Search, sort, and filter the transaction ledger while keeping cursor pagination intact."
+      description="Create transactions manually, import bank statements, and review imported rows before they become completed RAF activity."
       actions={
         <div className="flex gap-2">
           <Button
@@ -427,7 +573,7 @@ export function Transactions() {
               </label>
             </div>
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-raf-ink">Category</span>
+              <span className="mb-2 block text-sm font-medium text-raf-ink">Allocation bucket</span>
               <select
                 className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
                 value={form.categoryId}
@@ -440,7 +586,9 @@ export function Transactions() {
               </select>
             </label>
             <div className="flex items-center gap-3">
-              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? <LoadingSpinner inline size="sm" label="Saving transaction..." /> : "Create Transaction"}</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? <LoadingSpinner inline size="sm" label="Saving transaction..." /> : "Create Transaction"}
+              </Button>
             </div>
           </form>
         </Card>
@@ -448,7 +596,7 @@ export function Transactions() {
         <div className="space-y-4">
           {submitError ? <ErrorState title="Failed to record transaction" message={submitError} /> : null}
           {submitSuccess ? <SuccessNotice title="Transaction saved" message={submitSuccess} /> : null}
-          <Card title="Filter Ledger" subtitle="Date and category filters query the API. Search and sorting are applied to the current page.">
+          <Card title="Filter Ledger" subtitle="Date and bucket filters query the API. Search and sorting are applied to the current page.">
             <div className="grid gap-4 md:grid-cols-2">
               <Input
                 label="From date"
@@ -480,7 +628,7 @@ export function Transactions() {
                 onChange={(event) => setSearchTerm(event.target.value)}
               />
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-raf-ink">Filter by category</span>
+                <span className="mb-2 block text-sm font-medium text-raf-ink">Filter by bucket</span>
                 <select
                   className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
                   value={categoryFilter}
@@ -489,7 +637,7 @@ export function Transactions() {
                     setCursorHistory([null]);
                   }}
                 >
-                  <option value="">All categories</option>
+                  <option value="">All buckets</option>
                   {(data?.categories ?? []).map((category) => (
                     <option key={category.id} value={category.id}>{category.label}</option>
                   ))}
@@ -502,7 +650,7 @@ export function Transactions() {
 
       <Card
         title="Import Bank Statement"
-        subtitle="Upload a PDF bank statement to import transactions for review."
+        subtitle="Upload a PDF bank statement to create imported rows for review. Nothing becomes a completed RAF transaction until you approve it."
         actions={(
           <Button type="button" variant="secondary" disabled={isLoading || isImporting} onClick={() => void reload()}>
             Refresh imports
@@ -539,8 +687,8 @@ export function Transactions() {
           </div>
           <div className="space-y-3 rounded-3xl border border-stone-200 bg-stone-50/80 p-5">
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-stone-500">Import Summary</h3>
-              <p className="mt-2 text-sm leading-6 text-stone-600">Imported rows stay separate from ledger transactions until you review them.</p>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-stone-500">Review queue</h3>
+              <p className="mt-2 text-sm leading-6 text-stone-600">Imported rows stay separate from the ledger until you classify them into RAF buckets, debt payments, fixed bills, goals, duplicates, or transfers.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge tone="neutral">{importsSummary.total} total</Badge>
@@ -561,17 +709,12 @@ export function Transactions() {
 
       <Card
         title="Imported Rows Review"
-        subtitle="Review imported bank rows without overwhelming the main ledger view."
+        subtitle="Review imported bank rows inside the transaction workflow. Suggestions come from past decisions and stay editable."
         actions={(
           <div className="flex items-center gap-3">
             <Badge tone={importsSummary.unreviewed > 0 ? "warning" : "neutral"}>{importsSummary.unreviewed} unreviewed</Badge>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setIsImportsExpanded((current) => !current)}
-            >
-              {isImportsExpanded ? "Hide review" : "Review imports"}
-              <span className="ml-2 text-xs">{isImportsExpanded ? "▴" : "▾"}</span>
+            <Button type="button" variant="ghost" onClick={() => setIsImportsExpanded((current) => !current)}>
+              {isImportsExpanded ? "Collapse review" : "Expand review"}
             </Button>
           </div>
         )}
@@ -599,68 +742,234 @@ export function Transactions() {
           {reviewError ? <ErrorState title="Review action failed" message={reviewError} /> : null}
           {reviewSuccess ? <SuccessNotice title="Imported row updated" message={reviewSuccess} /> : null}
 
-          <div className="rounded-2xl border border-stone-200 bg-stone-50/70 px-4 py-3 text-sm text-stone-600">
-            Persistent “mark reviewed” support is not available in the backend yet. The current UI supports the existing persisted action: mark an imported row as ignored.
-          </div>
-
           {!isImportsExpanded ? (
             <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-4 py-4 text-sm text-stone-600">
-              Imported rows review is collapsed. Expand it to inspect and action imported bank statement rows.
+              Imported rows review is collapsed. Expand it to approve, ignore, mark duplicates or transfers, and remember review choices for future statement imports.
             </div>
           ) : isLoading ? (
             <LoadingState label="Loading imported rows..." />
           ) : !error && data ? (
             data.imports.length ? (
-              <Table
-                headers={["Date", "Description", "Amount", "Balance After", "Status", "Review Action"]}
-                footer={(
-                  <div className="flex items-center justify-between gap-4 text-sm text-stone-500">
-                    <span>{data.imports.length} imported row(s) loaded for review</span>
-                    <span>Only persisted action currently available: ignore</span>
-                  </div>
-                )}
-              >
+              <div className="space-y-4">
                 {data.imports.map((item) => {
                   const isInflow = Number(item.amount) > 0;
                   const isPending = reviewPendingId === item.id;
+                  const draft = getReviewDraft(item);
 
                   return (
-                    <tr key={item.id} className="hover:bg-stone-50/80">
-                      <td className="px-4 py-3 text-sm text-stone-600">{formatIsoDate(item.date)}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-raf-ink">{item.description}</td>
-                      <td className={`px-4 py-3 text-sm font-semibold ${isInflow ? "text-emerald-700" : "text-rose-700"}`}>
-                        {formatCurrency(item.amount)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-stone-600">
-                        {item.balance_after_transaction ? formatCurrency(item.balance_after_transaction) : "N/A"}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <Badge tone={importedStatusTone(item.status)}>{item.status}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled
-                            title="Backend mark reviewed endpoint not available yet"
-                          >
-                            Mark reviewed
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            disabled={item.status !== "unreviewed" || isPending}
-                            onClick={() => void handleIgnoreImportedRow(item.id)}
-                          >
-                            {isPending ? <LoadingSpinner inline size="sm" label="Ignoring..." /> : "Ignore"}
-                          </Button>
+                    <Card
+                      key={item.id}
+                      className="border border-stone-200 bg-white/90"
+                      title={item.description}
+                      subtitle={`${formatIsoDate(item.date)} • ${item.source}`}
+                      actions={<Badge tone={importedStatusTone(item)}>{importedStatusLabel(item)}</Badge>}
+                    >
+                      <div className="grid gap-4 lg:grid-cols-[0.9fr,1.1fr]">
+                        <div className="space-y-4">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Amount</div>
+                              <div className={`mt-1 text-base font-semibold ${isInflow ? "text-emerald-700" : "text-rose-700"}`}>
+                                {formatCurrency(item.amount)}
+                              </div>
+                            </div>
+                            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Balance after</div>
+                              <div className="mt-1 text-base font-semibold text-raf-ink">
+                                {item.balance_after_transaction ? formatCurrency(item.balance_after_transaction) : "Not provided"}
+                              </div>
+                            </div>
+                          </div>
+
+                          {item.suggestion ? (
+                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge tone="success">Suggested</Badge>
+                                <span className="text-sm text-emerald-900">
+                                  {item.suggestion.classification_type === "transaction" && item.suggestion.category_id
+                                    ? `Bucket: ${categoryLookup.get(item.suggestion.category_id) ?? item.suggestion.category_id}`
+                                    : item.suggestion.classification_type === "debt_payment" && item.suggestion.linked_debt_id
+                                      ? `Debt: ${debtLookup.get(item.suggestion.linked_debt_id) ?? item.suggestion.linked_debt_id}`
+                                      : item.suggestion.classification_type === "fixed_bill_payment" && item.suggestion.linked_fixed_bill_id
+                                        ? `Fixed bill: ${fixedBillLookup.get(item.suggestion.linked_fixed_bill_id) ?? item.suggestion.linked_fixed_bill_id}`
+                                        : item.suggestion.classification_type === "goal_funding" && item.suggestion.linked_goal_id
+                                          ? `Goal: ${goalLookup.get(item.suggestion.linked_goal_id) ?? item.suggestion.linked_goal_id}`
+                                          : item.suggestion.classification_type}
+                                </span>
+                              </div>
+                              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-emerald-900">
+                                <span>Remembered from a prior review of "{item.normalized_description ?? item.description.toLowerCase()}".</span>
+                                <Button type="button" variant="secondary" onClick={() => applySuggestion(item)}>
+                                  Use suggestion
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {item.status !== "unreviewed" ? (
+                            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+                              <div className="flex flex-wrap gap-2">
+                                {item.linked_transaction_id ? <Badge tone="neutral">Transaction linked</Badge> : null}
+                                {item.linked_debt_id ? <Badge tone="warning">{debtLookup.get(item.linked_debt_id) ?? "Debt linked"}</Badge> : null}
+                                {item.linked_fixed_bill_id ? <Badge tone="neutral">{fixedBillLookup.get(item.linked_fixed_bill_id) ?? "Fixed bill linked"}</Badge> : null}
+                                {item.linked_goal_id ? <Badge tone="success">{goalLookup.get(item.linked_goal_id) ?? "Goal linked"}</Badge> : null}
+                              </div>
+                              {item.review_note ? <p className="mt-3">{item.review_note}</p> : null}
+                            </div>
+                          ) : null}
                         </div>
-                      </td>
-                    </tr>
+
+                        <div className="space-y-4">
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <label className="block">
+                              <span className="mb-2 block text-sm font-medium text-raf-ink">Review action</span>
+                              <select
+                                className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                value={draft.classificationType}
+                                disabled={item.status !== "unreviewed" || isPending}
+                                onChange={(event) => updateReviewDraft(item, {
+                                  classificationType: event.target.value as ImportClassificationPayload["classification_type"],
+                                  categoryId: "",
+                                  debtId: "",
+                                  fixedBillId: "",
+                                  goalId: "",
+                                })}
+                              >
+                                <option value="transaction">Approve as transaction</option>
+                                <option value="debt_payment">Link to debt payment</option>
+                                <option value="fixed_bill_payment">Link to fixed bill</option>
+                                <option value="goal_funding">Link to goal funding</option>
+                                <option value="duplicate">Mark duplicate</option>
+                                <option value="transfer">Mark transfer</option>
+                                <option value="ignore">Ignore</option>
+                              </select>
+                            </label>
+
+                            {requiresCategorySelection(draft.classificationType) ? (
+                              <label className="block">
+                                <span className="mb-2 block text-sm font-medium text-raf-ink">Allocation bucket</span>
+                                <select
+                                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                  value={draft.categoryId}
+                                  disabled={item.status !== "unreviewed" || isPending}
+                                  onChange={(event) => updateReviewDraft(item, { categoryId: event.target.value })}
+                                >
+                                  <option value="">Leave unassigned</option>
+                                  {data.categories.map((category) => (
+                                    <option key={category.id} value={category.id}>{category.label}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : null}
+
+                            {requiresDebtSelection(draft.classificationType) ? (
+                              <label className="block">
+                                <span className="mb-2 block text-sm font-medium text-raf-ink">Debt</span>
+                                <select
+                                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                  value={draft.debtId}
+                                  disabled={item.status !== "unreviewed" || isPending}
+                                  onChange={(event) => updateReviewDraft(item, { debtId: event.target.value })}
+                                >
+                                  <option value="">Select debt</option>
+                                  {data.debts.map((debt) => (
+                                    <option key={debt.id} value={debt.id}>{debt.name}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : null}
+
+                            {requiresFixedBillSelection(draft.classificationType) ? (
+                              <label className="block">
+                                <span className="mb-2 block text-sm font-medium text-raf-ink">Fixed bill</span>
+                                <select
+                                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                  value={draft.fixedBillId}
+                                  disabled={item.status !== "unreviewed" || isPending}
+                                  onChange={(event) => updateReviewDraft(item, { fixedBillId: event.target.value })}
+                                >
+                                  <option value="">Select fixed bill</option>
+                                  {data.fixedBills.map((bill) => (
+                                    <option key={bill.id} value={bill.id}>{bill.name}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : null}
+
+                            {requiresGoalSelection(draft.classificationType) ? (
+                              <label className="block">
+                                <span className="mb-2 block text-sm font-medium text-raf-ink">Goal</span>
+                                <select
+                                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                  value={draft.goalId}
+                                  disabled={item.status !== "unreviewed" || isPending}
+                                  onChange={(event) => updateReviewDraft(item, { goalId: event.target.value })}
+                                >
+                                  <option value="">Select goal</option>
+                                  {data.goals.map((goal) => (
+                                    <option key={goal.id} value={goal.id}>{goal.name}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : null}
+                          </div>
+
+                          <Input
+                            label="Review note"
+                            name={`review-note-${item.id}`}
+                            placeholder="Optional note"
+                            value={draft.reviewNote}
+                            onChange={(event) => updateReviewDraft(item, { reviewNote: event.target.value })}
+                          />
+
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
+                              <input
+                                type="checkbox"
+                                className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
+                                checked={draft.rememberChoice}
+                                disabled={item.status !== "unreviewed" || isPending}
+                                onChange={(event) => updateReviewDraft(item, { rememberChoice: event.target.checked })}
+                              />
+                              <span>
+                                <span className="block font-medium text-raf-ink">Remember this choice</span>
+                                <span className="mt-1 block text-stone-500">Store a reusable rule from the normalized description so RAF can suggest this next time.</span>
+                              </span>
+                            </label>
+
+                            <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
+                              <input
+                                type="checkbox"
+                                className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
+                                checked={draft.autoApplyRule}
+                                disabled={!draft.rememberChoice || item.status !== "unreviewed" || isPending}
+                                onChange={(event) => updateReviewDraft(item, { autoApplyRule: event.target.checked })}
+                              />
+                              <span>
+                                <span className="block font-medium text-raf-ink">Allow auto-apply later</span>
+                                <span className="mt-1 block text-stone-500">This stores the rule as auto-applicable for future imports, but nothing is auto-applied in the current review.</span>
+                              </span>
+                            </label>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Button
+                              type="button"
+                              disabled={item.status !== "unreviewed" || isPending}
+                              onClick={() => void handleReviewImportedRow(item)}
+                            >
+                              {isPending ? <LoadingSpinner inline size="sm" label="Saving review..." /> : "Apply Review"}
+                            </Button>
+                            <span className="text-sm text-stone-500">
+                              Suggestions stay editable. Rules are never auto-applied unless you explicitly enable that behavior.
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
                   );
                 })}
-              </Table>
+              </div>
             ) : (
               <EmptyState
                 title="No imported rows yet"
@@ -680,7 +989,7 @@ export function Transactions() {
               headers={[
                 sortableHeader("Date", "transactionDate"),
                 sortableHeader("Description", "description"),
-                sortableHeader("Category", "category"),
+                sortableHeader("Bucket", "category"),
                 sortableHeader("Amount", "amount"),
                 sortableHeader("Direction", "direction"),
               ]}
@@ -716,7 +1025,7 @@ export function Transactions() {
           ) : (
             <EmptyState
               title="No transactions match these filters"
-              message="Adjust the date range, category filter, or description search to widen the current view."
+              message="Adjust the date range, bucket filter, or description search to widen the current view."
             />
           )
         ) : null}
