@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-const baseUrl = 'http://localhost:3000';
+const port = 3100;
+const baseUrl = `http://localhost:${port}`;
 
 let serverProcess;
 
@@ -55,6 +56,10 @@ async function request(pathname, { method = 'GET', headers = {}, body } = {}) {
 before(async () => {
   serverProcess = spawn(process.execPath, ['index.js'], {
     cwd: repoRoot,
+    env: {
+      ...process.env,
+      PORT: String(port),
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -91,6 +96,58 @@ test('GET /health returns server health', async () => {
   });
 });
 
+test('household allocation category endpoints expose current configuration and accept valid updates', async () => {
+  const listed = await request('/api/v1/household/allocation-categories');
+  assert.equal(listed.response.status, 200);
+  assert.equal(Array.isArray(listed.data.items), true);
+
+  const updated = await request('/api/v1/household/allocation-categories', {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      items: listed.data.items.map((item) => ({
+        slug: item.slug,
+        label: item.slug === 'buffer' ? 'Operating Buffer' : item.label,
+        allocationPercent: item.allocationPercent,
+        sortOrder: item.sortOrder,
+        isActive: item.isActive,
+        isBuffer: item.isBuffer,
+      })),
+    }),
+  });
+
+  assert.equal(updated.response.status, 200);
+  assert.equal(updated.data.items.find((item) => item.slug === 'buffer').label, 'Operating Buffer');
+});
+
+test('allocation category compatibility aliases support the existing frontend endpoint shape', async () => {
+  const listed = await request('/api/v1/allocation-categories');
+  assert.equal(listed.response.status, 200);
+  assert.equal(Array.isArray(listed.data.items), true);
+
+  const updated = await request('/api/v1/allocation-categories', {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      items: listed.data.items.map((item) => ({
+        slug: item.slug,
+        label: item.label,
+        allocationPercent: item.allocationPercent,
+        sortOrder: item.sortOrder,
+        isActive: item.isActive,
+        isBuffer: item.isBuffer,
+      })),
+    }),
+  });
+
+  assert.equal(updated.response.status, 200);
+  assert.equal(Array.isArray(updated.data.items), true);
+});
+
 test('POST /api/v1/income creates deterministic allocations and GET /api/v1/income lists the deposit', async () => {
   const create = await request('/api/v1/income', {
     method: 'POST',
@@ -108,14 +165,20 @@ test('POST /api/v1/income creates deterministic allocations and GET /api/v1/inco
 
   assert.equal(create.response.status, 201);
   assert.equal(create.data.incomeId != null, true);
-  assert.deepEqual(create.data.allocations, [
-    { category: 'Savings', slug: 'savings', amount: '100.00' },
-    { category: 'Fixed Bills', slug: 'fixed_bills', amount: '300.00' },
-    { category: 'Personal Spending', slug: 'personal_spending', amount: '150.00' },
-    { category: 'Investment', slug: 'investment', amount: '100.00' },
-    { category: 'Debt Payoff', slug: 'debt_payoff', amount: '100.00' },
-    { category: 'Buffer', slug: 'buffer', amount: '250.01' },
-  ]);
+  assert.deepEqual(
+    create.data.allocations.map((allocation) => ({
+      slug: allocation.slug,
+      amount: allocation.amount,
+    })),
+    [
+      { slug: 'savings', amount: '100.00' },
+      { slug: 'fixed_bills', amount: '300.00' },
+      { slug: 'personal_spending', amount: '150.00' },
+      { slug: 'investment', amount: '100.00' },
+      { slug: 'debt_payoff', amount: '100.00' },
+      { slug: 'buffer', amount: '250.01' },
+    ],
+  );
 
   const list = await request('/api/v1/income?from=2026-03-01&to=2026-03-31');
   assert.equal(list.response.status, 200);

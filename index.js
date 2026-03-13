@@ -8,7 +8,7 @@ import { createApiRouter } from './lib/server/routerLoader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const port = 3000;
+const port = Number(process.env.PORT ?? 3000);
 
 const db = createInMemoryDb();
 const app = express();
@@ -22,7 +22,7 @@ app.use((req, res, next) => {
   }
 
   res.header('Access-Control-Allow-Headers', 'Content-Type, Idempotency-Key, x-household-id, x-household_id');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -55,6 +55,16 @@ app.get('/api/v1/health', (_req, res) => {
 
 const apiRootDir = path.join(__dirname, 'app', 'api', 'v1');
 const aliases = [
+  {
+    path: '/allocation-categories',
+    method: 'GET',
+    file: path.join(apiRootDir, 'household', 'allocation-categories', 'route.js'),
+  },
+  {
+    path: '/allocation-categories',
+    method: 'PUT',
+    file: path.join(apiRootDir, 'household', 'allocation-categories', 'route.js'),
+  },
   {
     path: '/monthly-review',
     method: 'POST',
