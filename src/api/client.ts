@@ -19,6 +19,7 @@ export class ApiError extends Error {
 
 interface RequestOptions {
   base?: "api" | "origin";
+  headers?: Record<string, string>;
 }
 
 function buildUrl(
@@ -85,6 +86,7 @@ export async function getJson<T>(
   const response = await performRequest(buildUrl(path, params, options), {
     headers: {
       "Content-Type": "application/json",
+      ...(options?.headers ?? {}),
     },
   });
 
@@ -101,6 +103,7 @@ export async function postJson<T>(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...(options?.headers ?? {}),
       ...headers,
     },
     body: JSON.stringify(body),
@@ -119,9 +122,28 @@ export async function putJson<T>(
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
+      ...(options?.headers ?? {}),
       ...headers,
     },
     body: JSON.stringify(body),
+  });
+
+  return parseResponse<T>(response);
+}
+
+export async function postForm<T>(
+  path: string,
+  formData: FormData,
+  headers?: Record<string, string>,
+  options?: RequestOptions,
+): Promise<T> {
+  const response = await performRequest(buildUrl(path, undefined, options), {
+    method: "POST",
+    headers: {
+      ...(options?.headers ?? {}),
+      ...headers,
+    },
+    body: formData,
   });
 
   return parseResponse<T>(response);

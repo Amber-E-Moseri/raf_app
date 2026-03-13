@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from "react";
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
 import { getDebts } from "../api/debtsApi";
+import { getImportedTransactions, ignoreImportedTransaction, importBankStatement } from "../api/importsApi";
 import { createTransaction, getTransactions } from "../api/transactionsApi";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
@@ -21,12 +22,13 @@ import { useAsyncData } from "../hooks/useAsyncData";
 import { DEFAULT_PAGE_SIZE } from "../lib/constants";
 import { formatCurrency, formatIsoDate, monthRange } from "../lib/format";
 import { normalizeMoneyInput, validateIsoDate, validatePositiveMoney, validateRequiredText } from "../lib/validation";
-import type { AllocationCategory, Debt, Transaction, TransactionListResponse } from "../lib/types";
+import type { AllocationCategory, Debt, ImportedTransaction, Transaction, TransactionListResponse } from "../lib/types";
 
 interface TransactionsViewModel {
   transactions: TransactionListResponse;
   debts: Debt[];
   categories: AllocationCategory[];
+  imports: ImportedTransaction[];
 }
 
 type SortKey = "transactionDate" | "description" | "category" | "amount" | "direction";
@@ -44,6 +46,22 @@ function categoryTone(label: string) {
   const tones: Array<"neutral" | "success" | "warning" | "danger"> = ["neutral", "success", "warning", "danger"];
   const hash = [...label].reduce((sum, char) => sum + char.charCodeAt(0), 0);
   return tones[hash % tones.length];
+}
+
+function importedStatusTone(status: string) {
+  if (status === "unreviewed") {
+    return "warning";
+  }
+
+  if (status === "classified") {
+    return "success";
+  }
+
+  if (status === "ignored") {
+    return "neutral";
+  }
+
+  return "neutral";
 }
 
 function sortIndicator(active: boolean, direction: SortDirection) {
@@ -84,10 +102,18 @@ export function Transactions() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isImportsExpanded, setIsImportsExpanded] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
+  const [reviewPendingId, setReviewPendingId] = useState<string | null>(null);
   const cursor = cursorHistory[cursorHistory.length - 1];
 
   const { data, error, isLoading, reload } = useAsyncData<TransactionsViewModel>(async () => {
-    const [transactions, debts] = await Promise.all([
+    const [transactions, debts, imports] = await Promise.all([
       getTransactions({
         from: fromDate,
         to: toDate,
@@ -96,6 +122,7 @@ export function Transactions() {
         limit: DEFAULT_PAGE_SIZE,
       }),
       getDebts(),
+      getImportedTransactions(),
     ]);
 
     let categories: AllocationCategory[] = [];
@@ -112,6 +139,7 @@ export function Transactions() {
       transactions,
       debts: debts.items,
       categories,
+      imports: imports.items,
     };
   }, [categoryFilter, cursor, fromDate, toDate]);
 
@@ -137,6 +165,19 @@ export function Transactions() {
       return compareValues(left[sortKey], right[sortKey], sortDirection);
     });
   }, [categoryLookup, data?.transactions.items, searchTerm, sortDirection, sortKey]);
+
+  const importsSummary = useMemo(() => {
+    const imports = data?.imports ?? [];
+    const unreviewed = imports.filter((item) => item.status === "unreviewed").length;
+    const dates = imports.map((item) => item.date).filter(Boolean).sort();
+
+    return {
+      total: imports.length,
+      unreviewed,
+      earliestDate: dates[0] ?? null,
+      latestDate: dates.at(-1) ?? null,
+    };
+  }, [data?.imports]);
 
   function setSort(nextKey: SortKey) {
     if (sortKey === nextKey) {
@@ -218,6 +259,53 @@ export function Transactions() {
       setSubmitError(requestError instanceof Error ? requestError.message : "Transaction could not be created.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleImportUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedImportFile) {
+      setImportError("Select a PDF statement before uploading.");
+      setImportSuccess(null);
+      return;
+    }
+
+    if (selectedImportFile.type !== "application/pdf" && !selectedImportFile.name.toLowerCase().endsWith(".pdf")) {
+      setImportError("Only PDF bank statements are supported.");
+      setImportSuccess(null);
+      return;
+    }
+
+    setIsImporting(true);
+    setImportError(null);
+    setImportSuccess(null);
+
+    try {
+      const result = await importBankStatement(selectedImportFile);
+      setImportSuccess(`Imported ${result.extracted} row${result.extracted === 1 ? "" : "s"} for review.`);
+      setSelectedImportFile(null);
+      setIsImportsExpanded(true);
+      await reload();
+    } catch (requestError) {
+      setImportError(requestError instanceof Error ? requestError.message : "Bank statement import failed.");
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  async function handleIgnoreImportedRow(importId: string) {
+    setReviewPendingId(importId);
+    setReviewError(null);
+    setReviewSuccess(null);
+
+    try {
+      await ignoreImportedTransaction(importId, "Reviewed in Transactions");
+      setReviewSuccess("Imported row marked ignored.");
+      await reload();
+    } catch (requestError) {
+      setReviewError(requestError instanceof Error ? requestError.message : "Imported row review failed.");
+    } finally {
+      setReviewPendingId(null);
     }
   }
 
@@ -411,6 +499,177 @@ export function Transactions() {
           </Card>
         </div>
       </section>
+
+      <Card
+        title="Import Bank Statement"
+        subtitle="Upload a PDF bank statement to import transactions for review."
+        actions={(
+          <Button type="button" variant="secondary" disabled={isLoading || isImporting} onClick={() => void reload()}>
+            Refresh imports
+          </Button>
+        )}
+      >
+        <form className="grid gap-4 lg:grid-cols-[1.2fr,0.8fr]" onSubmit={handleImportUpload}>
+          <div className="space-y-4">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-raf-ink">Statement PDF</span>
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                disabled={isImporting}
+                className="block w-full rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-4 py-4 text-sm text-stone-600 file:mr-4 file:rounded-full file:border-0 file:bg-raf-moss file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-raf-ink disabled:cursor-not-allowed disabled:opacity-60"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setSelectedImportFile(file);
+                  setImportError(null);
+                  setImportSuccess(null);
+                }}
+              />
+            </label>
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+              {selectedImportFile
+                ? `Selected file: ${selectedImportFile.name}`
+                : "Select a PDF file to prepare an import."}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={!selectedImportFile || isImporting}>
+                {isImporting ? <LoadingSpinner inline size="sm" label="Uploading statement..." /> : "Upload PDF"}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-3 rounded-3xl border border-stone-200 bg-stone-50/80 p-5">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-stone-500">Import Summary</h3>
+              <p className="mt-2 text-sm leading-6 text-stone-600">Imported rows stay separate from ledger transactions until you review them.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="neutral">{importsSummary.total} total</Badge>
+              <Badge tone={importsSummary.unreviewed > 0 ? "warning" : "success"}>{importsSummary.unreviewed} unreviewed</Badge>
+            </div>
+            <p className="text-sm text-stone-500">
+              {importsSummary.earliestDate && importsSummary.latestDate
+                ? `Current import range: ${formatIsoDate(importsSummary.earliestDate)} to ${formatIsoDate(importsSummary.latestDate)}`
+                : "No imported statement rows yet."}
+            </p>
+          </div>
+        </form>
+        <div className="mt-4 space-y-3">
+          {importError ? <ErrorState title="Import failed" message={importError} /> : null}
+          {importSuccess ? <SuccessNotice title="Import complete" message={importSuccess} /> : null}
+        </div>
+      </Card>
+
+      <Card
+        title="Imported Rows Review"
+        subtitle="Review imported bank rows without overwhelming the main ledger view."
+        actions={(
+          <div className="flex items-center gap-3">
+            <Badge tone={importsSummary.unreviewed > 0 ? "warning" : "neutral"}>{importsSummary.unreviewed} unreviewed</Badge>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsImportsExpanded((current) => !current)}
+            >
+              {isImportsExpanded ? "Hide review" : "Review imports"}
+              <span className="ml-2 text-xs">{isImportsExpanded ? "▴" : "▾"}</span>
+            </Button>
+          </div>
+        )}
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Imported rows</div>
+              <div className="mt-1 text-lg font-semibold text-raf-ink">{importsSummary.total}</div>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Unreviewed rows</div>
+              <div className="mt-1 text-lg font-semibold text-raf-ink">{importsSummary.unreviewed}</div>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Import range</div>
+              <div className="mt-1 text-sm font-medium text-raf-ink">
+                {importsSummary.earliestDate && importsSummary.latestDate
+                  ? `${formatIsoDate(importsSummary.earliestDate)} to ${formatIsoDate(importsSummary.latestDate)}`
+                  : "No rows imported"}
+              </div>
+            </div>
+          </div>
+
+          {reviewError ? <ErrorState title="Review action failed" message={reviewError} /> : null}
+          {reviewSuccess ? <SuccessNotice title="Imported row updated" message={reviewSuccess} /> : null}
+
+          <div className="rounded-2xl border border-stone-200 bg-stone-50/70 px-4 py-3 text-sm text-stone-600">
+            Persistent “mark reviewed” support is not available in the backend yet. The current UI supports the existing persisted action: mark an imported row as ignored.
+          </div>
+
+          {!isImportsExpanded ? (
+            <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-4 py-4 text-sm text-stone-600">
+              Imported rows review is collapsed. Expand it to inspect and action imported bank statement rows.
+            </div>
+          ) : isLoading ? (
+            <LoadingState label="Loading imported rows..." />
+          ) : !error && data ? (
+            data.imports.length ? (
+              <Table
+                headers={["Date", "Description", "Amount", "Balance After", "Status", "Review Action"]}
+                footer={(
+                  <div className="flex items-center justify-between gap-4 text-sm text-stone-500">
+                    <span>{data.imports.length} imported row(s) loaded for review</span>
+                    <span>Only persisted action currently available: ignore</span>
+                  </div>
+                )}
+              >
+                {data.imports.map((item) => {
+                  const isInflow = Number(item.amount) > 0;
+                  const isPending = reviewPendingId === item.id;
+
+                  return (
+                    <tr key={item.id} className="hover:bg-stone-50/80">
+                      <td className="px-4 py-3 text-sm text-stone-600">{formatIsoDate(item.date)}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-raf-ink">{item.description}</td>
+                      <td className={`px-4 py-3 text-sm font-semibold ${isInflow ? "text-emerald-700" : "text-rose-700"}`}>
+                        {formatCurrency(item.amount)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-stone-600">
+                        {item.balance_after_transaction ? formatCurrency(item.balance_after_transaction) : "N/A"}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <Badge tone={importedStatusTone(item.status)}>{item.status}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled
+                            title="Backend mark reviewed endpoint not available yet"
+                          >
+                            Mark reviewed
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={item.status !== "unreviewed" || isPending}
+                            onClick={() => void handleIgnoreImportedRow(item.id)}
+                          >
+                            {isPending ? <LoadingSpinner inline size="sm" label="Ignoring..." /> : "Ignore"}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Table>
+            ) : (
+              <EmptyState
+                title="No imported rows yet"
+                message="Upload a PDF bank statement to import transactions for review alongside the ledger."
+              />
+            )
+          ) : null}
+        </div>
+      </Card>
 
       <Card title="Transactions Table" subtitle={`Showing transactions from ${formatIsoDate(fromDate)} to ${formatIsoDate(toDate)}.`}>
         {isLoading ? <LoadingState label="Loading transactions..." /> : null}

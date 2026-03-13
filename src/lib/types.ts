@@ -92,6 +92,38 @@ export interface TransactionListResponse {
   nextCursor: string | null;
 }
 
+export interface ImportedTransaction {
+  id: string;
+  household_id: string;
+  date: string;
+  description: string;
+  amount: string;
+  currency: string;
+  source: string;
+  raw_description: string | null;
+  reference_number: string | null;
+  balance_after_transaction: string | null;
+  status: "unreviewed" | "classified" | "ignored" | string;
+  classification_type: string | null;
+  linked_transaction_id: string | null;
+  linked_debt_id: string | null;
+  linked_fixed_bill_id: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportedTransactionListResponse {
+  items: ImportedTransaction[];
+}
+
+export interface BankStatementImportResponse {
+  extracted: number;
+  currency: string;
+  items: ImportedTransaction[];
+}
+
 export interface Debt {
   id: string;
   name: string;
