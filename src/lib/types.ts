@@ -15,6 +15,7 @@ export interface AllocationCategory {
   allocationPercent: string;
   isSystem?: boolean;
   isActive: boolean;
+  isBuffer?: boolean;
 }
 
 export interface AllocationCategoryWriteItem {
@@ -23,6 +24,7 @@ export interface AllocationCategoryWriteItem {
   sortOrder: number;
   allocationPercent: string;
   isActive: boolean;
+  isBuffer?: boolean;
 }
 
 export interface AllocationCategoriesResponse {
