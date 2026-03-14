@@ -94,8 +94,18 @@ function createDbDouble({
       const activeSnapshotId = sortedSnapshots[0];
       return rows.filter((row) => row.snapshotId === activeSnapshotId);
     },
-    async listIncomeAllocationsBySlug({ slug }) {
-      return incomeAllocations.filter((entry) => entry.slug === slug);
+    async listIncomeAllocationsBySlug({ slug, from, to }) {
+      return incomeAllocations.filter((entry) => {
+        if (entry.slug !== slug) {
+          return false;
+        }
+
+        if (!from || !to) {
+          return true;
+        }
+
+        return entry.receivedDate >= from && entry.receivedDate < incrementMonth(to);
+      });
     },
     async listSurplusSplitRules() {
       return surplusSplitRules;
@@ -927,6 +937,33 @@ test('household route updates savings floor settings and financial health respec
 
   assert.equal(financialHealth.savingsFloorEnabled, true);
   assert.equal(financialHealth.availableSavings, '-150.00');
+});
+
+test('financial health savings floor uses global savings bucket balance', async () => {
+  const db = createDbDouble({
+    household: {
+      id: 'household_1',
+      name: 'Household 1',
+      timezone: 'America/Toronto',
+      activeMonth: '2026-03-01',
+      periodStartDay: 1,
+      savingsFloor: '250.00',
+      savingsFloorEnabled: true,
+      monthlyEssentialsBaseline: '200.00',
+    },
+    incomeAllocations: [
+      { incomeEntryId: 'income_prev', receivedDate: '2026-02-10', slug: 'savings', label: 'Savings', amount: '400.00', allocatedAmount: '400.00' },
+      { incomeEntryId: 'income_curr', receivedDate: '2026-03-10', slug: 'savings', label: 'Savings', amount: '100.00', allocatedAmount: '100.00' },
+    ],
+  });
+
+  const financialHealth = await getFinancialHealthReport({
+    db,
+    householdId: 'household_1',
+  });
+
+  assert.equal(financialHealth.savingsBalance, '500.00');
+  assert.equal(financialHealth.availableSavings, '250.00');
 });
 
 test('surplus recommendations route exposes the spec-compatible alias', async () => {

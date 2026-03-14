@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 
+import { formatCurrency, formatPercentWithDigits } from "../../lib/format";
 import { Card } from "../ui/Card";
 import { EmptyState } from "../ui/EmptyState";
-import { formatCurrency, formatPercentWithDigits } from "../../lib/format";
 
 export interface AllocationBarDatum {
   bucketId: string;
@@ -15,6 +15,8 @@ export interface AllocationBarDatum {
   availableThisMonth: string | null;
   usedThisMonth: string | null;
   remainingThisMonth: string | null;
+  ttdBalance?: string | null;
+  percentOfTotal?: number | null;
   percentUsedThisMonth: number | null;
   percentReservedForGoalsThisMonth?: number | null;
 }
@@ -59,6 +61,7 @@ export function AllocationBarChart({ items }: AllocationBarChartProps) {
             const spent = parseMoney(item.usedThisMonth);
             const available = Math.max(parseMoney(item.availableThisMonth), 0);
             const used = reserved + spent;
+            const ttdBalance = parseMoney(item.ttdBalance);
             const totalForBar = Math.max(allocated + added, 0);
             const usedWidth = totalForBar === 0 ? 0 : Math.max(0, Math.min(100, (used / totalForBar) * 100));
             const hasAdded = added > 0;
@@ -118,10 +121,19 @@ export function AllocationBarChart({ items }: AllocationBarChartProps) {
 
                     <div className="mt-4 text-[11px] text-[var(--text-muted)]">
                       <span>Allocated {allocatedLabel}</span>
-                      <span> · </span>
+                      <span>{" · "}</span>
                       <span>Goals {formatCurrency(reserved.toFixed(2))}</span>
-                      <span> · </span>
+                      <span>{" · "}</span>
                       <span>Spent {formatCurrency(spent.toFixed(2))}</span>
+                    </div>
+                    <div className="mt-2 text-[11px] text-[var(--text-muted)]">
+                      <span>TTD balance {formatCurrency(ttdBalance.toFixed(2))}</span>
+                      {item.percentOfTotal != null ? (
+                        <>
+                          <span>{" · "}</span>
+                          <span>Share {item.percentOfTotal.toFixed(0)}%</span>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </div>

@@ -303,14 +303,9 @@ export function Debts() {
       description="Current balances come straight from the backend. The client only renders what the API provides."
     >
       <section className="grid gap-4 xl:grid-cols-[0.95fr,1.05fr]">
-        <Card title="Add Debt Account" subtitle="Create a debt profile so RAF can track actual activity and forecast payoff.">
+        <Card className="p-5">
           <form className="space-y-4" onSubmit={handleSubmit}>
-            <div className="rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] px-5 py-6 shadow-sm">
-              <div className="text-[2rem] font-semibold tracking-[-0.03em] text-[var(--text-strong)]">Add Debt Account</div>
-              <div className="mt-3 max-w-xl text-lg leading-9 text-[var(--text-muted)]">
-                Enter debt account details below so RAF can forecast and track balances.
-              </div>
-            </div>
+            <div className="text-[2rem] font-semibold tracking-[-0.03em] text-[var(--text-strong)]">Add Debt</div>
             <Input
               label="Debt name"
               name="name"
@@ -335,26 +330,28 @@ export function Debts() {
                   setFieldErrors((current) => ({ ...current, startingBalance: null }));
                 }}
               />
-              <Input
-                label="APR"
-                name="apr"
-                inputMode="decimal"
-                placeholder="19.99"
-                value={form.apr}
-                error={fieldErrors.apr}
-                onBlur={() => setFieldErrors((current) => ({ ...current, apr: validateApr(form.apr) }))}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  if (nextValue === "" || /^(?:0|[1-9]\d*)(?:\.\d{0,2})?$/.test(nextValue)) {
-                    setForm((current) => ({ ...current, apr: nextValue }));
-                    setFieldErrors((current) => ({ ...current, apr: null }));
-                  }
-                }}
-                className="pr-10"
-              />
-            </div>
-            <div className="-mt-[3.35rem] flex justify-end pr-4 text-2xl font-medium text-[var(--text-muted)] pointer-events-none">
-              <span>%</span>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">APR</span>
+                <div className="relative">
+                  <input
+                    className="ui-field pr-10"
+                    name="apr"
+                    inputMode="decimal"
+                    placeholder="19.99"
+                    value={form.apr}
+                    onBlur={() => setFieldErrors((current) => ({ ...current, apr: validateApr(form.apr) }))}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      if (nextValue === "" || /^(?:0|[1-9]\d*)(?:\.\d{0,2})?$/.test(nextValue)) {
+                        setForm((current) => ({ ...current, apr: nextValue }));
+                        setFieldErrors((current) => ({ ...current, apr: null }));
+                      }
+                    }}
+                  />
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xl font-medium text-[var(--text-muted)]">%</span>
+                </div>
+                {fieldErrors.apr ? <span className="mt-2 block text-sm leading-6 text-rose-600">{fieldErrors.apr}</span> : null}
+              </label>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <MoneyInput
@@ -429,39 +426,39 @@ export function Debts() {
             <div className="space-y-3">
               <div className="text-sm font-medium text-[var(--text-muted)]">Auto-post fees based on account activity</div>
               <div className="grid gap-3 md:grid-cols-2">
-                <label className="flex min-h-[108px] items-center gap-4 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] px-5 py-4 text-sm text-[var(--text-strong)]">
+                <label className="flex min-h-[76px] items-center gap-3 rounded-[1.2rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
                   <input
                     type="checkbox"
                     className="peer sr-only"
                     checked={form.autoPostInterest}
                     onChange={(event) => setForm((current) => ({ ...current, autoPostInterest: event.target.checked }))}
                   />
-                  <span className="relative inline-flex h-9 w-16 shrink-0 rounded-full bg-slate-500/60 transition peer-checked:bg-emerald-500">
-                    <span className="absolute left-1 top-1 h-7 w-7 rounded-full bg-white shadow-sm transition peer-checked:translate-x-7" />
+                  <span className="relative inline-flex h-7 w-12 shrink-0 rounded-full bg-slate-500/60 transition peer-checked:bg-emerald-500">
+                    <span className="absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5" />
                   </span>
-                  <span className="leading-6">
-                    <span className="block text-2xl font-medium tracking-[-0.03em] text-[var(--text-strong)]">Auto-post interest</span>
-                    <span className="block text-[13px] text-[var(--text-muted)]">on statement cycle</span>
+                  <span className="min-w-0 leading-[1.35]">
+                    <span className="block text-[13px] font-semibold tracking-[-0.01em] text-[var(--text-strong)]">Auto-post interest</span>
+                    <span className="block text-[11px] text-[var(--text-muted)]">on statement cycle</span>
                   </span>
                 </label>
-                <label className="flex min-h-[108px] items-center gap-4 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] px-5 py-4 text-sm text-[var(--text-strong)]">
+                <label className="flex min-h-[76px] items-center gap-3 rounded-[1.2rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
                   <input
                     type="checkbox"
                     className="peer sr-only"
                     checked={form.autoPostLateFee}
                     onChange={(event) => setForm((current) => ({ ...current, autoPostLateFee: event.target.checked }))}
                   />
-                  <span className="relative inline-flex h-9 w-16 shrink-0 rounded-full bg-slate-500/60 transition peer-checked:bg-emerald-500">
-                    <span className="absolute left-1 top-1 h-7 w-7 rounded-full bg-white shadow-sm transition peer-checked:translate-x-7" />
+                  <span className="relative inline-flex h-7 w-12 shrink-0 rounded-full bg-slate-500/60 transition peer-checked:bg-emerald-500">
+                    <span className="absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5" />
                   </span>
-                  <span className="leading-6">
-                    <span className="block text-2xl font-medium tracking-[-0.03em] text-[var(--text-strong)]">Auto-post late fee</span>
-                    <span className="block text-[13px] text-[var(--text-muted)]">on missed cycle</span>
+                  <span className="min-w-0 leading-[1.35]">
+                    <span className="block text-[13px] font-semibold tracking-[-0.01em] text-[var(--text-strong)]">Auto-post late fee</span>
+                    <span className="block text-[11px] text-[var(--text-muted)]">on missed cycle</span>
                   </span>
                 </label>
               </div>
             </div>
-            <Button type="submit" className="min-h-16 rounded-[1.75rem] px-8 text-2xl tracking-[-0.03em]" disabled={isSubmitting}>
+            <Button type="submit" className="min-h-12 rounded-[1.25rem] px-6 text-lg tracking-[-0.02em]" disabled={isSubmitting}>
               {isSubmitting ? <LoadingSpinner inline size="sm" label="Saving debt..." /> : "Add Debt"}
             </Button>
           </form>
@@ -856,9 +853,9 @@ export function Debts() {
                           checked={editForm.autoPostInterest}
                           onChange={(event) => setEditForm((current) => ({ ...current, autoPostInterest: event.target.checked }))}
                         />
-                        <span className="leading-5">
-                          <span className="block font-medium text-[var(--text-strong)]">Auto-post interest</span>
-                          <span className="block text-[12px] text-[var(--text-muted)]">on statement cycle</span>
+                        <span className="leading-[1.35]">
+                          <span className="block text-[13px] font-medium text-[var(--text-strong)]">Auto-post interest</span>
+                          <span className="block text-[11px] text-[var(--text-muted)]">on statement cycle</span>
                         </span>
                       </span>
                     </label>
@@ -870,9 +867,9 @@ export function Debts() {
                           checked={editForm.autoPostLateFee}
                           onChange={(event) => setEditForm((current) => ({ ...current, autoPostLateFee: event.target.checked }))}
                         />
-                        <span className="leading-5">
-                          <span className="block font-medium text-[var(--text-strong)]">Auto-post late fee</span>
-                          <span className="block text-[12px] text-[var(--text-muted)]">on missed cycle</span>
+                        <span className="leading-[1.35]">
+                          <span className="block text-[13px] font-medium text-[var(--text-strong)]">Auto-post late fee</span>
+                          <span className="block text-[11px] text-[var(--text-muted)]">on missed cycle</span>
                         </span>
                       </span>
                     </label>
