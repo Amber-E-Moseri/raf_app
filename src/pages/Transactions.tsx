@@ -172,6 +172,22 @@ function requiresGoalSelection(classificationType: ImportClassificationPayload["
   return classificationType === "goal_funding";
 }
 
+function primaryReviewLabel(classificationType: ImportClassificationPayload["classification_type"]) {
+  return classificationType === "transaction" ? "Approve" : "Apply";
+}
+
+function importRowStatus(item: ImportedTransaction, draft: ImportReviewDraft) {
+  if (item.status !== "unreviewed") {
+    return { label: "Approved", tone: "success" as const };
+  }
+
+  if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
+    return { label: "Needs bucket", tone: "warning" as const };
+  }
+
+  return { label: "Ready to approve", tone: "neutral" as const };
+}
+
 export function Transactions() {
   const { activeMonth, activeMonthLabel, activeRange } = usePeriod();
   const { from: initialFrom, to: initialTo } = activeRange;
@@ -204,7 +220,13 @@ export function Transactions() {
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, ImportReviewDraft>>({});
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
-  const [reviewPendingId, setReviewPendingId] = useState<string | null>(null);
+  const [reviewPendingIds, setReviewPendingIds] = useState<string[]>([]);
+  const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
+  const [importsView, setImportsView] = useState<"needs_review" | "processed">("needs_review");
+  const [expandedImportIds, setExpandedImportIds] = useState<Record<string, boolean>>({});
+  const [bulkBucketId, setBulkBucketId] = useState("");
+  const [isBulkReviewing, setIsBulkReviewing] = useState(false);
+  const [openImportMenuId, setOpenImportMenuId] = useState<string | null>(null);
   const cursor = cursorHistory[cursorHistory.length - 1];
 
   useEffect(() => {
@@ -216,6 +238,14 @@ export function Transactions() {
       transactionDate: defaultReviewDateForMonth(activeMonth),
     }));
   }, [activeMonth, activeRange.from, activeRange.to]);
+
+  useEffect(() => {
+    setSelectedImportIds([]);
+    setExpandedImportIds({});
+    setBulkBucketId("");
+    setImportsView("needs_review");
+    setOpenImportMenuId(null);
+  }, [activeMonth]);
 
   const { data, error, isLoading, reload } = useAsyncData<TransactionsViewModel>(async () => {
     const [transactions, debts, imports, fixedBills, goals] = await Promise.all([
@@ -295,6 +325,30 @@ export function Transactions() {
     [activeMonth, data?.imports],
   );
 
+  const needsReviewImports = useMemo(
+    () => visibleImports.filter((item) => item.status === "unreviewed"),
+    [visibleImports],
+  );
+
+  const processedImports = useMemo(
+    () => visibleImports.filter((item) => item.status !== "unreviewed"),
+    [visibleImports],
+  );
+
+  const importsInView = importsView === "needs_review" ? needsReviewImports : processedImports;
+
+  const selectedNeedsReviewItems = useMemo(
+    () => needsReviewImports.filter((item) => selectedImportIds.includes(item.id)),
+    [needsReviewImports, selectedImportIds],
+  );
+
+  const hasSelectedNeedsReview = selectedNeedsReviewItems.length > 0;
+
+  useEffect(() => {
+    const validIds = new Set(needsReviewImports.map((item) => item.id));
+    setSelectedImportIds((current) => current.filter((id) => validIds.has(id)));
+  }, [needsReviewImports]);
+
   function getReviewDraft(item: ImportedTransaction) {
     return reviewDrafts[item.id] ?? buildDraftFromImportedRow(item);
   }
@@ -309,6 +363,37 @@ export function Transactions() {
     }));
   }
 
+  function toggleImportSelection(importId: string) {
+    setSelectedImportIds((current) => (
+      current.includes(importId)
+        ? current.filter((id) => id !== importId)
+        : [...current, importId]
+    ));
+  }
+
+  function toggleSelectAllImports() {
+    if (!needsReviewImports.length) {
+      return;
+    }
+
+    setSelectedImportIds((current) => (
+      current.length === needsReviewImports.length
+        ? []
+        : needsReviewImports.map((item) => item.id)
+    ));
+  }
+
+  function toggleImportDetails(importId: string) {
+    setExpandedImportIds((current) => ({
+      ...current,
+      [importId]: !current[importId],
+    }));
+  }
+
+  function toggleImportMenu(importId: string) {
+    setOpenImportMenuId((current) => current === importId ? null : importId);
+  }
+
   function applySuggestion(item: ImportedTransaction) {
     if (!item.suggestion) {
       return;
@@ -318,6 +403,75 @@ export function Transactions() {
       ...current,
       [item.id]: buildDraftFromImportedRow(item),
     }));
+  }
+
+  function getBucketLabel(item: ImportedTransaction) {
+    const draft = getReviewDraft(item);
+    const bucketId = draft.categoryId || item.suggestion?.category_id || "";
+
+    if (bucketId) {
+      return categoryLookup.get(bucketId) ?? bucketId;
+    }
+
+    if (draft.classificationType === "debt_payment") {
+      return "Debt payoff";
+    }
+
+    if (draft.classificationType === "fixed_bill_payment") {
+      return "Via fixed bill";
+    }
+
+    if (draft.classificationType === "goal_funding") {
+      return "Via goal";
+    }
+
+    if (item.classification_type === "duplicate") {
+      return "Duplicate";
+    }
+
+    if (item.classification_type === "transfer") {
+      return "Transfer";
+    }
+
+    if (item.classification_type === "ignore" || item.status === "ignored") {
+      return "Ignored";
+    }
+
+    if (item.classification_type === "transaction") {
+      return "Approved";
+    }
+
+    return "Select bucket";
+  }
+
+  function getLinkedLabel(item: ImportedTransaction) {
+    const draft = getReviewDraft(item);
+
+    if (draft.classificationType === "debt_payment") {
+      return draft.debtId ? debtLookup.get(draft.debtId) ?? draft.debtId : "Select debt";
+    }
+
+    if (draft.classificationType === "fixed_bill_payment") {
+      return draft.fixedBillId ? fixedBillLookup.get(draft.fixedBillId) ?? draft.fixedBillId : "Select fixed bill";
+    }
+
+    if (draft.classificationType === "goal_funding") {
+      return draft.goalId ? goalLookup.get(draft.goalId) ?? draft.goalId : "Select goal";
+    }
+
+    if (item.classification_type === "debt_payment" && item.linked_debt_id) {
+      return debtLookup.get(item.linked_debt_id) ?? item.linked_debt_id;
+    }
+
+    if (item.classification_type === "fixed_bill_payment" && item.linked_fixed_bill_id) {
+      return fixedBillLookup.get(item.linked_fixed_bill_id) ?? item.linked_fixed_bill_id;
+    }
+
+    if (item.classification_type === "goal_funding" && item.linked_goal_id) {
+      return goalLookup.get(item.linked_goal_id) ?? item.linked_goal_id;
+    }
+
+    return "None";
   }
 
   function setSort(nextKey: SortKey) {
@@ -434,12 +588,10 @@ export function Transactions() {
     }
   }
 
-  async function handleReviewImportedRow(item: ImportedTransaction) {
+  function buildImportClassificationPayload(item: ImportedTransaction) {
     const draft = getReviewDraft(item);
     if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
-      setReviewError("Select an allocation bucket before approving this imported row.");
-      setReviewSuccess(null);
-      return;
+      throw new Error("Select an allocation bucket before approving this imported row.");
     }
 
     const payload: ImportClassificationPayload = {
@@ -465,18 +617,117 @@ export function Transactions() {
       payload.goal_id = draft.goalId || null;
     }
 
-    setReviewPendingId(item.id);
+    return payload;
+  }
+
+  async function submitImportedReview(item: ImportedTransaction, payload: ImportClassificationPayload) {
+    setReviewPendingIds((current) => [...current, item.id]);
     setReviewError(null);
     setReviewSuccess(null);
 
     try {
       await classifyImportedTransaction(item.id, payload);
+    } catch (requestError) {
+      throw requestError instanceof Error ? requestError : new Error("Imported row review failed.");
+    } finally {
+      setReviewPendingIds((current) => current.filter((id) => id !== item.id));
+    }
+  }
+
+  async function handleReviewImportedRow(item: ImportedTransaction) {
+    try {
+      const payload = buildImportClassificationPayload(item);
+      await submitImportedReview(item, payload);
       setReviewSuccess("Imported row reviewed and saved.");
       await reload();
     } catch (requestError) {
       setReviewError(requestError instanceof Error ? requestError.message : "Imported row review failed.");
+      setReviewSuccess(null);
+    }
+  }
+
+  async function handleIgnoreImportedRow(item: ImportedTransaction) {
+    const currentDraft = getReviewDraft(item);
+
+    setReviewDrafts((current) => ({
+      ...current,
+      [item.id]: {
+        ...currentDraft,
+        classificationType: "ignore",
+      },
+    }));
+
+    try {
+      await submitImportedReview(item, {
+        classification_type: "ignore",
+        review_note: currentDraft.reviewNote.trim() || null,
+        remember_choice: false,
+        auto_apply_rule: false,
+      });
+      setReviewSuccess("Imported row ignored.");
+      setOpenImportMenuId(null);
+      await reload();
+    } catch (requestError) {
+      setReviewError(requestError instanceof Error ? requestError.message : "Ignore action failed.");
+      setReviewSuccess(null);
+    }
+  }
+
+  function handleBulkAssignBucket() {
+    if (!bulkBucketId || !selectedNeedsReviewItems.length) {
+      return;
+    }
+
+    selectedNeedsReviewItems.forEach((item) => {
+      updateReviewDraft(item, { categoryId: bulkBucketId });
+    });
+    setReviewSuccess(`Assigned ${selectedNeedsReviewItems.length} selected row${selectedNeedsReviewItems.length === 1 ? "" : "s"} to a bucket.`);
+    setReviewError(null);
+  }
+
+  function handleBulkApplyRememberedRule() {
+    const itemsWithSuggestions = selectedNeedsReviewItems.filter((item) => item.suggestion);
+    if (!itemsWithSuggestions.length) {
+      setReviewError("No remembered rules are available for the selected rows.");
+      setReviewSuccess(null);
+      return;
+    }
+
+    itemsWithSuggestions.forEach((item) => applySuggestion(item));
+    setReviewSuccess(`Applied remembered suggestions to ${itemsWithSuggestions.length} selected row${itemsWithSuggestions.length === 1 ? "" : "s"}.`);
+    setReviewError(null);
+  }
+
+  async function handleBulkReview(action: "approve" | "ignore") {
+    if (!selectedNeedsReviewItems.length) {
+      return;
+    }
+
+    setIsBulkReviewing(true);
+    setReviewError(null);
+    setReviewSuccess(null);
+
+    try {
+      for (const item of selectedNeedsReviewItems) {
+        const payload = action === "ignore"
+          ? {
+            classification_type: "ignore" as const,
+            review_note: getReviewDraft(item).reviewNote.trim() || null,
+            remember_choice: false,
+            auto_apply_rule: false,
+          }
+          : buildImportClassificationPayload(item);
+
+        await submitImportedReview(item, payload);
+      }
+
+      setSelectedImportIds([]);
+      setReviewSuccess(`${action === "approve" ? "Approved" : "Ignored"} ${selectedNeedsReviewItems.length} imported row${selectedNeedsReviewItems.length === 1 ? "" : "s"}.`);
+      await reload();
+    } catch (requestError) {
+      setReviewError(requestError instanceof Error ? requestError.message : "Bulk review failed.");
     } finally {
-      setReviewPendingId(null);
+      setIsBulkReviewing(false);
     }
   }
 
@@ -760,10 +1011,10 @@ export function Transactions() {
 
       <Card
         title="Imported Rows Review"
-        subtitle="Review imported bank rows inside the transaction workflow. Suggestions come from past decisions and stay editable."
+        subtitle="Work through the review queue quickly with compact rows, bulk tools, and editable suggestions."
         actions={(
           <div className="flex items-center gap-3">
-            <Badge tone={importsSummary.unreviewed > 0 ? "warning" : "neutral"}>{importsSummary.unreviewed} unreviewed</Badge>
+            <Badge tone={importsSummary.unreviewed > 0 ? "warning" : "neutral"}>{importsSummary.unreviewed} needs review</Badge>
             <Button type="button" variant="ghost" onClick={() => setIsImportsExpanded((current) => !current)}>
               {isImportsExpanded ? "Collapse review" : "Expand review"}
             </Button>
@@ -771,22 +1022,35 @@ export function Transactions() {
         )}
       >
         <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Imported rows</div>
-              <div className="mt-1 text-lg font-semibold text-raf-ink">{importsSummary.total}</div>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
+                  importsView === "needs_review"
+                    ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
+                    : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
+                }`}
+                onClick={() => setImportsView("needs_review")}
+              >
+                Needs review ({needsReviewImports.length})
+              </button>
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
+                  importsView === "processed"
+                    ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
+                    : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
+                }`}
+                onClick={() => setImportsView("processed")}
+              >
+                Processed ({processedImports.length})
+              </button>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Unreviewed rows</div>
-              <div className="mt-1 text-lg font-semibold text-raf-ink">{importsSummary.unreviewed}</div>
-            </div>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Import range</div>
-              <div className="mt-1 text-sm font-medium text-raf-ink">
-                {importsSummary.earliestDate && importsSummary.latestDate
-                  ? `${formatIsoDate(importsSummary.earliestDate)} to ${formatIsoDate(importsSummary.latestDate)}`
-                  : `No rows in ${activeMonthLabel}`}
-              </div>
+            <div className="text-sm text-stone-500">
+              {importsSummary.earliestDate && importsSummary.latestDate
+                ? `${formatIsoDate(importsSummary.earliestDate)} to ${formatIsoDate(importsSummary.latestDate)}`
+                : `No imported rows in ${activeMonthLabel}`}
             </div>
           </div>
 
@@ -795,245 +1059,335 @@ export function Transactions() {
 
           {!isImportsExpanded ? (
             <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-4 py-4 text-sm text-stone-600">
-              Imported rows review is collapsed. Expand it to approve, ignore, mark duplicates or transfers, and remember review choices for future statement imports.
+              Imported rows review is collapsed. Expand it to process the review queue and bulk-approve similar imports.
             </div>
           ) : isLoading ? (
             <LoadingState label="Loading imported rows..." />
           ) : !error && data ? (
-            visibleImports.length ? (
-              <div className="space-y-4">
-                {visibleImports.map((item) => {
-                  const isInflow = Number(item.amount) > 0;
-                  const isPending = reviewPendingId === item.id;
-                  const draft = getReviewDraft(item);
+            importsInView.length ? (
+              <div className="space-y-3">
+                {importsView === "needs_review" ? (
+                  <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <label className="inline-flex items-center gap-3 text-sm font-medium text-raf-ink">
+                        <input
+                          type="checkbox"
+                          checked={needsReviewImports.length > 0 && selectedImportIds.length === needsReviewImports.length}
+                          onChange={toggleSelectAllImports}
+                        />
+                        <span>Select all</span>
+                      </label>
+                      {hasSelectedNeedsReview ? (
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Badge tone="warning">{selectedNeedsReviewItems.length} selected</Badge>
+                          <label className="flex items-center gap-2 text-sm text-stone-600">
+                            <span>Assign bucket</span>
+                            <select
+                              className="rounded-full border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                              value={bulkBucketId}
+                              onChange={(event) => setBulkBucketId(event.target.value)}
+                            >
+                              <option value="">Choose bucket</option>
+                              {data.categories.map((category) => (
+                                <option key={category.id} value={category.id}>{category.label}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <Button type="button" variant="secondary" disabled={!bulkBucketId || isBulkReviewing} onClick={handleBulkAssignBucket}>
+                            Assign bucket
+                          </Button>
+                          <Button type="button" disabled={isBulkReviewing} onClick={() => void handleBulkReview("approve")}>
+                            {isBulkReviewing ? <LoadingSpinner inline size="sm" label="Approving..." /> : "Approve Selected"}
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-stone-500">Select rows to assign, approve, ignore, or prefill from remembered rules.</span>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
 
-                  return (
-                    <Card
-                      key={item.id}
-                      className="border border-stone-200 bg-white/90"
-                      title={item.description}
-                      subtitle={`${formatIsoDate(item.date)} | ${item.source}`}
-                      actions={<Badge tone={importedStatusTone(item)}>{importedStatusLabel(item)}</Badge>}
-                    >
-                      <div className="grid gap-4 lg:grid-cols-[0.9fr,1.1fr]">
-                        <div className="space-y-4">
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
-                              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Amount</div>
-                              <div className={`mt-1 text-base font-semibold ${isInflow ? "text-emerald-700" : "text-rose-700"}`}>
+                <div className="overflow-hidden rounded-2xl border border-stone-200">
+                  <div className="hidden bg-stone-50 px-4 py-2.5 text-xs font-semibold text-stone-500 lg:grid lg:grid-cols-[36px,88px,minmax(0,320px),112px,132px,132px,112px,44px] lg:gap-3">
+                    <span />
+                    <span>Date</span>
+                    <span>Description</span>
+                    <span>Amount</span>
+                    <span>Bucket</span>
+                    <span>Linked type</span>
+                    <span>Primary action</span>
+                    <span />
+                  </div>
+                  <div className="divide-y divide-stone-200 bg-white">
+                    {importsInView.map((item) => {
+                      const isInflow = Number(item.amount) > 0;
+                      const isPending = reviewPendingIds.includes(item.id);
+                      const draft = getReviewDraft(item);
+                      const status = importRowStatus(item, draft);
+                      const isExpanded = expandedImportIds[item.id] ?? false;
+                      const needsReview = item.status === "unreviewed";
+                      const isMenuOpen = openImportMenuId === item.id;
+
+                      return (
+                        <div key={item.id}>
+                          <div className="grid gap-2 px-4 py-2.5 lg:grid-cols-[36px,88px,minmax(0,320px),112px,132px,132px,112px,44px] lg:items-start">
+                            <div className="flex items-center justify-center">
+                              {needsReview ? (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedImportIds.includes(item.id)}
+                                  onChange={() => toggleImportSelection(item.id)}
+                                />
+                              ) : (
+                                <span className="text-xs text-stone-400">-</span>
+                              )}
+                            </div>
+                            <div className="min-w-0 text-sm text-stone-600 lg:pt-1">{formatIsoDate(item.date)}</div>
+                            <div className="min-w-0 max-w-[320px]">
+                              <div className="break-words text-sm font-medium leading-5 text-raf-ink" title={item.description}>
+                                {item.description}
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <Badge tone={status.tone}>{status.label}</Badge>
+                                {!needsReview ? <Badge tone={importedStatusTone(item)}>{importedStatusLabel(item)}</Badge> : null}
+                                {item.suggestion ? <Badge tone="success">Suggested</Badge> : null}
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+                                {item.review_note ? <span>Note: {item.review_note}</span> : null}
+                              </div>
+                            </div>
+                            <div className="min-w-0 rounded-xl bg-stone-50 px-3 py-2 text-right lg:bg-transparent lg:px-0 lg:py-1">
+                              <div className="text-[11px] font-semibold text-stone-500 lg:hidden">Amount</div>
+                              <div className={`text-sm font-semibold ${isInflow ? "text-emerald-700" : "text-rose-700"}`}>
                                 {formatCurrency(item.amount)}
                               </div>
                             </div>
-                            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
-                              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Balance after</div>
-                              <div className="mt-1 text-base font-semibold text-raf-ink">
-                                {item.balance_after_transaction ? formatCurrency(item.balance_after_transaction) : "Not provided"}
-                              </div>
-                            </div>
-                          </div>
-
-                          {item.suggestion ? (
-                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge tone="success">Suggested</Badge>
-                                <span className="text-sm text-emerald-900">
-                                  {item.suggestion.classification_type === "transaction" && item.suggestion.category_id
-                                    ? `Bucket: ${categoryLookup.get(item.suggestion.category_id) ?? item.suggestion.category_id}`
-                                    : item.suggestion.classification_type === "debt_payment" && item.suggestion.linked_debt_id
-                                      ? `Debt: ${debtLookup.get(item.suggestion.linked_debt_id) ?? item.suggestion.linked_debt_id}`
-                                      : item.suggestion.classification_type === "fixed_bill_payment" && item.suggestion.linked_fixed_bill_id
-                                        ? `Fixed bill: ${fixedBillLookup.get(item.suggestion.linked_fixed_bill_id) ?? item.suggestion.linked_fixed_bill_id}`
-                                        : item.suggestion.classification_type === "goal_funding" && item.suggestion.linked_goal_id
-                                          ? `Goal: ${goalLookup.get(item.suggestion.linked_goal_id) ?? item.suggestion.linked_goal_id}`
-                                          : item.suggestion.classification_type}
-                                </span>
-                              </div>
-                              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-emerald-900">
-                                <span>Remembered from a prior review of "{item.normalized_description ?? item.description.toLowerCase()}".</span>
-                                <Button type="button" variant="secondary" onClick={() => applySuggestion(item)}>
-                                  Use suggestion
-                                </Button>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {item.status !== "unreviewed" ? (
-                            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
-                              <div className="flex flex-wrap gap-2">
-                                {item.linked_transaction_id ? <Badge tone="neutral">Transaction linked</Badge> : null}
-                                {item.linked_debt_id ? <Badge tone="warning">{debtLookup.get(item.linked_debt_id) ?? "Debt linked"}</Badge> : null}
-                                {item.linked_fixed_bill_id ? <Badge tone="neutral">{fixedBillLookup.get(item.linked_fixed_bill_id) ?? "Fixed bill linked"}</Badge> : null}
-                                {item.linked_goal_id ? <Badge tone="success">{goalLookup.get(item.linked_goal_id) ?? "Goal linked"}</Badge> : null}
-                              </div>
-                              {item.review_note ? <p className="mt-3">{item.review_note}</p> : null}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="space-y-4">
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <label className="block">
-                              <span className="mb-2 block text-sm font-medium text-raf-ink">Review action</span>
-                              <select
-                                className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                value={draft.classificationType}
-                                disabled={item.status !== "unreviewed" || isPending}
-                                onChange={(event) => updateReviewDraft(item, {
-                                  classificationType: event.target.value as ImportClassificationPayload["classification_type"],
-                                  categoryId: "",
-                                  debtId: "",
-                                  fixedBillId: "",
-                                  goalId: "",
-                                })}
-                              >
-                                <option value="transaction">Approve as transaction</option>
-                                <option value="debt_payment">Link to debt payment</option>
-                                <option value="fixed_bill_payment">Link to fixed bill</option>
-                                <option value="goal_funding">Link to goal funding</option>
-                                <option value="duplicate">Mark duplicate</option>
-                                <option value="transfer">Mark transfer</option>
-                                <option value="ignore">Ignore</option>
-                              </select>
-                            </label>
-
-                            {requiresCategorySelection(draft.classificationType) ? (
-                              <label className="block">
-                                <span className="mb-2 block text-sm font-medium text-raf-ink">Allocation bucket</span>
+                            <div className="min-w-0 lg:pt-0.5">
+                              {needsReview && requiresCategorySelection(draft.classificationType) ? (
                                 <select
-                                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                  className="w-full rounded-xl border border-stone-300 bg-white px-2.5 py-1.5 text-xs text-stone-700 outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
                                   value={draft.categoryId}
-                                  disabled={item.status !== "unreviewed" || isPending}
+                                  disabled={isPending || isBulkReviewing}
                                   onChange={(event) => updateReviewDraft(item, { categoryId: event.target.value })}
                                 >
-                                  <option value="">Select allocation bucket</option>
+                                  <option value="">Select bucket</option>
                                   {data.categories.map((category) => (
                                     <option key={category.id} value={category.id}>{category.label}</option>
                                   ))}
                                 </select>
-                                <span className="mt-2 block text-xs text-stone-500">
-                                  Approved imported transactions must end in an allocation bucket.
-                                </span>
-                              </label>
-                            ) : null}
-
-                            {requiresDebtSelection(draft.classificationType) ? (
-                              <label className="block">
-                                <span className="mb-2 block text-sm font-medium text-raf-ink">Debt</span>
-                                <select
-                                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                  value={draft.debtId}
-                                  disabled={item.status !== "unreviewed" || isPending}
-                                  onChange={(event) => updateReviewDraft(item, { debtId: event.target.value })}
+                              ) : (
+                                <div className="truncate text-sm text-stone-600">{getBucketLabel(item)}</div>
+                              )}
+                            </div>
+                            <div className="min-w-0 truncate text-sm text-stone-600 lg:pt-0.5">{getLinkedLabel(item)}</div>
+                            <div className="min-w-0 lg:pt-0.5">
+                              {needsReview ? (
+                                <Button
+                                  type="button"
+                                  className="min-h-9 rounded-full px-3 py-1.5 text-xs"
+                                  disabled={isPending || isBulkReviewing}
+                                  onClick={() => void handleReviewImportedRow(item)}
                                 >
-                                  <option value="">Select debt</option>
-                                  {data.debts.map((debt) => (
-                                    <option key={debt.id} value={debt.id}>{debt.name}</option>
-                                  ))}
-                                </select>
-                                <span className="mt-2 block text-xs text-stone-500">
-                                  Debt payments route into the Debt Payoff bucket automatically.
-                                </span>
-                              </label>
-                            ) : null}
-
-                            {requiresFixedBillSelection(draft.classificationType) ? (
-                              <label className="block">
-                                <span className="mb-2 block text-sm font-medium text-raf-ink">Fixed bill</span>
-                                <select
-                                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                  value={draft.fixedBillId}
-                                  disabled={item.status !== "unreviewed" || isPending}
-                                  onChange={(event) => updateReviewDraft(item, { fixedBillId: event.target.value })}
-                                >
-                                  <option value="">Select fixed bill</option>
-                                  {data.fixedBills.map((bill) => (
-                                    <option key={bill.id} value={bill.id}>{bill.name}</option>
-                                  ))}
-                                </select>
-                                <span className="mt-2 block text-xs text-stone-500">
-                                  Fixed bill payments use the fixed bill&apos;s configured allocation bucket.
-                                </span>
-                              </label>
-                            ) : null}
-
-                            {requiresGoalSelection(draft.classificationType) ? (
-                              <label className="block">
-                                <span className="mb-2 block text-sm font-medium text-raf-ink">Goal</span>
-                                <select
-                                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                  value={draft.goalId}
-                                  disabled={item.status !== "unreviewed" || isPending}
-                                  onChange={(event) => updateReviewDraft(item, { goalId: event.target.value })}
-                                >
-                                  <option value="">Select goal</option>
-                                  {data.goals.map((goal) => (
-                                    <option key={goal.id} value={goal.id}>{goal.name}</option>
-                                  ))}
-                                </select>
-                              </label>
-                            ) : null}
+                                  {isPending ? <LoadingSpinner inline size="sm" label="Saving..." /> : primaryReviewLabel(draft.classificationType)}
+                                </Button>
+                              ) : (
+                                <div className="text-sm text-stone-500">Processed</div>
+                              )}
+                            </div>
+                            <div className="relative flex justify-end">
+                              <Button type="button" variant="ghost" className="min-h-9 rounded-full px-2 py-1.5 text-base leading-none" onClick={() => toggleImportMenu(item.id)}>
+                                ...
+                              </Button>
+                              {isMenuOpen ? (
+                                <div className="absolute right-0 top-10 z-10 min-w-[140px] rounded-2xl border border-stone-200 bg-white p-2 shadow-lg">
+                                  <button
+                                    type="button"
+                                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                    onClick={() => {
+                                      setExpandedImportIds((current) => ({ ...current, [item.id]: true }));
+                                      setOpenImportMenuId(null);
+                                    }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                    onClick={() => {
+                                      toggleImportDetails(item.id);
+                                      setOpenImportMenuId(null);
+                                    }}
+                                  >
+                                    View details
+                                  </button>
+                                  {needsReview ? (
+                                    <button
+                                      type="button"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-700 hover:bg-stone-50"
+                                      onClick={() => void handleIgnoreImportedRow(item)}
+                                    >
+                                      Ignore
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
 
-                          <Input
-                            label="Review note"
-                            name={`review-note-${item.id}`}
-                            placeholder="Optional note"
-                            value={draft.reviewNote}
-                            onChange={(event) => updateReviewDraft(item, { reviewNote: event.target.value })}
-                          />
+                          {isExpanded ? (
+                            <div className="border-t border-stone-100 bg-stone-50 px-4 py-4">
+                              {item.suggestion ? (
+                                <div className="mb-4 rounded-2xl border border-stone-200 bg-white px-4 py-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="text-sm text-stone-600">
+                                      Remembered from a prior review of "{item.normalized_description ?? item.description.toLowerCase()}".
+                                    </div>
+                                    {needsReview ? (
+                                      <Button type="button" variant="secondary" onClick={() => applySuggestion(item)}>
+                                        Use suggestion
+                                      </Button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ) : null}
 
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
-                              <input
-                                type="checkbox"
-                                className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
-                                checked={draft.rememberChoice}
-                                disabled={item.status !== "unreviewed" || isPending}
-                                onChange={(event) => updateReviewDraft(item, { rememberChoice: event.target.checked })}
-                              />
-                              <span>
-                                <span className="block font-medium text-raf-ink">Remember this choice</span>
-                                <span className="mt-1 block text-stone-500">Store a reusable rule from the normalized description so RAF can suggest this next time.</span>
-                              </span>
-                            </label>
+                              {needsReview ? (
+                                <div className="grid gap-4 lg:grid-cols-[220px,220px,220px,1fr]">
+                                  <label className="block">
+                                    <span className="mb-2 block text-sm font-medium text-raf-ink">Review action</span>
+                                    <select
+                                      className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                      value={draft.classificationType}
+                                      disabled={isPending || isBulkReviewing}
+                                      onChange={(event) => updateReviewDraft(item, {
+                                        classificationType: event.target.value as ImportClassificationPayload["classification_type"],
+                                        categoryId: "",
+                                        debtId: "",
+                                        fixedBillId: "",
+                                        goalId: "",
+                                      })}
+                                    >
+                                      <option value="transaction">Approve as transaction</option>
+                                      <option value="debt_payment">Link to debt payment</option>
+                                      <option value="fixed_bill_payment">Link to fixed bill</option>
+                                      <option value="goal_funding">Link to goal funding</option>
+                                      <option value="duplicate">Mark duplicate</option>
+                                      <option value="transfer">Mark transfer</option>
+                                      <option value="ignore">Ignore</option>
+                                    </select>
+                                  </label>
 
-                            <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
-                              <input
-                                type="checkbox"
-                                className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
-                                checked={draft.autoApplyRule}
-                                disabled={!draft.rememberChoice || item.status !== "unreviewed" || isPending}
-                                onChange={(event) => updateReviewDraft(item, { autoApplyRule: event.target.checked })}
-                              />
-                              <span>
-                                <span className="block font-medium text-raf-ink">Allow auto-apply later</span>
-                                <span className="mt-1 block text-stone-500">This stores the rule as auto-applicable for future imports, but nothing is auto-applied in the current review.</span>
-                              </span>
-                            </label>
-                          </div>
+                                  {requiresDebtSelection(draft.classificationType) ? (
+                                    <label className="block">
+                                      <span className="mb-2 block text-sm font-medium text-raf-ink">Debt</span>
+                                      <select
+                                        className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                        value={draft.debtId}
+                                        disabled={isPending || isBulkReviewing}
+                                        onChange={(event) => updateReviewDraft(item, { debtId: event.target.value })}
+                                      >
+                                        <option value="">Select debt</option>
+                                        {data.debts.map((debt) => (
+                                          <option key={debt.id} value={debt.id}>{debt.name}</option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  ) : null}
 
-                          <div className="flex flex-wrap items-center gap-3">
-                            <Button
-                              type="button"
-                              disabled={item.status !== "unreviewed" || isPending}
-                              onClick={() => void handleReviewImportedRow(item)}
-                            >
-                              {isPending ? <LoadingSpinner inline size="sm" label="Saving review..." /> : "Apply Review"}
-                            </Button>
-                            <span className="text-sm text-stone-500">
-                              Suggestions stay editable. Rules are never auto-applied unless you explicitly enable that behavior.
-                            </span>
-                          </div>
+                                  {requiresFixedBillSelection(draft.classificationType) ? (
+                                    <label className="block">
+                                      <span className="mb-2 block text-sm font-medium text-raf-ink">Fixed bill</span>
+                                      <select
+                                        className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                        value={draft.fixedBillId}
+                                        disabled={isPending || isBulkReviewing}
+                                        onChange={(event) => updateReviewDraft(item, { fixedBillId: event.target.value })}
+                                      >
+                                        <option value="">Select fixed bill</option>
+                                        {data.fixedBills.map((bill) => (
+                                          <option key={bill.id} value={bill.id}>{bill.name}</option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  ) : null}
+
+                                  {requiresGoalSelection(draft.classificationType) ? (
+                                    <label className="block">
+                                      <span className="mb-2 block text-sm font-medium text-raf-ink">Goal</span>
+                                      <select
+                                        className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                        value={draft.goalId}
+                                        disabled={isPending || isBulkReviewing}
+                                        onChange={(event) => updateReviewDraft(item, { goalId: event.target.value })}
+                                      >
+                                        <option value="">Select goal</option>
+                                        {data.goals.map((goal) => (
+                                          <option key={goal.id} value={goal.id}>{goal.name}</option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  ) : null}
+
+                                  <div className="grid gap-3 sm:grid-cols-2">
+                                    <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700">
+                                      <input
+                                        type="checkbox"
+                                        className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
+                                        checked={draft.rememberChoice}
+                                        disabled={isPending || isBulkReviewing}
+                                        onChange={(event) => updateReviewDraft(item, { rememberChoice: event.target.checked })}
+                                      />
+                                      <span>
+                                        <span className="block font-medium text-raf-ink">Remember this choice</span>
+                                        <span className="mt-1 block text-stone-500">Keep this review decision ready as a suggestion next time.</span>
+                                      </span>
+                                    </label>
+
+                                    <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700">
+                                      <input
+                                        type="checkbox"
+                                        className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
+                                        checked={draft.autoApplyRule}
+                                        disabled={!draft.rememberChoice || isPending || isBulkReviewing}
+                                        onChange={(event) => updateReviewDraft(item, { autoApplyRule: event.target.checked })}
+                                      />
+                                      <span>
+                                        <span className="block font-medium text-raf-ink">Allow auto-apply later</span>
+                                        <span className="mt-1 block text-stone-500">Store this rule as auto-applicable for future imports without using it silently today.</span>
+                                      </span>
+                                    </label>
+                                  </div>
+
+                                  <Input
+                                    label="Review note"
+                                    name={`review-note-${item.id}`}
+                                    placeholder="Optional note"
+                                    value={draft.reviewNote}
+                                    onChange={(event) => updateReviewDraft(item, { reviewNote: event.target.value })}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex flex-wrap gap-2">
+                                  {item.linked_transaction_id ? <Badge tone="neutral">Transaction linked</Badge> : null}
+                                  {item.linked_debt_id ? <Badge tone="warning">{debtLookup.get(item.linked_debt_id) ?? "Debt linked"}</Badge> : null}
+                                  {item.linked_fixed_bill_id ? <Badge tone="neutral">{fixedBillLookup.get(item.linked_fixed_bill_id) ?? "Fixed bill linked"}</Badge> : null}
+                                  {item.linked_goal_id ? <Badge tone="success">{goalLookup.get(item.linked_goal_id) ?? "Goal linked"}</Badge> : null}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
-                    </Card>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             ) : (
               <EmptyState
-                title="No imported rows for this month"
-                message="Upload a PDF bank statement or switch months to review imported rows for a different period."
+                title={importsView === "needs_review" ? "No rows need review" : "No processed imports yet"}
+                message={importsView === "needs_review"
+                  ? "Upload a PDF bank statement or switch months to review imported rows for a different period."
+                  : "Approved, ignored, duplicate, and transfer rows will move here once they leave the review queue."}
               />
             )
           ) : null}
