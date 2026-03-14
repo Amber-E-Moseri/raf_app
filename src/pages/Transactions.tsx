@@ -274,11 +274,13 @@ export function Transactions() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryFilterFromUrl = searchParams.get("categoryId") ?? "";
+  const categorySlugFilterFromUrl = searchParams.get("categorySlug") ?? "";
+  const focusLabelFromUrl = searchParams.get("focusLabel") ?? "";
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([null]);
   const [fromDate, setFromDate] = useState(initialFrom);
   const [toDate, setToDate] = useState(initialTo);
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState(categoryFilterFromUrl);
+  const [categoryFilter, setCategoryFilter] = useState(categorySlugFilterFromUrl ? "" : categoryFilterFromUrl);
   const [sortKey, setSortKey] = useState<SortKey>("transactionDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [quickFilter, setQuickFilter] = useState<"all" | "spend" | "income" | "transfer" | "debt">("all");
@@ -342,9 +344,9 @@ export function Transactions() {
   }, [activeMonth]);
 
   useEffect(() => {
-    setCategoryFilter(categoryFilterFromUrl);
+    setCategoryFilter(categorySlugFilterFromUrl ? "" : categoryFilterFromUrl);
     setCursorHistory([null]);
-  }, [categoryFilterFromUrl]);
+  }, [categoryFilterFromUrl, categorySlugFilterFromUrl]);
 
   useEffect(() => {
     if (location.hash !== "#transactions-table") {
@@ -367,6 +369,7 @@ export function Transactions() {
         from: fromDate,
         to: toDate,
         categoryId: categoryFilter || undefined,
+        categorySlug: !categoryFilter && categorySlugFilterFromUrl ? categorySlugFilterFromUrl : undefined,
         cursor: cursor ?? undefined,
         limit: DEFAULT_PAGE_SIZE,
       }),
@@ -394,12 +397,15 @@ export function Transactions() {
       goals: goals.items.filter((goal) => goal.active !== false),
       imports: imports.items,
     };
-  }, [categoryFilter, cursor, fromDate, toDate]);
+  }, [categoryFilter, categorySlugFilterFromUrl, cursor, fromDate, toDate]);
 
   const debtLookup = new Map(data?.debts.map((debt) => [debt.id, debt.name]) ?? []);
   const categoryLookup = new Map(data?.categories.map((category) => [category.id, category.label]) ?? []);
+  const categorySlugLookup = new Map(data?.categories.map((category) => [category.id, category.slug]) ?? []);
+  const categoryLabelBySlug = new Map(data?.categories.map((category) => [category.slug, category.label]) ?? []);
   const fixedBillLookup = new Map(data?.fixedBills.map((bill) => [bill.id, bill.name]) ?? []);
   const goalLookup = new Map(data?.goals.map((goal) => [goal.id, goal.name]) ?? []);
+  const dashboardFocusedBucketLabel = focusLabelFromUrl || (categorySlugFilterFromUrl ? categoryLabelBySlug.get(categorySlugFilterFromUrl) ?? categorySlugFilterFromUrl : "");
   const goalsForSelectedBucket = useMemo(
     () => (data?.goals ?? []).filter((goal) => !form.categoryId || goal.bucket_id === form.categoryId),
     [data?.goals, form.categoryId],
@@ -434,6 +440,18 @@ export function Transactions() {
     ];
 
     const filtered = combinedRows.filter((transaction) => {
+      const matchesBucketFilter = !categoryFilter && !categorySlugFilterFromUrl
+        ? true
+        : categoryFilter
+          ? transaction.categoryId === categoryFilter
+          : transaction.categoryId
+            ? categorySlugLookup.get(transaction.categoryId) === categorySlugFilterFromUrl
+            : false;
+
+      if (!matchesBucketFilter) {
+        return false;
+      }
+
       const normalizedSearch = searchTerm.trim().toLowerCase();
       const matchesSearch = !normalizedSearch
         || transaction.description.toLowerCase().includes(normalizedSearch)
@@ -476,7 +494,7 @@ export function Transactions() {
 
       return compareValues(left[sortKey], right[sortKey], sortDirection);
     });
-  }, [categoryLookup, data?.transactions.items, searchTerm, sortDirection, sortKey]);
+  }, [categoryFilter, categoryLookup, categorySlugFilterFromUrl, categorySlugLookup, data?.imports, data?.transactions.items, searchTerm, sortDirection, sortKey]);
 
   const importsSummary = useMemo(() => {
     const imports = (data?.imports ?? []).filter((item) => getMonthKeyFromDate(item.date) === activeMonth);
@@ -536,9 +554,23 @@ export function Transactions() {
       const next = new URLSearchParams(current);
       if (nextCategoryId) {
         next.set("categoryId", nextCategoryId);
+        next.delete("categorySlug");
       } else {
         next.delete("categoryId");
+        next.delete("categorySlug");
       }
+      next.delete("focusLabel");
+      return next;
+    }, { replace: true });
+  }
+
+  function clearDashboardBucketFocus() {
+    setCursorHistory([null]);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("categoryId");
+      next.delete("categorySlug");
+      next.delete("focusLabel");
       return next;
     }, { replace: true });
   }
@@ -2195,37 +2227,52 @@ export function Transactions() {
         {!isLoading && error ? <ErrorState title="Failed to fetch transactions" message={error} onRetry={() => void reload()} /> : null}
         {!isLoading && !error && data ? (
           <>
-            <div className="mb-4 flex flex-wrap gap-2">
-              {[
-                ["all", "All"],
-                ["spend", "Spend"],
-                ["income", "Income"],
-                ["transfer", "Transfer"],
-                ["debt", "Debt Payoff"],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
-                    quickFilter === value
-                      ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
-                      : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
-                  }`}
-                  onClick={() => applyQuickFilter(value as "all" | "spend" | "income" | "transfer" | "debt")}
-                >
-                  {label}
-                </button>
-              ))}
+            <div
+              className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3"
+              style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}
+            >
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                {categorySlugFilterFromUrl || categoryFilterFromUrl ? (
+                  <span className="rounded-full bg-[color:color-mix(in_srgb,var(--primary-color)_10%,transparent)] px-3 py-1 text-[11px] font-semibold text-[var(--text-strong)]">
+                    {dashboardFocusedBucketLabel ? `${dashboardFocusedBucketLabel} filter active` : "Dashboard filter active"}
+                  </span>
+                ) : null}
+                {[
+                  ["all", "All"],
+                  ["spend", "Spend"],
+                  ["income", "Income"],
+                  ["transfer", "Transfer"],
+                  ["debt", "Debt Payoff"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
+                      quickFilter === value
+                        ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
+                        : "border-[var(--border-color)] bg-[var(--surface-color)] text-[var(--text-muted)]"
+                    }`}
+                    onClick={() => applyQuickFilter(value as "all" | "spend" | "income" | "transfer" | "debt")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {categorySlugFilterFromUrl || categoryFilterFromUrl ? (
+                <Button type="button" variant="secondary" className="rounded-full px-3 py-1.5 text-xs" onClick={clearDashboardBucketFocus}>
+                  Clear filter
+                </Button>
+              ) : null}
             </div>
             {visibleTransactions.length ? (
               <Table
                 headers={[
-                  <span className="inline-block w-20">Date</span>,
-                  sortableHeader("Description", "description"),
-                  <span className="inline-block w-[120px]">Category</span>,
-                  <span className="inline-block w-[100px]">Type</span>,
-                  <span className="inline-block w-[88px]">Amount</span>,
-                  <span className="inline-block w-[140px]">Actions</span>,
+                  <span className="inline-block w-20 text-[0.72rem] text-[var(--text-strong)]">Date</span>,
+                  <span className="text-[0.72rem] text-[var(--text-strong)]">{sortableHeader("Description", "description")}</span>,
+                  <span className="inline-block w-[120px] text-[0.68rem] text-[var(--text-muted)]">Category</span>,
+                  <span className="inline-block w-[110px] text-[0.68rem] text-[var(--text-muted)]">Type</span>,
+                  <span className="inline-block w-[88px] text-[0.74rem] font-bold text-[var(--text-strong)]">Amount</span>,
+                  <span className="inline-block w-[110px] text-[0.68rem] text-[var(--text-muted)]">Actions</span>,
                 ]}
                 footer={(
                   <div className="flex items-center justify-between gap-4 text-sm text-stone-500">
@@ -2249,6 +2296,9 @@ export function Transactions() {
                             ? "ignored"
                             : transaction.direction)
                     : transaction.direction;
+                  const typeSummary = transaction.source === "import"
+                    ? `${typeLabel} • Imported`
+                    : typeLabel;
 
                   return (
                     <tr key={transaction.id} className="hover:bg-stone-50/80">
@@ -2257,18 +2307,15 @@ export function Transactions() {
                         <div className="max-w-[420px] whitespace-normal break-words">{transaction.description}</div>
                       </td>
                       <td className="w-[120px] px-4 py-3 text-sm">
-                        {categoryLabel ? <Badge tone={categoryTone(categoryLabel)}>{categoryLabel}</Badge> : null}
+                        {categoryLabel ? <Badge tone={categoryTone(categoryLabel)} className="px-2.5 py-0.5 text-[11px] font-medium">{categoryLabel}</Badge> : null}
                       </td>
                       <td className="w-[100px] px-4 py-3 text-sm">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge tone={directionTone(transaction.direction)}>{typeLabel}</Badge>
-                          {transaction.source === "import" ? <Badge tone="neutral">Imported</Badge> : null}
-                        </div>
+                        <div className="text-[12px] text-[var(--text-muted)]">{typeSummary}</div>
                       </td>
-                      <td className={`w-[88px] px-4 py-3 text-right text-sm font-semibold ${amountClassName(transaction.direction)}`}>
+                      <td className={`w-[88px] px-4 py-3 text-right text-sm font-bold ${amountClassName(transaction.direction)}`}>
                         {formatCurrency(transaction.amount)}
                       </td>
-                      <td className="w-[140px] px-4 py-3 text-sm">
+                      <td className="w-[110px] px-4 py-3 text-sm">
                         {transaction.isImportOnly ? (
                           <div className="text-right text-xs text-[var(--text-muted)]">Review row</div>
                         ) : (
@@ -2276,20 +2323,20 @@ export function Transactions() {
                             <Button
                               type="button"
                               variant="secondary"
-                              className="rounded-full px-3 py-1.5 text-xs"
+                              className="min-h-8 rounded-full px-3 py-1.5 text-xs"
                               onClick={() => setEditingTransaction(mapTransactionToEditState(transaction))}
                             >
                               Edit
                             </Button>
-                            <Button
+                            <button
                               type="button"
-                              variant="ghost"
-                              className="rounded-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50"
+                              aria-label="Delete transaction"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] transition hover:bg-rose-50 hover:text-rose-600"
                               disabled={isDeletingTransaction === transaction.id}
                               onClick={() => void handleDeleteTransaction(transaction as Transaction)}
                             >
-                              {isDeletingTransaction === transaction.id ? "Deleting..." : "Delete"}
-                            </Button>
+                              {isDeletingTransaction === transaction.id ? "…" : "🗑"}
+                            </button>
                           </div>
                         )}
                       </td>
@@ -2298,10 +2345,23 @@ export function Transactions() {
                 })}
               </Table>
             ) : (
-              <EmptyState
-                title="No transactions match these filters"
-                message="Adjust the quick filter, date range, bucket filter, or description search to widen the current view."
-              />
+              <div className="space-y-4">
+                <EmptyState
+                  title={dashboardFocusedBucketLabel
+                    ? `No transactions found for ${dashboardFocusedBucketLabel} this month.`
+                    : "No transactions match these filters"}
+                  message={dashboardFocusedBucketLabel
+                    ? "Clear the filter to return to the full Transactions table."
+                    : "Adjust the quick filter, date range, bucket filter, or description search to widen the current view."}
+                />
+                {dashboardFocusedBucketLabel ? (
+                  <div className="flex justify-center">
+                    <Button type="button" variant="secondary" className="rounded-full px-3 py-1.5 text-xs" onClick={clearDashboardBucketFocus}>
+                      Clear filter
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
             )}
           </>
         ) : null}

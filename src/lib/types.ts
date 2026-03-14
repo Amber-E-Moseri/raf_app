@@ -220,6 +220,9 @@ export interface Debt {
   status: string;
   sortOrder: number;
   isActive?: boolean;
+  estimatedPayoffDate?: string | null;
+  monthsRemaining?: number | null;
+  totalInterestRemaining?: string | null;
 }
 
 export interface DebtCreateRequest {
@@ -325,6 +328,7 @@ export interface GoalProgress {
 export interface MonthlyBucketProgress {
   bucket_id: string;
   bucket_name: string;
+  slug?: string;
   allocated_this_month: string;
   added_this_month: string;
   used_this_month: string;

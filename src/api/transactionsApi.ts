@@ -5,6 +5,7 @@ export interface TransactionsQuery {
   from: string;
   to: string;
   categoryId?: string | null;
+  categorySlug?: string | null;
   cursor?: string | null;
   limit?: number;
 }

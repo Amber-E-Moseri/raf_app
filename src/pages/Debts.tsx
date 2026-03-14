@@ -13,7 +13,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatCurrency, percentPaidOff } from "../lib/format";
+import { formatCurrency, formatIsoDate, percentPaidOff } from "../lib/format";
 import { normalizeMoneyInput, validateApr, validateNonNegativeMoney, validatePositiveMoney, validateRequiredText } from "../lib/validation";
 
 export function Debts() {
@@ -25,7 +25,6 @@ export function Debts() {
     apr: "",
     minimumPayment: "",
     monthlyPayment: "",
-    sortOrder: "0",
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -63,7 +62,6 @@ export function Debts() {
         apr: form.apr.trim(),
         minimumPayment: normalizeMoneyInput(form.minimumPayment) ?? form.minimumPayment,
         monthlyPayment: normalizeMoneyInput(form.monthlyPayment) ?? form.monthlyPayment,
-        sortOrder: Number(form.sortOrder || "0"),
       });
 
       setSubmitSuccess("Debt account created.");
@@ -73,7 +71,6 @@ export function Debts() {
         apr: "",
         minimumPayment: "",
         monthlyPayment: "",
-        sortOrder: "0",
       });
       setFieldErrors({});
       await reload();
@@ -159,18 +156,6 @@ export function Debts() {
                 }}
               />
             </div>
-            <Input
-              label="Sort order"
-              name="sortOrder"
-              inputMode="numeric"
-              value={form.sortOrder}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                if (nextValue === "" || /^\d+$/.test(nextValue)) {
-                  setForm((current) => ({ ...current, sortOrder: nextValue }));
-                }
-              }}
-            />
             <Button type="submit" disabled={isSubmitting}>{isSubmitting ? <LoadingSpinner inline size="sm" label="Saving debt..." /> : "Add Debt"}</Button>
           </form>
         </Card>
@@ -226,8 +211,26 @@ export function Debts() {
                           <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.monthlyPayment)}</p>
                         </div>
                         <div>
+                          <p className="text-[var(--text-muted)]">Estimated payoff</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">
+                            {debt.estimatedPayoffDate ? formatIsoDate(debt.estimatedPayoffDate) : "Unavailable"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[var(--text-muted)]">Months remaining</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">
+                            {debt.monthsRemaining == null ? "Unavailable" : debt.monthsRemaining}
+                          </p>
+                        </div>
+                        <div>
                           <p className="text-[var(--text-muted)]">Minimum payment</p>
                           <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.minimumPayment)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[var(--text-muted)]">Interest remaining</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">
+                            {debt.totalInterestRemaining == null ? "Unavailable" : formatCurrency(debt.totalInterestRemaining)}
+                          </p>
                         </div>
                       </div>
                       <div>
@@ -241,7 +244,7 @@ export function Debts() {
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[var(--text-muted)]">Status</span>
-                        <Badge tone={debt.status === "active" ? "success" : "neutral"}>{debt.status}</Badge>
+                        <Badge tone={debt.status === "current" ? "success" : "neutral"}>{debt.status}</Badge>
                       </div>
                     </div>
                   </Card>

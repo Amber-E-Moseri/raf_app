@@ -6,6 +6,7 @@ import { formatCurrency, formatPercentWithDigits } from "../../lib/format";
 
 export interface AllocationBarDatum {
   bucketId: string;
+  slug?: string | null;
   label: string;
   allocationPercent: string | null;
   allocatedThisMonth: string | null;
@@ -68,7 +69,9 @@ export function AllocationBarChart({ items }: AllocationBarChartProps) {
             return (
               <Link
                 key={item.bucketId}
-                to={`/transactions?categoryId=${encodeURIComponent(item.bucketId)}#transactions-table`}
+                to={item.slug
+                  ? `/transactions?categorySlug=${encodeURIComponent(item.slug)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`
+                  : `/transactions?categoryId=${encodeURIComponent(item.bucketId)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`}
                 className="group block rounded-[1.4rem] border px-4 py-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-lift active:translate-y-0"
                 style={{
                   borderColor: "var(--border-color)",

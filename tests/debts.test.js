@@ -110,6 +110,9 @@ test('createDebt creates a debt and returns money values as decimal strings', as
   assert.equal(result.monthlyPayment, '250.00');
   assert.equal(result.apr, 19.99);
   assert.equal(result.status, 'current');
+  assert.ok(typeof result.monthsRemaining === 'number' && result.monthsRemaining > 0);
+  assert.ok(typeof result.totalInterestRemaining === 'string' && Number(result.totalInterestRemaining) > 0);
+  assert.match(result.estimatedPayoffDate, /^\d{4}-\d{2}-\d{2}$/);
 });
 
 test('updateDebt patches editable fields and keeps currentBalance derived from payments', async () => {
@@ -212,6 +215,86 @@ test('listDebts derives currentBalance and returns summary totals from live paym
   assert.equal(result.items[0].currentBalance, '4600.00');
   assert.equal(result.items[1].currentBalance, '0.00');
   assert.equal(result.items[1].status, 'paid_off');
+  assert.equal(result.items[1].monthsRemaining, 0);
+  assert.equal(result.items[1].totalInterestRemaining, '0.00');
+});
+
+test('listDebts sorts by APR, then balance, then payoff speed instead of manual sort order', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_low_apr',
+        householdId: 'household_1',
+        name: 'Low APR',
+        startingBalance: '6000.00',
+        apr: 8.5,
+        minimumPayment: '100.00',
+        monthlyPayment: '300.00',
+        sortOrder: 1,
+        isActive: true,
+      },
+      {
+        id: 'debt_high_apr',
+        householdId: 'household_1',
+        name: 'High APR',
+        startingBalance: '2000.00',
+        apr: 23.9,
+        minimumPayment: '50.00',
+        monthlyPayment: '200.00',
+        sortOrder: 99,
+        isActive: true,
+      },
+      {
+        id: 'debt_same_apr_small',
+        householdId: 'household_1',
+        name: 'Same APR Small',
+        startingBalance: '1500.00',
+        apr: 8.5,
+        minimumPayment: '50.00',
+        monthlyPayment: '300.00',
+        sortOrder: 0,
+        isActive: true,
+      },
+    ],
+  });
+
+  const result = await listDebts({
+    db,
+    householdId: 'household_1',
+  });
+
+  assert.deepEqual(result.items.map((item) => item.id), [
+    'debt_high_apr',
+    'debt_low_apr',
+    'debt_same_apr_small',
+  ]);
+});
+
+test('listDebts returns null payoff estimates when monthly payment does not beat interest accrual', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Visa',
+        startingBalance: '5000.00',
+        apr: 29.99,
+        minimumPayment: '0.00',
+        monthlyPayment: '50.00',
+        sortOrder: 1,
+        isActive: true,
+      },
+    ],
+  });
+
+  const result = await listDebts({
+    db,
+    householdId: 'household_1',
+  });
+
+  assert.equal(result.items[0].estimatedPayoffDate, null);
+  assert.equal(result.items[0].monthsRemaining, null);
+  assert.equal(result.items[0].totalInterestRemaining, null);
 });
 
 test('createDebtAdjustment records an auditable balance adjustment and updates derived balance', async () => {
