@@ -81,6 +81,29 @@ function paymentTooLowWarning(balance: string, apr: string, monthlyPayment: stri
   return monthlyPaymentValue <= monthlyInterest ? "Payment too low to reduce principal." : null;
 }
 
+function actualVsPlannedPaymentMessage(plannedPayment: string, actualPayment: string) {
+  const planned = Number(plannedPayment ?? "0");
+  const actual = Number(actualPayment ?? "0");
+
+  if (!Number.isFinite(planned) || planned <= 0) {
+    return null;
+  }
+
+  if (actual === 0) {
+    return "No payment recorded this month";
+  }
+
+  if (actual < planned) {
+    return "Actual payment this month was below plan";
+  }
+
+  if (actual > planned) {
+    return "Actual payment this month exceeded plan";
+  }
+
+  return "Actual payment this month matched plan";
+}
+
 export function Debts() {
   // Debt balances stay current-only for now; month switching does not backdate debt snapshots yet.
   const { data, error, isLoading, reload } = useAsyncData(() => getDebts(), []);
@@ -448,6 +471,7 @@ export function Debts() {
               {data.items.map((debt) => {
                 const completion = percentPaidOff(debt.startingBalance, debt.currentBalance) ?? 0;
                 const estimateMessage = payoffEstimateMessage(debt);
+                const actualVsPlannedMessage = actualVsPlannedPaymentMessage(debt.monthlyPayment, debt.paymentsThisMonth ?? "0.00");
 
                 return (
                   <Card key={debt.id} title={debt.name} subtitle={`APR ${debt.apr}%`}>
@@ -521,10 +545,13 @@ export function Debts() {
                               <p className="mt-3 text-sm text-[var(--text-muted)]">No payment recorded this month.</p>
                             ) : null}
                             {debt.paymentStatus === "under_minimum" ? (
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">Payment is below the minimum payment.</p>
+                              <p className="mt-3 text-sm text-[var(--text-muted)]">Payment this month was below minimum.</p>
                             ) : null}
                             {debt.paymentStatus === "at_risk" ? (
                               <p className="mt-3 text-sm text-[var(--text-muted)]">Payment is too low to meaningfully reduce principal.</p>
+                            ) : null}
+                            {actualVsPlannedMessage && debt.paymentStatus !== "missed_payment" && debt.paymentStatus !== "under_minimum" ? (
+                              <p className="mt-3 text-sm text-[var(--text-muted)]">{actualVsPlannedMessage}</p>
                             ) : null}
                             {debt.autoPostInterest && Number(debt.interestChargedThisMonth ?? "0") === 0 ? (
                               <p className="mt-3 text-sm text-[var(--text-muted)]">Interest will post on the next statement cycle.</p>
@@ -556,6 +583,10 @@ export function Debts() {
                                 <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.monthlyPayment)}</p>
                               </div>
                               <div>
+                                <p className="text-[var(--text-muted)]">Planned monthly payment</p>
+                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.monthlyPayment)}</p>
+                              </div>
+                              <div>
                                 <p className="text-[var(--text-muted)]">Estimated payoff</p>
                                 <p className="mt-1 font-semibold text-[var(--text-strong)]">
                                   {debt.estimatedPayoffDate ? formatIsoDate(debt.estimatedPayoffDate) : "—"}
@@ -580,6 +611,9 @@ export function Debts() {
                             </div>
                             {estimateMessage ? (
                               <p className="mt-3 text-sm text-[var(--text-muted)]">{estimateMessage}</p>
+                            ) : null}
+                            {Number(debt.monthlyPayment ?? "0") > 0 && debt.estimatedPayoffDate ? (
+                              <p className="mt-3 text-sm italic text-[var(--text-muted)]">Forecast assumes {formatCurrency(debt.monthlyPayment)}/month.</p>
                             ) : null}
                           </div>
                         ) : null}
