@@ -303,8 +303,14 @@ export function Debts() {
       description="Current balances come straight from the backend. The client only renders what the API provides."
     >
       <section className="grid gap-4 xl:grid-cols-[0.95fr,1.05fr]">
-        <Card title="Add Debt" subtitle="Client-side validation checks format only and leaves derived balances to the backend.">
+        <Card title="Add Debt Account" subtitle="Create a debt profile so RAF can track actual activity and forecast payoff.">
           <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] px-5 py-6 shadow-sm">
+              <div className="text-[2rem] font-semibold tracking-[-0.03em] text-[var(--text-strong)]">Add Debt Account</div>
+              <div className="mt-3 max-w-xl text-lg leading-9 text-[var(--text-muted)]">
+                Enter debt account details below so RAF can forecast and track balances.
+              </div>
+            </div>
             <Input
               label="Debt name"
               name="name"
@@ -316,34 +322,40 @@ export function Debts() {
                 setFieldErrors((current) => ({ ...current, name: null }));
               }}
             />
-            <MoneyInput
-              label="Starting balance"
-              name="startingBalance"
-              value={form.startingBalance}
-              error={fieldErrors.startingBalance}
-              disabled={isSubmitting}
-              onBlur={() => setFieldErrors((current) => ({ ...current, startingBalance: validatePositiveMoney(form.startingBalance, "Starting balance") }))}
-              onChange={(value) => {
-                setForm((current) => ({ ...current, startingBalance: value }));
-                setFieldErrors((current) => ({ ...current, startingBalance: null }));
-              }}
-            />
-            <Input
-              label="APR"
-              name="apr"
-              inputMode="decimal"
-              placeholder="19.99"
-              value={form.apr}
-              error={fieldErrors.apr}
-              onBlur={() => setFieldErrors((current) => ({ ...current, apr: validateApr(form.apr) }))}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                if (nextValue === "" || /^(?:0|[1-9]\d*)(?:\.\d{0,2})?$/.test(nextValue)) {
-                  setForm((current) => ({ ...current, apr: nextValue }));
-                  setFieldErrors((current) => ({ ...current, apr: null }));
-                }
-              }}
-            />
+            <div className="grid gap-4 md:grid-cols-2">
+              <MoneyInput
+                label="Starting balance"
+                name="startingBalance"
+                value={form.startingBalance}
+                error={fieldErrors.startingBalance}
+                disabled={isSubmitting}
+                onBlur={() => setFieldErrors((current) => ({ ...current, startingBalance: validatePositiveMoney(form.startingBalance, "Starting balance") }))}
+                onChange={(value) => {
+                  setForm((current) => ({ ...current, startingBalance: value }));
+                  setFieldErrors((current) => ({ ...current, startingBalance: null }));
+                }}
+              />
+              <Input
+                label="APR"
+                name="apr"
+                inputMode="decimal"
+                placeholder="19.99"
+                value={form.apr}
+                error={fieldErrors.apr}
+                onBlur={() => setFieldErrors((current) => ({ ...current, apr: validateApr(form.apr) }))}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (nextValue === "" || /^(?:0|[1-9]\d*)(?:\.\d{0,2})?$/.test(nextValue)) {
+                    setForm((current) => ({ ...current, apr: nextValue }));
+                    setFieldErrors((current) => ({ ...current, apr: null }));
+                  }
+                }}
+                className="pr-10"
+              />
+            </div>
+            <div className="-mt-[3.35rem] flex justify-end pr-4 text-2xl font-medium text-[var(--text-muted)] pointer-events-none">
+              <span>%</span>
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <MoneyInput
                 label="Minimum payment"
@@ -370,9 +382,9 @@ export function Debts() {
                 }}
               />
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <Input
-                label="Statement day"
+                label="Statement date"
                 name="statementDay"
                 inputMode="numeric"
                 placeholder="15"
@@ -387,10 +399,10 @@ export function Debts() {
                 }}
               />
               <Input
-                label="Payment due day"
+                label="Due date"
                 name="paymentDueDay"
                 inputMode="numeric"
-                placeholder="28"
+                placeholder="30"
                 value={form.paymentDueDay}
                 error={fieldErrors.paymentDueDay}
                 onChange={(event) => {
@@ -414,25 +426,44 @@ export function Debts() {
                 }}
               />
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex items-center gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
-                <input
-                  type="checkbox"
-                  checked={form.autoPostInterest}
-                  onChange={(event) => setForm((current) => ({ ...current, autoPostInterest: event.target.checked }))}
-                />
-                Auto-post interest on statement cycle
-              </label>
-              <label className="flex items-center gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
-                <input
-                  type="checkbox"
-                  checked={form.autoPostLateFee}
-                  onChange={(event) => setForm((current) => ({ ...current, autoPostLateFee: event.target.checked }))}
-                />
-                Auto-post late fee on missed cycle
-              </label>
+            <div className="space-y-3">
+              <div className="text-sm font-medium text-[var(--text-muted)]">Auto-post fees based on account activity</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="flex min-h-[108px] items-center gap-4 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] px-5 py-4 text-sm text-[var(--text-strong)]">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={form.autoPostInterest}
+                    onChange={(event) => setForm((current) => ({ ...current, autoPostInterest: event.target.checked }))}
+                  />
+                  <span className="relative inline-flex h-9 w-16 shrink-0 rounded-full bg-slate-500/60 transition peer-checked:bg-emerald-500">
+                    <span className="absolute left-1 top-1 h-7 w-7 rounded-full bg-white shadow-sm transition peer-checked:translate-x-7" />
+                  </span>
+                  <span className="leading-6">
+                    <span className="block text-2xl font-medium tracking-[-0.03em] text-[var(--text-strong)]">Auto-post interest</span>
+                    <span className="block text-[13px] text-[var(--text-muted)]">on statement cycle</span>
+                  </span>
+                </label>
+                <label className="flex min-h-[108px] items-center gap-4 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] px-5 py-4 text-sm text-[var(--text-strong)]">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={form.autoPostLateFee}
+                    onChange={(event) => setForm((current) => ({ ...current, autoPostLateFee: event.target.checked }))}
+                  />
+                  <span className="relative inline-flex h-9 w-16 shrink-0 rounded-full bg-slate-500/60 transition peer-checked:bg-emerald-500">
+                    <span className="absolute left-1 top-1 h-7 w-7 rounded-full bg-white shadow-sm transition peer-checked:translate-x-7" />
+                  </span>
+                  <span className="leading-6">
+                    <span className="block text-2xl font-medium tracking-[-0.03em] text-[var(--text-strong)]">Auto-post late fee</span>
+                    <span className="block text-[13px] text-[var(--text-muted)]">on missed cycle</span>
+                  </span>
+                </label>
+              </div>
             </div>
-            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? <LoadingSpinner inline size="sm" label="Saving debt..." /> : "Add Debt"}</Button>
+            <Button type="submit" className="min-h-16 rounded-[1.75rem] px-8 text-2xl tracking-[-0.03em]" disabled={isSubmitting}>
+              {isSubmitting ? <LoadingSpinner inline size="sm" label="Saving debt..." /> : "Add Debt"}
+            </Button>
           </form>
         </Card>
 
@@ -759,12 +790,13 @@ export function Debts() {
                     <h3 className="text-sm font-semibold text-[var(--text-strong)]">Statement Cycle</h3>
                     <p className="mt-1 text-sm italic text-[var(--text-muted)]">These fields power automatic interest and fee posting.</p>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     <div>
                       <Input
-                        label="Statement day"
+                        label="Statement date"
                         name="editStatementDay"
                         inputMode="numeric"
+                        placeholder="15"
                         value={editForm.statementDay}
                         error={editFieldErrors.statementDay}
                         onChange={(event) => {
@@ -779,9 +811,10 @@ export function Debts() {
                     </div>
                     <div>
                       <Input
-                        label="Payment due day"
+                        label="Due date"
                         name="editPaymentDueDay"
                         inputMode="numeric"
+                        placeholder="30"
                         value={editForm.paymentDueDay}
                         error={editFieldErrors.paymentDueDay}
                         onChange={(event) => {
@@ -813,37 +846,45 @@ export function Debts() {
                     <h3 className="text-sm font-semibold text-[var(--text-strong)]">Automation</h3>
                     <p className="mt-1 text-sm italic text-[var(--text-muted)]">Automation settings control how RAF posts cycle activity.</p>
                   </div>
+                  <div className="text-sm font-medium text-[var(--text-muted)]">Auto-post fees based on account activity</div>
                   <div className="grid gap-3 md:grid-cols-3">
                     <label className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
-                      <span className="flex items-center gap-3">
+                      <span className="flex min-h-[72px] items-start gap-3">
                         <input
                           type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
                           checked={editForm.autoPostInterest}
                           onChange={(event) => setEditForm((current) => ({ ...current, autoPostInterest: event.target.checked }))}
                         />
-                        Auto-post interest
+                        <span className="leading-5">
+                          <span className="block font-medium text-[var(--text-strong)]">Auto-post interest</span>
+                          <span className="block text-[12px] text-[var(--text-muted)]">on statement cycle</span>
+                        </span>
                       </span>
-                      <span className="mt-2 block text-sm italic text-[var(--text-muted)]">Automatically add monthly interest on the statement day.</span>
                     </label>
                     <label className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
-                      <span className="flex items-center gap-3">
+                      <span className="flex min-h-[72px] items-start gap-3">
                         <input
                           type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
                           checked={editForm.autoPostLateFee}
                           onChange={(event) => setEditForm((current) => ({ ...current, autoPostLateFee: event.target.checked }))}
                         />
-                        Auto-post late fee
+                        <span className="leading-5">
+                          <span className="block font-medium text-[var(--text-strong)]">Auto-post late fee</span>
+                          <span className="block text-[12px] text-[var(--text-muted)]">on missed cycle</span>
+                        </span>
                       </span>
-                      <span className="mt-2 block text-sm italic text-[var(--text-muted)]">Apply a late fee when the payment due date passes without sufficient payment.</span>
                     </label>
                     <label className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
-                      <span className="flex items-center gap-3">
+                      <span className="flex min-h-[72px] items-start gap-3">
                         <input
                           type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
                           checked={editForm.isActive}
                           onChange={(event) => setEditForm((current) => ({ ...current, isActive: event.target.checked }))}
                         />
-                        Active debt
+                        <span>Active debt</span>
                       </span>
                     </label>
                   </div>

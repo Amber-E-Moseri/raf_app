@@ -91,6 +91,73 @@ function createDbDouble({ debts = [], debtPayments = [], debtAdjustments = [], h
   };
 }
 
+function buildDebtStressDataset() {
+  return {
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Stress Test Card',
+        startingBalance: '2000.00',
+        apr: 19.99,
+        minimumPayment: '45.00',
+        monthlyPayment: '120.00',
+        statementDay: 5,
+        paymentDueDay: 25,
+        lateFeeAmount: '35.00',
+        autoPostInterest: false,
+        autoPostLateFee: false,
+        sortOrder: 1,
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ],
+    debtPayments: [
+      { debtId: 'debt_1', paymentDate: '2026-01-15', amount: '120.00' },
+      { debtId: 'debt_1', paymentDate: '2026-02-20', amount: '120.00' },
+      { debtId: 'debt_1', paymentDate: '2026-03-18', amount: '80.00' },
+      { debtId: 'debt_1', paymentDate: '2026-05-10', amount: '200.00' },
+      { debtId: 'debt_1', paymentDate: '2026-06-22', amount: '120.00' },
+      { debtId: 'debt_1', paymentDate: '2026-07-19', amount: '120.00' },
+      { debtId: 'debt_1', paymentDate: '2026-08-20', amount: '45.00' },
+      { debtId: 'debt_1', paymentDate: '2026-09-18', amount: '120.00' },
+      { debtId: 'debt_1', paymentDate: '2026-10-15', amount: '400.00' },
+      { debtId: 'debt_1', paymentDate: '2026-11-20', amount: '120.00' },
+      { debtId: 'debt_1', paymentDate: '2026-12-15', amount: '600.00' },
+    ],
+    debtAdjustments: [
+      { debtId: 'debt_1', householdId: 'household_1', amount: '33.32', adjustmentType: 'interest', effectiveDate: '2026-01-05', note: 'Month 1 interest', createdAt: '2026-01-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '75.00', adjustmentType: 'correction', effectiveDate: '2026-01-10', note: 'Month 1 spend', createdAt: '2026-01-10T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '32.10', adjustmentType: 'interest', effectiveDate: '2026-02-05', note: 'Month 2 interest', createdAt: '2026-02-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '40.00', adjustmentType: 'correction', effectiveDate: '2026-02-12', note: 'Month 2 spend', createdAt: '2026-02-12T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '31.80', adjustmentType: 'interest', effectiveDate: '2026-03-05', note: 'Month 3 interest', createdAt: '2026-03-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '31.40', adjustmentType: 'interest', effectiveDate: '2026-04-05', note: 'Month 4 interest', createdAt: '2026-04-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '35.00', adjustmentType: 'late_fee', effectiveDate: '2026-04-25', note: 'Month 4 late fee', createdAt: '2026-04-25T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '32.50', adjustmentType: 'interest', effectiveDate: '2026-05-05', note: 'Month 5 interest', createdAt: '2026-05-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '29.70', adjustmentType: 'interest', effectiveDate: '2026-06-05', note: 'Month 6 interest', createdAt: '2026-06-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '250.00', adjustmentType: 'correction', effectiveDate: '2026-06-07', note: 'Month 6 spend spike', createdAt: '2026-06-07T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '31.00', adjustmentType: 'interest', effectiveDate: '2026-07-05', note: 'Month 7 interest', createdAt: '2026-07-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '30.20', adjustmentType: 'interest', effectiveDate: '2026-08-05', note: 'Month 8 interest', createdAt: '2026-08-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '30.10', adjustmentType: 'interest', effectiveDate: '2026-09-05', note: 'Month 9 interest', createdAt: '2026-09-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '28.50', adjustmentType: 'interest', effectiveDate: '2026-10-05', note: 'Month 10 interest', createdAt: '2026-10-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '22.40', adjustmentType: 'interest', effectiveDate: '2026-11-05', note: 'Month 11 interest', createdAt: '2026-11-05T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '12.20', adjustmentType: 'interest', effectiveDate: '2026-12-05', note: 'Month 12 interest', createdAt: '2026-12-05T00:00:00.000Z' },
+    ],
+  };
+}
+
+function buildDebtStressDatasetWithTruePayoff() {
+  const dataset = buildDebtStressDataset();
+  return {
+    ...dataset,
+    debtPayments: dataset.debtPayments.map((payment) => (
+      payment.paymentDate === '2026-12-15'
+        ? { ...payment, amount: '1300.22' }
+        : payment
+    )),
+  };
+}
+
 test('createDebt creates a debt and returns money values as decimal strings', async () => {
   const db = createDbDouble();
 
@@ -469,6 +536,78 @@ test('listDebts auto-posts late fee when due cycle is missed and auto late fee i
   assert.equal(result.items[0].feesThisMonth, '30.00');
   assert.equal(result.items[0].currentBalance, '2030.00');
   assert.equal(result.items[0].paymentStatus, 'missed_payment');
+});
+
+test('listDebts handles a 12-month credit card stress dataset with interest, spend, missed payment, fee, and payoff shifts', async () => {
+  const dataset = buildDebtStressDataset();
+
+  const marchDb = createDbDouble({
+    ...dataset,
+    household: { id: 'household_1', activeMonth: '2026-03-01' },
+  });
+  const aprilDb = createDbDouble({
+    ...dataset,
+    household: { id: 'household_1', activeMonth: '2026-04-01' },
+  });
+  const juneDb = createDbDouble({
+    ...dataset,
+    household: { id: 'household_1', activeMonth: '2026-06-01' },
+  });
+  const augustDb = createDbDouble({
+    ...dataset,
+    household: { id: 'household_1', activeMonth: '2026-08-01' },
+  });
+  const decemberDb = createDbDouble({
+    ...dataset,
+    household: { id: 'household_1', activeMonth: '2026-12-01' },
+  });
+
+  const march = await listDebts({ db: marchDb, householdId: 'household_1' });
+  assert.equal(march.items[0].paymentsThisMonth, '80.00');
+  assert.equal(march.items[0].interestChargedThisMonth, '31.80');
+  assert.equal(march.items[0].paymentStatus, 'paying_down');
+
+  const april = await listDebts({ db: aprilDb, householdId: 'household_1' });
+  assert.equal(april.items[0].paymentsThisMonth, '0.00');
+  assert.equal(april.items[0].feesThisMonth, '35.00');
+  assert.equal(april.items[0].paymentStatus, 'missed_payment');
+
+  const june = await listDebts({ db: juneDb, householdId: 'household_1' });
+  assert.equal(june.items[0].interestChargedThisMonth, '29.70');
+  assert.equal(june.items[0].paymentsThisMonth, '120.00');
+  assert.equal(june.items[0].currentBalance, '1950.82');
+  assert.ok(Number(june.items[0].monthsRemaining) > 0);
+
+  const august = await listDebts({ db: augustDb, householdId: 'household_1' });
+  assert.equal(august.items[0].paymentsThisMonth, '45.00');
+  assert.equal(august.items[0].paymentStatus, 'paying_down');
+  assert.ok(Number(august.items[0].monthsRemaining) > Number(june.items[0].monthsRemaining));
+
+  const december = await listDebts({ db: decemberDb, householdId: 'household_1' });
+  assert.equal(december.items[0].interestChargedThisMonth, '12.20');
+  assert.equal(december.items[0].paymentsThisMonth, '600.00');
+  assert.equal(december.items[0].currentBalance, '700.22');
+  assert.equal(december.items[0].status, 'current');
+  assert.equal(december.items[0].paymentStatus, 'paying_down');
+});
+
+test('listDebts marks the debt paid off when the December payoff covers the final remaining balance', async () => {
+  const dataset = buildDebtStressDatasetWithTruePayoff();
+  const decemberDb = createDbDouble({
+    ...dataset,
+    household: { id: 'household_1', activeMonth: '2026-12-01' },
+  });
+
+  const december = await listDebts({ db: decemberDb, householdId: 'household_1' });
+
+  assert.equal(december.items[0].paymentsThisMonth, '1300.22');
+  assert.equal(december.items[0].interestChargedThisMonth, '12.20');
+  assert.equal(december.items[0].currentBalance, '0.00');
+  assert.equal(december.items[0].closingBalance, '0.00');
+  assert.equal(december.items[0].status, 'paid_off');
+  assert.equal(december.items[0].paymentStatus, 'paid_off');
+  assert.equal(december.items[0].monthsRemaining, 0);
+  assert.equal(december.items[0].totalInterestRemaining, '0.00');
 });
 
 test('createDebtAdjustment records an auditable balance adjustment and updates derived balance', async () => {

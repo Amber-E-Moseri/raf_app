@@ -340,8 +340,8 @@ export function AppearanceSettings() {
   return (
     <PageShell
       eyebrow="Settings"
-      title="Appearance Settings"
-      description="Customize how RAF looks on this device and preview changes instantly."
+      title="Settings"
+      description="Manage appearance, savings floor alerts, and import rules for this device."
     >
       <section className="grid gap-7 xl:grid-cols-[minmax(180px,20%),minmax(0,45%),minmax(320px,35%)]">
         <aside className="xl:sticky xl:top-6 xl:self-start">
@@ -650,7 +650,9 @@ export function AppearanceSettings() {
                     <div className="space-y-2">
                       {rulesData.data.rules.map((rule) => {
                         const isPending = pendingRuleId === rule.id;
-                        const categoryLabel = rule.category_id ? rulesData.data.categories.find((item) => item.id === rule.category_id)?.label ?? rule.category_id : null;
+                        const categoryLabel = rule.category_id
+                          ? (rulesData.data.categories.find((item) => item.id === rule.category_id)?.label ?? rule.category_id)
+                          : null;
                         return (
                           <div
                             key={rule.id}
@@ -775,7 +777,7 @@ export function AppearanceSettings() {
                         className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-color)] text-base text-[var(--text-muted)] transition hover:bg-[var(--surface-plain)] hover:text-[var(--text-strong)]"
                         onClick={() => setEditingRuleId(null)}
                       >
-                        ×
+                        X
                       </button>
                     </div>
 
