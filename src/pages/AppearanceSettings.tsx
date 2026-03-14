@@ -53,13 +53,18 @@ interface ProfileSettingsViewModel {
   rules: ImportReviewRule[];
 }
 
-type SettingsTab = "preferences" | "import_rules";
+type SettingsTab = "preferences" | "savings_floor" | "import_rules";
 
 const settingsTabs: Array<{ id: SettingsTab; label: string; description: string }> = [
   {
     id: "preferences",
     label: "Preferences",
     description: "Theme, typography, and scale for this device.",
+  },
+  {
+    id: "savings_floor",
+    label: "Savings Floor",
+    description: "Warning threshold for protected savings.",
   },
   {
     id: "import_rules",
@@ -424,65 +429,6 @@ export function AppearanceSettings() {
                 </div>
               </Card>
 
-              <Card title="Savings Floor">
-                <div className="space-y-5">
-                  <div className="border-b border-[var(--border-color)] pb-5">
-                    <div className="text-[17px] font-semibold text-[var(--text-strong)]">Savings Floor</div>
-                    <p className="mt-2 max-w-2xl text-[13px] italic leading-6 text-[var(--text-muted)]">
-                      Set a warning threshold for savings. RAF will alert you when savings drop below this floor, but nothing moves automatically.
-                    </p>
-                  </div>
-
-                  {savingsFloorMessage ? <SuccessNotice title="Savings floor updated" message={savingsFloorMessage} /> : null}
-                  {savingsFloorError ? (
-                    <ErrorState
-                      title="Savings floor update failed"
-                      message={savingsFloorError}
-                    />
-                  ) : null}
-
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] px-4 py-4" style={{ background: "var(--surface-plain)" }}>
-                    <label className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-sm font-semibold text-[var(--text-strong)]">Enable savings floor alerts</div>
-                        <div className="mt-1 text-[12px] italic text-[var(--text-muted)]">Warnings appear on the dashboard when protected savings fall under your floor.</div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
-                        checked={savingsFloorDraft.enabled}
-                        onChange={(event) => {
-                          setSavingsFloorDraft((current) => ({ ...current, enabled: event.target.checked }));
-                          setSavingsFloorError(null);
-                          setSavingsFloorMessage(null);
-                        }}
-                      />
-                    </label>
-                  </div>
-
-                  <MoneyInput
-                    label="Floor amount"
-                    name="savingsFloor"
-                    value={savingsFloorDraft.amount}
-                    onChange={(value) => {
-                      setSavingsFloorDraft((current) => ({ ...current, amount: value }));
-                      setSavingsFloorError(null);
-                      setSavingsFloorMessage(null);
-                    }}
-                    placeholder="500.00"
-                  />
-
-                  <div className="flex flex-wrap gap-3">
-                    <Button type="button" onClick={handleSaveSavingsFloor} disabled={isSavingFloor || !hasSavingsFloorChanges}>
-                      {isSavingFloor ? "Saving floor..." : "Save Savings Floor"}
-                    </Button>
-                    <Button type="button" variant="secondary" onClick={handleResetSavingsFloor} disabled={isSavingFloor || !hasSavingsFloorChanges}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-
               <Card title="Font Family">
                 <div className="space-y-5">
                   <div className="border-b border-[var(--border-color)] pb-6">
@@ -633,6 +579,65 @@ export function AppearanceSettings() {
                 </Card>
               </div>
             </>
+          ) : activeTab === "savings_floor" ? (
+            <Card title="Savings Floor">
+              <div className="space-y-5">
+                <div className="border-b border-[var(--border-color)] pb-5">
+                  <div className="text-[17px] font-semibold text-[var(--text-strong)]">Savings Floor</div>
+                  <p className="mt-2 max-w-2xl text-[13px] italic leading-6 text-[var(--text-muted)]">
+                    Get warned before savings drops below this amount.
+                  </p>
+                </div>
+
+                {savingsFloorMessage ? <SuccessNotice title="Savings floor updated" message={savingsFloorMessage} /> : null}
+                {savingsFloorError ? (
+                  <ErrorState
+                    title="Savings floor update failed"
+                    message={savingsFloorError}
+                  />
+                ) : null}
+
+                <div className="rounded-[1.5rem] border border-[var(--border-color)] px-4 py-4" style={{ background: "var(--surface-plain)" }}>
+                  <label className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--text-strong)]">Enable savings floor alerts</div>
+                      <div className="mt-1 text-[12px] italic text-[var(--text-muted)]">This is a user preference for planning, not a required setup step.</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
+                      checked={savingsFloorDraft.enabled}
+                      onChange={(event) => {
+                        setSavingsFloorDraft((current) => ({ ...current, enabled: event.target.checked }));
+                        setSavingsFloorError(null);
+                        setSavingsFloorMessage(null);
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <MoneyInput
+                  label="Floor amount"
+                  name="savingsFloor"
+                  value={savingsFloorDraft.amount}
+                  onChange={(value) => {
+                    setSavingsFloorDraft((current) => ({ ...current, amount: value }));
+                    setSavingsFloorError(null);
+                    setSavingsFloorMessage(null);
+                  }}
+                  placeholder="500.00"
+                />
+
+                <div className="flex flex-wrap gap-3">
+                  <Button type="button" onClick={handleSaveSavingsFloor} disabled={isSavingFloor || !hasSavingsFloorChanges}>
+                    {isSavingFloor ? "Saving floor..." : "Save Savings Floor"}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={handleResetSavingsFloor} disabled={isSavingFloor || !hasSavingsFloorChanges}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </Card>
           ) : (
             <>
               {rulesData.isLoading ? <LoadingState label="Loading import rules..." /> : null}

@@ -170,11 +170,6 @@ export function Dashboard() {
   const savingsFloor = Number(data.financialHealth.savingsFloor);
   const savingsFloorEnabled = data.financialHealth.savingsFloorEnabled === true;
   const isBelowSavingsFloor = savingsFloorEnabled && savingsBalance < savingsFloor;
-  const availableSavingsAmount = Number(data.financialHealth.availableSavings);
-  const emergencyFundBalance = Number(data.financialHealth.emergencyFundBalance);
-  const savingsMax = Math.max(savingsBalance, emergencyFundBalance, savingsFloor, 1);
-  const savingsPercent = Math.max(0, Math.min(100, (savingsBalance / savingsMax) * 100));
-  const floorPercent = Math.max(0, Math.min(100, (savingsFloor / savingsMax) * 100));
   const suggestionItems = data.surplusRecommendations.distributions.filter((distribution) => Number(distribution.amount) > 0);
   const surplusExists = Number(data.surplusRecommendations.netSurplus) > 0 && suggestionItems.length > 0;
   const draftTotal = Object.values(surplusDraft).reduce((sum, amount) => sum + Number(normalizeMoneyInput(amount) ?? "0.00"), 0);
@@ -257,62 +252,21 @@ export function Dashboard() {
         </div>
 
         <div className="space-y-4">
-          <Card
-            title="Savings floor protection"
-            subtitle="Household protection threshold. Separate from the monthly Savings bucket."
-            actions={(
-              <Badge tone={isBelowSavingsFloor ? "danger" : savingsFloorEnabled ? alertTone(data.financialHealth.alertStatus) : "neutral"}>
-                {isBelowSavingsFloor ? "Below floor" : savingsFloorEnabled ? "Protected" : "Monitoring off"}
-              </Badge>
-            )}
-          >
-            <div className="space-y-3">
-              {isBelowSavingsFloor ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-700 shadow-sm">
-                  <div className="font-semibold">Savings is below your floor</div>
-                  <div className="mt-1 text-[12px] leading-5">This is a warning only. RAF will not move money automatically.</div>
-                </div>
-              ) : null}
+          {savingsFloorEnabled && isBelowSavingsFloor ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[24px] font-bold leading-none text-[var(--text-strong)]">{formatCurrency(data.financialHealth.savingsBalance)}</div>
-                  <div className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">Current protected savings balance</div>
+                  <div className="font-semibold">Savings is below your floor.</div>
+                  <div className="mt-1 text-[12px] leading-5">
+                    Current savings is {formatCurrency(data.financialHealth.savingsBalance)} against a floor of {formatCurrency(data.financialHealth.savingsFloor)}.
+                  </div>
                 </div>
-                <div className="text-[11px] font-medium text-[var(--text-muted)]">
-                  {savingsFloorEnabled ? (isBelowSavingsFloor ? "Warning" : "Protected") : "Disabled"}
-                </div>
+                <Link className="text-[12px] font-semibold text-rose-700 underline-offset-2 hover:underline" to="/settings">
+                  Adjust in Settings
+                </Link>
               </div>
-              <div className="relative">
-                <div className="progress-track h-2 overflow-hidden rounded-full">
-                  <div className="h-full rounded-full bg-raf-moss" style={{ width: `${savingsPercent}%` }} />
-                </div>
-                {savingsFloorEnabled ? (
-                  <div
-                    className="absolute top-[-3px] h-4 w-[2px] rounded-full bg-amber-500"
-                    style={{ left: `calc(${floorPercent}% - 1px)` }}
-                  />
-                ) : null}
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-medium text-[var(--text-muted)]">
-                <span>$0</span>
-                <span>{formatCurrency(data.financialHealth.savingsFloor)} floor</span>
-                <span>{formatCurrency(String(savingsMax.toFixed(2)))} max</span>
-              </div>
-              <div className="rounded-2xl border border-[var(--border-color)] px-3 py-3" style={{ background: "var(--surface-plain)" }}>
-                <div className="text-[11px] font-medium text-[var(--text-muted)]">
-                  {savingsFloorEnabled ? (isBelowSavingsFloor ? "Below floor by" : "Above floor") : "Savings balance"}
-                </div>
-                <div className="mt-1 text-[16px] font-semibold text-[var(--text-strong)]">
-                  {formatCurrency(isBelowSavingsFloor ? Math.abs(availableSavingsAmount) : data.financialHealth.availableSavings)}
-                </div>
-              </div>
-              <p className="text-[12px] italic text-[var(--text-muted)]">
-                {savingsFloorEnabled
-                  ? "This protection view is cumulative and does not change the monthly amount shown in the Savings bucket row."
-                  : "Savings floor monitoring is off. Enable it in Settings if you want low-savings warnings."}
-              </p>
             </div>
-          </Card>
+          ) : null}
 
           {surplusExists ? (
             <Card
