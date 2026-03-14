@@ -391,9 +391,13 @@ test('goals endpoints create, update, soft-delete, and expose dashboard goal pro
     bucket_id: bucket.id,
     bucket_name: 'Savings',
     allocated_this_month: '2000.00',
+    added_this_month: '2000.00',
     used_this_month: '200.00',
-    remaining_this_month: '1800.00',
+    reserved_for_goals_this_month: '0.00',
+    available_this_month: '3800.00',
+    remaining_this_month: '3800.00',
     percent_used_this_month: 10,
+    percent_reserved_for_goals_this_month: 0,
   });
 
   const deleted = await request(`/api/v1/goals/${created.data.id}`, {

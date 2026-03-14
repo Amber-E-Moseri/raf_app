@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 import { Card } from "../ui/Card";
 import { EmptyState } from "../ui/EmptyState";
 import { formatCurrency, formatPercentWithDigits } from "../../lib/format";
@@ -7,13 +9,13 @@ export interface AllocationBarDatum {
   label: string;
   allocationPercent: string | null;
   allocatedThisMonth: string | null;
+  addedThisMonth: string | null;
+  reservedForGoalsThisMonth: string | null;
+  availableThisMonth: string | null;
   usedThisMonth: string | null;
   remainingThisMonth: string | null;
   percentUsedThisMonth: number | null;
-  goalName?: string | null;
-  goalTargetAmount?: string | null;
-  goalReservedAmount?: string | null;
-  goalProgressPercent?: number | null;
+  percentReservedForGoalsThisMonth?: number | null;
 }
 
 interface AllocationBarChartProps {
@@ -33,8 +35,13 @@ function barColor(index: number) {
   return colors[index % colors.length];
 }
 
+function parseMoney(value: string | null | undefined) {
+  const numeric = Number(value ?? "0");
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
 export function AllocationBarChart({ items }: AllocationBarChartProps) {
-  const validItems = items.filter((item) => item.allocationPercent != null || item.remainingThisMonth != null);
+  const validItems = items.filter((item) => item.allocationPercent != null || item.availableThisMonth != null || item.remainingThisMonth != null);
 
   return (
     <Card
@@ -42,51 +49,80 @@ export function AllocationBarChart({ items }: AllocationBarChartProps) {
       actions={<button type="button" className="text-[11px] font-medium text-stone-500">Edit -&gt;</button>}
     >
       {validItems.length ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {validItems.map((item, index) => {
             const allocationPercent = item.allocationPercent ? formatPercentWithDigits(item.allocationPercent, 2) : null;
-            const percentUsed = item.percentUsedThisMonth ?? 0;
-            const usageWidth = Math.max(0, Math.min(100, percentUsed));
-            const amountLabel = item.remainingThisMonth ?? item.allocatedThisMonth ?? item.goalReservedAmount ?? "0.00";
+            const allocated = parseMoney(item.allocatedThisMonth);
+            const added = parseMoney(item.addedThisMonth);
+            const reserved = parseMoney(item.reservedForGoalsThisMonth);
+            const spent = parseMoney(item.usedThisMonth);
+            const available = Math.max(parseMoney(item.availableThisMonth), 0);
+            const used = reserved + spent;
+            const totalForBar = Math.max(allocated + added, 0);
+            const usedWidth = totalForBar === 0 ? 0 : Math.max(0, Math.min(100, (used / totalForBar) * 100));
+            const hasAdded = added > 0;
+            const allocatedLabel = hasAdded
+              ? `${formatCurrency((allocated + added).toFixed(2))} (includes ${formatCurrency(added.toFixed(2))} added)`
+              : formatCurrency(allocated.toFixed(2));
 
             return (
-              <div
+              <Link
                 key={item.bucketId}
-                className="rounded-2xl border px-3 py-2.5"
+                to="/allocation"
+                className="group block rounded-[1.4rem] border px-4 py-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-lift active:translate-y-0"
                 style={{
                   borderColor: "var(--border-color)",
                   background: "var(--surface-plain)",
                 }}
               >
-                <div className="flex items-center gap-2">
-                  <div className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md ${barColor(index)}`} />
-                  <div className="w-[90px] min-w-0 text-[13px] font-medium text-[var(--text-strong)]">{item.label}</div>
-                  <div className="flex-1">
-                    <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
-                      <div
-                        className={`h-full rounded-full ${barColor(index)} transition-all duration-500`}
-                        style={{ width: `${usageWidth}%` }}
-                      />
+                <div className="flex items-start gap-3">
+                  <div className={`mt-1 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md ${barColor(index)}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="truncate text-[15px] font-semibold text-[var(--text-strong)]">{item.label}</div>
+                        </div>
+                        <div className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">
+                          {allocationPercent ? `${allocationPercent.replace(".00", "")} of monthly allocation` : "Monthly bucket"}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <div className="text-right">
+                          <div className="text-[11px] font-medium text-[var(--text-muted)]">Available</div>
+                          <div className="mt-1 text-[18px] font-semibold tracking-tight text-[var(--text-strong)]">
+                            {formatCurrency(available.toFixed(2))}
+                          </div>
+                        </div>
+                        <div className="pt-1 text-[16px] text-[var(--text-muted)] transition group-hover:text-[var(--text-strong)]">
+                          &gt;
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="mb-2 flex items-center justify-between gap-3 text-[10px] font-medium text-[var(--text-muted)]">
+                        <span>Used this month</span>
+                        <span>{formatCurrency(used.toFixed(2))}</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
+                        <div
+                          className={`h-full rounded-full ${barColor(index)} transition-all duration-500`}
+                          style={{ width: `${usedWidth}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 text-[11px] text-[var(--text-muted)]">
+                      <span>Allocated {allocatedLabel}</span>
+                      <span> · </span>
+                      <span>Goals {formatCurrency(reserved.toFixed(2))}</span>
+                      <span> · </span>
+                      <span>Spent {formatCurrency(spent.toFixed(2))}</span>
                     </div>
                   </div>
-                  <div className="w-7 text-right text-[11px] font-medium text-[var(--text-muted)]">
-                    {allocationPercent ? allocationPercent.replace(".00", "") : "--"}
-                  </div>
-                  <div className="w-12 text-right text-[11px] font-semibold text-[var(--text-strong)]">
-                    {formatCurrency(amountLabel)}
-                  </div>
                 </div>
-                {item.goalName ? (
-                  <div className="mt-2 flex items-center justify-between gap-3 pl-8 text-[10px] text-[var(--text-muted)]">
-                    <span className="truncate">{item.goalName}</span>
-                    <span>
-                      {item.goalReservedAmount && item.goalTargetAmount
-                        ? `${formatCurrency(item.goalReservedAmount)} / ${formatCurrency(item.goalTargetAmount)}`
-                        : "Goal target unavailable"}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
+              </Link>
             );
           })}
         </div>

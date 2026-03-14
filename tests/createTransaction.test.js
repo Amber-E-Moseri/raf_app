@@ -10,7 +10,7 @@ import {
   updateTransaction,
 } from '../lib/transactions/createTransaction.js';
 
-function createDbDouble({ debt = null, transactions = [], debtPayments = [] } = {}) {
+function createDbDouble({ debt = null, goal = null, transactions = [], debtPayments = [] } = {}) {
   const state = {
     transactions: transactions.map((transaction) => ({ ...transaction })),
     debtPayments: debtPayments.map((payment) => ({ ...payment })),
@@ -25,6 +25,13 @@ function createDbDouble({ debt = null, transactions = [], debtPayments = [] } = 
     async findDebtById({ debtId }) {
       if (debt && debt.id === debtId) {
         return debt;
+      }
+
+      return null;
+    },
+    async getGoalById({ goalId }) {
+      if (goal && goal.id === goalId) {
+        return goal;
       }
 
       return null;
@@ -159,6 +166,51 @@ test('createTransaction returns 404 when linked debt is missing', async () => {
   );
 });
 
+test('createTransaction persists linkedGoalId when the goal matches the selected bucket', async () => {
+  const db = createDbDouble({
+    goal: { id: 'goal_1', bucketId: 'bucket_savings', active: true, name: 'Emergency Fund' },
+  });
+
+  const result = await createTransaction({
+    db,
+    householdId: 'household_1',
+    input: {
+      transactionDate: '2026-03-12',
+      description: 'Emergency fund transfer',
+      amount: '200.00',
+      direction: 'credit',
+      categoryId: 'bucket_savings',
+      linkedGoalId: 'goal_1',
+    },
+  });
+
+  assert.equal(result.linkedGoalId, 'goal_1');
+  assert.equal(db.state.insertedTransaction.linkedGoalId, 'goal_1');
+});
+
+test('createTransaction rejects linked goals that do not match the selected bucket', async () => {
+  const db = createDbDouble({
+    goal: { id: 'goal_1', bucketId: 'bucket_emergency', active: true, name: 'Emergency Fund' },
+  });
+
+  await assert.rejects(
+    () =>
+      createTransaction({
+        db,
+        householdId: 'household_1',
+        input: {
+          transactionDate: '2026-03-12',
+          description: 'Emergency fund transfer',
+          amount: '200.00',
+          direction: 'credit',
+          categoryId: 'bucket_savings',
+          linkedGoalId: 'goal_1',
+        },
+      }),
+    /linked goal must match the selected bucket/,
+  );
+});
+
 test('updateTransaction removes the debt payment when linkedDebtId is removed', async () => {
   const db = createDbDouble({
     transactions: [
@@ -245,6 +297,7 @@ test('listTransactions returns items and nextCursor', async () => {
         direction: 'debit',
         categoryId: 'cat_food',
         linkedDebtId: null,
+        linkedGoalId: null,
       },
       {
         id: 'txn_2',
@@ -255,6 +308,7 @@ test('listTransactions returns items and nextCursor', async () => {
         direction: 'credit',
         categoryId: null,
         linkedDebtId: null,
+        linkedGoalId: null,
       },
     ],
   });

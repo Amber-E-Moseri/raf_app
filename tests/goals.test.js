@@ -28,8 +28,32 @@ function createDbDouble({
   };
 
   const tx = {
-    async listAllocationCategories() {
-      return state.allocationCategories.map((row) => ({ ...row }));
+    async listAllocationCategories({ includeSuperseded = false, asOf = null } = {}) {
+      const rows = state.allocationCategories.filter((row) => {
+        if (includeSuperseded) {
+          return true;
+        }
+
+        if (row.snapshotId == null) {
+          return true;
+        }
+
+        const targetDate = asOf ?? '9999-12-31';
+        return row.effectiveFrom <= targetDate && (!row.supersededAt || row.supersededAt > targetDate);
+      });
+
+      if (includeSuperseded || !rows.some((row) => row.snapshotId != null)) {
+        return rows.map((row) => ({ ...row }));
+      }
+
+      const sortedSnapshots = [...new Set(rows.map((row) => row.snapshotId))]
+        .sort((left, right) => {
+          const leftRow = rows.find((row) => row.snapshotId === left);
+          const rightRow = rows.find((row) => row.snapshotId === right);
+          return String(rightRow?.effectiveFrom ?? '').localeCompare(String(leftRow?.effectiveFrom ?? ''));
+        });
+      const activeSnapshotId = sortedSnapshots[0];
+      return rows.filter((row) => row.snapshotId === activeSnapshotId).map((row) => ({ ...row }));
     },
     async listTransactions() {
       return state.transactions.map((row) => ({ ...row }));
@@ -321,6 +345,74 @@ test('goal progress stays at zero when the linked bucket has money but no goal-l
   assert.equal(result[0].current_amount, '0.00');
   assert.equal(result[0].remaining_amount, '1000.00');
   assert.equal(result[0].progress_percent, 0);
+});
+
+test('goal progress resolves historical bucket ids to the active bucket snapshot by slug', async () => {
+  const db = createDbDouble({
+    allocationCategories: [
+      {
+        id: 'bucket_savings_old',
+        snapshotId: 'snapshot_old',
+        effectiveFrom: '2026-01-01',
+        supersededAt: '2026-03-01',
+        label: 'Savings',
+        slug: 'savings',
+        isActive: true,
+        sortOrder: 1,
+      },
+      {
+        id: 'bucket_savings_current',
+        snapshotId: 'snapshot_current',
+        effectiveFrom: '2026-03-01',
+        supersededAt: null,
+        label: 'Savings',
+        slug: 'savings',
+        isActive: true,
+        sortOrder: 1,
+      },
+    ],
+    incomeAllocations: [
+      { allocationCategoryId: 'bucket_savings_current', allocatedAmount: '500.00' },
+    ],
+    transactions: [
+      { id: 'txn_1', categoryId: 'bucket_savings_current', transactionDate: '2026-03-10', amount: '125.00', direction: 'credit', linkedGoalId: 'goal_1' },
+    ],
+    goals: [
+      {
+        id: 'goal_1',
+        householdId: 'household_1',
+        bucketId: 'bucket_savings_old',
+        name: 'Emergency Fund',
+        targetAmount: '1000.00',
+        targetDate: null,
+        notes: null,
+        active: true,
+        createdAt: '2026-03-13T00:00:00.000Z',
+        updatedAt: '2026-03-13T00:00:00.000Z',
+      },
+    ],
+  });
+
+  const result = await listGoalProgress({
+    db,
+    householdId: 'household_1',
+  });
+
+  assert.deepEqual(result, [
+    {
+      goal_id: 'goal_1',
+      goal_name: 'Emergency Fund',
+      bucket_id: 'bucket_savings_current',
+      bucket: 'Savings',
+      bucket_name: 'Savings',
+      bucket_balance: '500.00',
+      target_amount: '1000.00',
+      reserved_amount: '125.00',
+      current_amount: '125.00',
+      remaining_amount: '875.00',
+      progress_percent: 12.5,
+    },
+  ]);
 });
 
 test('goal progress clamps remaining at zero and progress at 100 when linked goal transactions exceed target', async () => {

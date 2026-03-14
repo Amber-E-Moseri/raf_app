@@ -62,8 +62,32 @@ function createDbDouble({
     async listGoals() {
       return goals;
     },
-    async listAllocationCategories() {
-      return allocationCategories;
+    async listAllocationCategories({ includeSuperseded = false, asOf = null } = {}) {
+      const rows = allocationCategories.filter((row) => {
+        if (includeSuperseded) {
+          return true;
+        }
+
+        if (row.snapshotId == null) {
+          return true;
+        }
+
+        const targetDate = asOf ?? '9999-12-31';
+        return row.effectiveFrom <= targetDate && (!row.supersededAt || row.supersededAt > targetDate);
+      });
+
+      if (includeSuperseded || !rows.some((row) => row.snapshotId != null)) {
+        return rows;
+      }
+
+      const sortedSnapshots = [...new Set(rows.map((row) => row.snapshotId))]
+        .sort((left, right) => {
+          const leftRow = rows.find((row) => row.snapshotId === left);
+          const rightRow = rows.find((row) => row.snapshotId === right);
+          return String(rightRow?.effectiveFrom ?? '').localeCompare(String(leftRow?.effectiveFrom ?? ''));
+        });
+      const activeSnapshotId = sortedSnapshots[0];
+      return rows.filter((row) => row.snapshotId === activeSnapshotId);
     },
     async listIncomeAllocationsBySlug({ slug }) {
       return incomeAllocations.filter((entry) => entry.slug === slug);
@@ -193,17 +217,25 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
         bucket_id: 'cat_fixed_bills',
         bucket_name: 'fixed_bills',
         allocated_this_month: '0.00',
+        added_this_month: '0.00',
         used_this_month: '0.00',
+        reserved_for_goals_this_month: '0.00',
+        available_this_month: '0.00',
         remaining_this_month: '0.00',
         percent_used_this_month: 0,
+        percent_reserved_for_goals_this_month: 0,
       },
       {
         bucket_id: 'cat_personal_spending',
         bucket_name: 'personal_spending',
         allocated_this_month: '0.00',
+        added_this_month: '0.00',
         used_this_month: '0.00',
+        reserved_for_goals_this_month: '0.00',
+        available_this_month: '0.00',
         remaining_this_month: '0.00',
         percent_used_this_month: 0,
+        percent_reserved_for_goals_this_month: 0,
       },
     ],
     goal_progress: [],
@@ -371,17 +403,111 @@ test('dashboard reporting includes monthly bucket progress and goal progress', a
       bucket_id: 'bucket_savings',
       bucket_name: 'Savings',
       allocated_this_month: '2000.00',
+      added_this_month: '0.00',
       used_this_month: '200.00',
+      reserved_for_goals_this_month: '0.00',
+      available_this_month: '1800.00',
       remaining_this_month: '1800.00',
       percent_used_this_month: 10,
+      percent_reserved_for_goals_this_month: 0,
     },
     {
       bucket_id: 'bucket_giving',
       bucket_name: 'Giving',
       allocated_this_month: '500.00',
+      added_this_month: '100.00',
       used_this_month: '0.00',
-      remaining_this_month: '500.00',
+      reserved_for_goals_this_month: '0.00',
+      available_this_month: '600.00',
+      remaining_this_month: '600.00',
       percent_used_this_month: 0,
+      percent_reserved_for_goals_this_month: 0,
+    },
+  ]);
+});
+
+test('dashboard monthly bucket progress separates current-month goal reservations from bucket availability', async () => {
+  const db = createDbDouble({
+    allocationCategories: [
+      { id: 'bucket_savings', label: 'Savings', slug: 'savings', isActive: true, sortOrder: 1 },
+      { id: 'bucket_giving', label: 'Giving', slug: 'giving', isActive: true, sortOrder: 2 },
+    ],
+    incomeAllocations: [
+      { allocationCategoryId: 'bucket_savings', receivedDate: '2026-03-01', allocatedAmount: '500.00' },
+      { allocationCategoryId: 'bucket_giving', receivedDate: '2026-03-01', allocatedAmount: '250.00' },
+      { allocationCategoryId: 'bucket_savings', receivedDate: '2026-02-01', allocatedAmount: '900.00' },
+    ],
+    transactions: [
+      { id: 'txn_goal_1', transactionDate: '2026-03-05', amount: '200.00', direction: 'credit', categoryId: 'bucket_savings', linkedGoalId: 'goal_active' },
+      { id: 'txn_goal_2', transactionDate: '2026-02-12', amount: '300.00', direction: 'credit', categoryId: 'bucket_savings', linkedGoalId: 'goal_active' },
+      { id: 'txn_goal_3', transactionDate: '2026-03-08', amount: '125.00', direction: 'credit', categoryId: 'bucket_savings', linkedGoalId: 'goal_archived' },
+      { id: 'txn_goal_4', transactionDate: '2026-03-10', amount: '40.00', direction: 'credit', categoryId: 'bucket_giving', linkedGoalId: 'goal_other_bucket' },
+    ],
+    goals: [
+      {
+        id: 'goal_active',
+        householdId: 'household_1',
+        bucketId: 'bucket_savings',
+        name: 'Emergency Fund',
+        targetAmount: '1000.00',
+        targetDate: null,
+        notes: null,
+        active: true,
+      },
+      {
+        id: 'goal_archived',
+        householdId: 'household_1',
+        bucketId: 'bucket_savings',
+        name: 'Old Goal',
+        targetAmount: '1000.00',
+        targetDate: null,
+        notes: null,
+        active: false,
+      },
+      {
+        id: 'goal_other_bucket',
+        householdId: 'household_1',
+        bucketId: 'bucket_giving',
+        name: 'Giving Goal',
+        targetAmount: '100.00',
+        targetDate: null,
+        notes: null,
+        active: true,
+      },
+    ],
+  });
+
+  const result = await getDashboardReport({
+    db,
+    householdId: 'household_1',
+    from: '2026-03-01',
+    to: '2026-03-01',
+  });
+
+  assert.deepEqual(result.monthly_bucket_progress, [
+    {
+      bucket_id: 'bucket_savings',
+      bucket_name: 'Savings',
+      allocated_this_month: '500.00',
+      added_this_month: '200.00',
+      used_this_month: '0.00',
+      reserved_for_goals_this_month: '200.00',
+      available_this_month: '500.00',
+      remaining_this_month: '700.00',
+      percent_used_this_month: 0,
+      percent_reserved_for_goals_this_month: 40,
+    },
+    {
+      bucket_id: 'bucket_giving',
+      bucket_name: 'Giving',
+      allocated_this_month: '250.00',
+      added_this_month: '40.00',
+      used_this_month: '0.00',
+      reserved_for_goals_this_month: '40.00',
+      available_this_month: '250.00',
+      remaining_this_month: '290.00',
+      percent_used_this_month: 0,
+      percent_reserved_for_goals_this_month: 16,
     },
   ]);
 });
@@ -433,6 +559,57 @@ test('dashboard goal progress clamps overfunded goals at zero remaining and 100 
       progress_percent: 100,
     },
   ]);
+});
+
+test('dashboard goal progress resolves goals linked to a superseded bucket snapshot', async () => {
+  const db = createDbDouble({
+    allocationCategories: [
+      { id: 'bucket_savings_old', snapshotId: 'snapshot_old', effectiveFrom: '2026-01-01', supersededAt: '2026-03-01', label: 'Savings', slug: 'savings', isActive: true, sortOrder: 1 },
+      { id: 'bucket_savings_current', snapshotId: 'snapshot_current', effectiveFrom: '2026-03-01', supersededAt: null, label: 'Savings', slug: 'savings', isActive: true, sortOrder: 1 },
+    ],
+    incomeAllocations: [
+      { allocationCategoryId: 'bucket_savings_current', receivedDate: '2026-03-01', allocatedAmount: '500.00' },
+    ],
+    transactions: [
+      { id: 'txn_1', categoryId: 'bucket_savings_current', transactionDate: '2026-03-20', amount: '125.00', direction: 'credit', linkedGoalId: 'goal_1' },
+    ],
+    goals: [
+      {
+        id: 'goal_1',
+        householdId: 'household_1',
+        bucketId: 'bucket_savings_old',
+        name: 'Emergency Fund',
+        targetAmount: '1000.00',
+        targetDate: null,
+        notes: null,
+        active: true,
+      },
+    ],
+  });
+
+  const result = await getDashboardReport({
+    db,
+    householdId: 'household_1',
+    from: '2026-03-01',
+    to: '2026-03-01',
+  });
+
+  assert.deepEqual(result.goal_progress, [
+    {
+      goal_id: 'goal_1',
+      goal_name: 'Emergency Fund',
+      bucket_id: 'bucket_savings_current',
+      bucket: 'Savings',
+      bucket_name: 'Savings',
+      target_amount: '1000.00',
+      bucket_balance: '625.00',
+      reserved_amount: '125.00',
+      current_amount: '125.00',
+      remaining_amount: '875.00',
+      progress_percent: 12.5,
+    },
+  ]);
+  assert.equal(result.monthly_bucket_progress[0].reserved_for_goals_this_month, '125.00');
 });
 
 test('createMonthlyReview computes surplus distributions with remainder routed to emergency_fund', async () => {
@@ -632,17 +809,25 @@ test('report services handle empty-state data without persisting derived results
         bucket_id: 'cat_fixed_bills',
         bucket_name: 'fixed_bills',
         allocated_this_month: '0.00',
+        added_this_month: '0.00',
         used_this_month: '0.00',
+        reserved_for_goals_this_month: '0.00',
+        available_this_month: '0.00',
         remaining_this_month: '0.00',
         percent_used_this_month: 0,
+        percent_reserved_for_goals_this_month: 0,
       },
       {
         bucket_id: 'cat_personal_spending',
         bucket_name: 'personal_spending',
         allocated_this_month: '0.00',
+        added_this_month: '0.00',
         used_this_month: '0.00',
+        reserved_for_goals_this_month: '0.00',
+        available_this_month: '0.00',
         remaining_this_month: '0.00',
         percent_used_this_month: 0,
+        percent_reserved_for_goals_this_month: 0,
       },
     ],
     goal_progress: [],

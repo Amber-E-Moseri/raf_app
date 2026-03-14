@@ -323,9 +323,13 @@ export interface MonthlyBucketProgress {
   bucket_id: string;
   bucket_name: string;
   allocated_this_month: string;
+  added_this_month: string;
   used_this_month: string;
+  reserved_for_goals_this_month: string;
+  available_this_month: string;
   remaining_this_month: string;
   percent_used_this_month: number;
+  percent_reserved_for_goals_this_month: number;
 }
 
 export interface DashboardReport {

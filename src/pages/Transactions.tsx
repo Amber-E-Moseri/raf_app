@@ -245,6 +245,7 @@ export function Transactions() {
     direction: "debit" as "debit" | "credit",
     categoryId: "",
     linkedDebtId: "",
+    linkedGoalId: "",
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -331,6 +332,10 @@ export function Transactions() {
   const categoryLookup = new Map(data?.categories.map((category) => [category.id, category.label]) ?? []);
   const fixedBillLookup = new Map(data?.fixedBills.map((bill) => [bill.id, bill.name]) ?? []);
   const goalLookup = new Map(data?.goals.map((goal) => [goal.id, goal.name]) ?? []);
+  const goalsForSelectedBucket = useMemo(
+    () => (data?.goals ?? []).filter((goal) => !form.categoryId || goal.bucket_id === form.categoryId),
+    [data?.goals, form.categoryId],
+  );
 
   const visibleTransactions = useMemo(() => {
     const filtered = (data?.transactions.items ?? []).filter((transaction) => (
@@ -644,10 +649,15 @@ export function Transactions() {
       description: validateRequiredText(form.description, "Description"),
       amount: validatePositiveMoney(form.amount, "Amount"),
       linkedDebtId: null,
+      linkedGoalId: null,
     };
 
     if (form.linkedDebtId && form.direction !== "debit") {
       nextErrors.linkedDebtId = "Linked debt requires a debit transaction";
+    }
+
+    if (form.linkedGoalId && !form.categoryId) {
+      nextErrors.linkedGoalId = "Linked goal requires a bucket";
     }
 
     setFieldErrors(nextErrors);
@@ -674,6 +684,7 @@ export function Transactions() {
         direction: form.direction,
         categoryId: form.categoryId || null,
         linkedDebtId: form.linkedDebtId || null,
+        linkedGoalId: form.linkedGoalId || null,
       });
 
       setSubmitSuccess("Transaction created.");
@@ -685,6 +696,7 @@ export function Transactions() {
         direction: "debit",
         categoryId: "",
         linkedDebtId: "",
+        linkedGoalId: "",
       });
       setFieldErrors({});
       await reload();
@@ -1159,7 +1171,17 @@ export function Transactions() {
               <select
                 className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
                 value={form.categoryId}
-                onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}
+                onChange={(event) => {
+                  const categoryId = event.target.value;
+                  setForm((current) => ({
+                    ...current,
+                    categoryId,
+                    linkedGoalId: current.linkedGoalId && data?.goals.some((goal) => goal.id === current.linkedGoalId && goal.bucket_id === categoryId)
+                      ? current.linkedGoalId
+                      : "",
+                  }));
+                  setFieldErrors((current) => ({ ...current, linkedGoalId: null }));
+                }}
               >
                 <option value=""></option>
                 {(data?.categories ?? []).map((category) => (
@@ -1167,6 +1189,29 @@ export function Transactions() {
                 ))}
               </select>
             </label>
+            {form.categoryId ? (
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-raf-ink">Linked goal</span>
+                <select
+                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                  value={form.linkedGoalId}
+                  onChange={(event) => {
+                    const linkedGoalId = event.target.value;
+                    setForm((current) => ({ ...current, linkedGoalId }));
+                    setFieldErrors((current) => ({
+                      ...current,
+                      linkedGoalId: linkedGoalId && !form.categoryId ? "Linked goal requires a bucket" : null,
+                    }));
+                  }}
+                >
+                  <option value="">None</option>
+                  {goalsForSelectedBucket.map((goal) => (
+                    <option key={goal.id} value={goal.id}>{goal.name}</option>
+                  ))}
+                </select>
+                {fieldErrors.linkedGoalId ? <span className="mt-2 block text-sm text-rose-600">{fieldErrors.linkedGoalId}</span> : null}
+              </label>
+            ) : null}
             <div className="flex items-center gap-3">
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? <LoadingSpinner inline size="sm" label="Saving transaction..." /> : "Create Transaction"}

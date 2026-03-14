@@ -47,6 +47,15 @@ interface CompletedGoalSummary {
 
 const VISIBLE_ACHIEVEMENTS_LIMIT = 5;
 
+function resolveGoalCategoryLabel(goal: Goal, progress: GoalProgress | null, categoryLookup: Map<string, string>) {
+  return (
+    categoryLookup.get(progress?.bucket_id ?? "")
+    ?? categoryLookup.get(goal.bucket_id)
+    ?? progress?.bucket_name
+    ?? goal.bucket_id
+  );
+}
+
 export function Profile() {
   const { activeRange } = usePeriod();
   const { data, error, isLoading, reload } = useAsyncData<ProfileViewModel>(async () => {
@@ -127,7 +136,7 @@ export function Profile() {
           goal,
           progress,
           completedAt: achievement.completed_at,
-          categoryLabel: categoryLookup.get(goal.bucket_id) ?? progress.bucket_name ?? goal.bucket_id,
+          categoryLabel: resolveGoalCategoryLabel(goal, progress, categoryLookup),
           milestonesCompleted: countCompletedGoalMilestones(progress),
           badges: goalBadges,
         };

@@ -53,6 +53,15 @@ interface GoalActivityItem {
   source: "transaction" | "pdf_import";
 }
 
+function goalBucketLabel(goal: Goal, progress: GoalProgress | null, categoryLookup: Map<string, AllocationCategory>) {
+  return (
+    categoryLookup.get(progress?.bucket_id ?? "")?.label
+    ?? categoryLookup.get(goal.bucket_id)?.label
+    ?? progress?.bucket_name
+    ?? goal.bucket_id
+  );
+}
+
 const EMPTY_GOAL_FORM: GoalFormState = {
   name: "",
   bucketId: "",
@@ -184,27 +193,20 @@ export function Goals() {
     );
 
     for (const transaction of goalsData.data?.transactions ?? []) {
-      if (!transaction.categoryId) {
+      if (!transaction.linkedGoalId) {
         continue;
       }
 
-      const matchingGoals = activeGoals.filter((goal) => goal.bucket_id === transaction.categoryId);
-      if (!matchingGoals.length) {
-        continue;
-      }
-
-      for (const goal of matchingGoals) {
-        const current = grouped.get(goal.id) ?? [];
-        current.push({
-          id: transaction.id,
-          date: transaction.transactionDate,
-          description: transaction.description,
-          amount: transaction.amount,
-          direction: transaction.direction,
-          source: importedTransactionIds.has(transaction.id) ? "pdf_import" : "transaction",
-        });
-        grouped.set(goal.id, current);
-      }
+      const current = grouped.get(transaction.linkedGoalId) ?? [];
+      current.push({
+        id: transaction.id,
+        date: transaction.transactionDate,
+        description: transaction.description,
+        amount: transaction.amount,
+        direction: transaction.direction,
+        source: importedTransactionIds.has(transaction.id) ? "pdf_import" : "transaction",
+      });
+      grouped.set(transaction.linkedGoalId, current);
     }
 
     for (const importedRow of goalsData.data?.imports ?? []) {
@@ -464,7 +466,6 @@ export function Goals() {
                 <div className="space-y-3">
                   {activeGoals.map((goal) => {
                     const progress = progressLookup.get(goal.id) ?? null;
-                    const category = categoryLookup.get(goal.bucket_id);
                     const recentTransactions = (recentActivityByGoalId.get(goal.id) ?? []).slice(0, 5);
                     const isRecentActivityExpanded = expandedRecentActivity[goal.id] === true;
                     const progressPercent = Math.max(0, Math.min(progress?.progress_percent ?? 0, 100));
@@ -506,7 +507,7 @@ export function Goals() {
                               <Badge tone={goalStatusTone(progress)}>{goalStatusLabel(progress)}</Badge>
                             </div>
                             <p className="mt-2 text-sm text-[var(--text-muted)]">
-                              Linked bucket: {category?.label ?? progress?.bucket_name ?? goal.bucket_id}
+                              Linked bucket: {goalBucketLabel(goal, progress, categoryLookup)}
                             </p>
                             {progress?.bucket_balance ? (
                               <p className="mt-1 text-sm text-[var(--text-muted)]">Bucket balance: {formatCurrency(progress.bucket_balance)}</p>
@@ -634,13 +635,13 @@ export function Goals() {
               <Card title="Archived Goals" subtitle="Archived goals stay visible for reference but are no longer part of active planning.">
                 <div className="space-y-3">
                   {archivedGoals.map((goal) => {
-                    const category = categoryLookup.get(goal.bucket_id);
+                    const progress = progressLookup.get(goal.id) ?? null;
                     return (
                       <div key={goal.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
                         <div>
                           <div className="font-medium text-[var(--text-strong)]">{goal.name}</div>
                           <div className="mt-1 text-sm text-[var(--text-muted)]">
-                            Linked bucket: {category?.label ?? goal.bucket_id} - Target {formatCurrency(goal.target_amount)}
+                            Linked bucket: {goalBucketLabel(goal, progress, categoryLookup)} - Target {formatCurrency(goal.target_amount)}
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -775,7 +776,7 @@ export function Goals() {
                 <div className="text-lg font-semibold text-[var(--text-strong)]">{selectedGoal.name}</div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Badge tone="neutral">
-                    {categoryLookup.get(selectedGoal.bucket_id)?.label ?? selectedGoalProgress.bucket_name ?? selectedGoal.bucket_id}
+                    {goalBucketLabel(selectedGoal, selectedGoalProgress, categoryLookup)}
                   </Badge>
                   <Badge tone={goalStatusTone(selectedGoalProgress)}>{goalStatusLabel(selectedGoalProgress)}</Badge>
                 </div>

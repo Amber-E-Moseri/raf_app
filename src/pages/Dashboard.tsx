@@ -128,7 +128,6 @@ export function Dashboard() {
   const latestSurplus = data.latestPeriod?.surplusOrDeficit ?? "0.00";
   const bucketBalancesBySlug = new Map(data.dashboard.bucket_balances.map((bucket) => [bucket.slug, bucket.balance]));
   const monthlyProgressByBucketId = new Map(data.dashboard.monthly_bucket_progress.map((progress) => [progress.bucket_id, progress]));
-  const goalProgressByBucketId = new Map(data.dashboard.goal_progress.map((progress) => [progress.bucket_id, progress]));
   const latestAllocationAmounts = new Map((data.latestAllocationReport?.allocations ?? []).map((allocation) => [allocation.slug, allocation.amount]));
   const allocationRows = activeCategories.length
     ? activeCategories.map((category) => ({
@@ -139,7 +138,6 @@ export function Dashboard() {
       allocatedAmount: latestAllocationAmounts.get(category.slug) ?? null,
       currentBalance: bucketBalancesBySlug.get(category.slug) ?? null,
       monthlyProgress: monthlyProgressByBucketId.get(category.id) ?? null,
-      goalProgress: goalProgressByBucketId.get(category.id) ?? null,
     }))
     : [];
 
@@ -201,25 +199,29 @@ export function Dashboard() {
               label: row.label,
               allocationPercent: row.percent,
               allocatedThisMonth: row.monthlyProgress?.allocated_this_month ?? row.allocatedAmount ?? null,
+              addedThisMonth: row.monthlyProgress?.added_this_month ?? "0.00",
+              reservedForGoalsThisMonth: row.monthlyProgress?.reserved_for_goals_this_month ?? "0.00",
+              availableThisMonth: row.monthlyProgress?.available_this_month ?? row.currentBalance ?? null,
               usedThisMonth: row.monthlyProgress?.used_this_month ?? null,
               remainingThisMonth: row.monthlyProgress?.remaining_this_month ?? row.currentBalance ?? null,
               percentUsedThisMonth: row.monthlyProgress?.percent_used_this_month ?? null,
-              goalName: row.goalProgress?.goal_name ?? null,
-              goalTargetAmount: row.goalProgress?.target_amount ?? null,
-              goalReservedAmount: row.goalProgress?.reserved_amount ?? null,
-              goalProgressPercent: row.goalProgress?.progress_percent ?? null,
+              percentReservedForGoalsThisMonth: row.monthlyProgress?.percent_reserved_for_goals_this_month ?? null,
             }))}
           />
         </div>
 
         <div className="space-y-4">
           <Card
-            title="Savings floor"
+            title="Savings floor protection"
+            subtitle="Household protection threshold. Separate from the monthly Savings bucket."
             actions={<Badge tone={alertTone(data.financialHealth.alertStatus)}>{data.financialHealth.alertStatus === "ok" ? "Protected" : "At risk"}</Badge>}
           >
             <div className="space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <div className="text-[24px] font-bold leading-none text-[var(--text-strong)]">{formatCurrency(data.financialHealth.savingsBalance)}</div>
+                <div>
+                  <div className="text-[24px] font-bold leading-none text-[var(--text-strong)]">{formatCurrency(data.financialHealth.savingsBalance)}</div>
+                  <div className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">Current protected savings balance</div>
+                </div>
                 <div className="text-[11px] font-medium text-[var(--text-muted)]">{data.financialHealth.alertStatus === "ok" ? "Protected" : "At risk"}</div>
               </div>
               <div className="relative">
@@ -236,8 +238,14 @@ export function Dashboard() {
                 <span>{formatCurrency(data.financialHealth.savingsFloor)} floor</span>
                 <span>{formatCurrency(String(savingsMax.toFixed(2)))} max</span>
               </div>
-              <p className="text-[13px] text-[var(--text-muted)]">
-                Available savings: {formatCurrency(data.financialHealth.availableSavings)}
+              <div className="rounded-2xl border border-[var(--border-color)] px-3 py-3" style={{ background: "var(--surface-plain)" }}>
+                <div className="text-[11px] font-medium text-[var(--text-muted)]">Above floor</div>
+                <div className="mt-1 text-[16px] font-semibold text-[var(--text-strong)]">
+                  {formatCurrency(data.financialHealth.availableSavings)}
+                </div>
+              </div>
+              <p className="text-[12px] italic text-[var(--text-muted)]">
+                This protection view is cumulative and does not change the monthly amount shown in the Savings bucket row.
               </p>
             </div>
           </Card>
