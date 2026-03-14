@@ -48,7 +48,7 @@ function paymentStatusTone(status?: string): "success" | "warning" | "danger" | 
   }
 }
 
-function payoffEstimateMessage(debt: { currentBalance: string; monthlyPayment: string; estimatedPayoffDate?: string | null; paymentStatus?: string }) {
+function payoffEstimateMessage(debt: { currentBalance: string; monthlyPayment: string; apr: number; estimatedPayoffDate?: string | null }) {
   if (Number(debt.currentBalance) <= 0) {
     return "Debt has been paid off.";
   }
@@ -57,7 +57,7 @@ function payoffEstimateMessage(debt: { currentBalance: string; monthlyPayment: s
     return "Add a planned payment to estimate payoff.";
   }
 
-  if (!debt.estimatedPayoffDate && debt.paymentStatus === "at_risk") {
+  if (paymentTooLowWarning(debt.currentBalance, String(debt.apr), debt.monthlyPayment)) {
     return "Planned payment is too low to reduce principal.";
   }
 
@@ -583,12 +583,8 @@ export function Debts() {
                           <div className="border-t border-[var(--border-color)] px-4 py-4">
                             <div className="grid grid-cols-2 gap-4 text-sm">
                               <div>
-                                <p className="text-[var(--text-muted)]">Planned monthly payment</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.monthlyPayment)}</p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Planned monthly payment</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.monthlyPayment)}</p>
+                                <p className="text-[var(--text-muted)]">Current balance</p>
+                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.currentBalance)}</p>
                               </div>
                               <div>
                                 <p className="text-[var(--text-muted)]">Estimated payoff</p>

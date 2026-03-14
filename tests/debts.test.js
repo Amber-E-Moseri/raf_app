@@ -320,6 +320,37 @@ test('listDebts returns null payoff estimates when monthly payment does not beat
   assert.equal(result.items[0].paymentStatus, 'missed_payment');
 });
 
+test('listDebts payoff forecast uses planned monthly payment only, not the minimum payment', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Visa',
+        startingBalance: '5000.00',
+        apr: 12.00,
+        minimumPayment: '300.00',
+        monthlyPayment: '100.00',
+        sortOrder: 1,
+        isActive: true,
+      },
+    ],
+    debtPayments: [
+      { debtId: 'debt_1', paymentDate: '2026-03-10', amount: '90.00' },
+    ],
+  });
+
+  const result = await listDebts({
+    db,
+    householdId: 'household_1',
+  });
+
+  assert.equal(result.items[0].monthlyPayment, '100.00');
+  assert.equal(result.items[0].paymentStatus, 'under_minimum');
+  assert.ok(typeof result.items[0].monthsRemaining === 'number');
+  assert.ok(typeof result.items[0].totalInterestRemaining === 'string');
+});
+
 test('listDebts marks debts under minimum when month payments are below the minimum payment', async () => {
   const db = createDbDouble({
     debts: [
