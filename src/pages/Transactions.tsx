@@ -436,6 +436,12 @@ export function Transactions() {
 
   async function handleReviewImportedRow(item: ImportedTransaction) {
     const draft = getReviewDraft(item);
+    if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
+      setReviewError("Select an allocation bucket before approving this imported row.");
+      setReviewSuccess(null);
+      return;
+    }
+
     const payload: ImportClassificationPayload = {
       classification_type: draft.classificationType,
       review_note: draft.reviewNote.trim() || null,
@@ -899,11 +905,14 @@ export function Transactions() {
                                   disabled={item.status !== "unreviewed" || isPending}
                                   onChange={(event) => updateReviewDraft(item, { categoryId: event.target.value })}
                                 >
-                                  <option value="">Leave unassigned</option>
+                                  <option value="">Select allocation bucket</option>
                                   {data.categories.map((category) => (
                                     <option key={category.id} value={category.id}>{category.label}</option>
                                   ))}
                                 </select>
+                                <span className="mt-2 block text-xs text-stone-500">
+                                  Approved imported transactions must end in an allocation bucket.
+                                </span>
                               </label>
                             ) : null}
 
@@ -921,6 +930,9 @@ export function Transactions() {
                                     <option key={debt.id} value={debt.id}>{debt.name}</option>
                                   ))}
                                 </select>
+                                <span className="mt-2 block text-xs text-stone-500">
+                                  Debt payments route into the Debt Payoff bucket automatically.
+                                </span>
                               </label>
                             ) : null}
 
@@ -938,6 +950,9 @@ export function Transactions() {
                                     <option key={bill.id} value={bill.id}>{bill.name}</option>
                                   ))}
                                 </select>
+                                <span className="mt-2 block text-xs text-stone-500">
+                                  Fixed bill payments use the fixed bill&apos;s configured allocation bucket.
+                                </span>
                               </label>
                             ) : null}
 

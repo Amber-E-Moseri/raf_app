@@ -20,6 +20,7 @@ function createDbDouble({
   categories = [
     { id: 'bucket_living', slug: 'living', label: 'Living', isActive: true, sortOrder: 1 },
     { id: 'bucket_savings', slug: 'savings', label: 'Savings', isActive: true, sortOrder: 2 },
+    { id: 'bucket_debt_payoff', slug: 'debt_payoff', label: 'Debt Payoff', isActive: true, sortOrder: 3 },
   ],
   importReviewRules = [],
 } = {}) {
@@ -187,6 +188,24 @@ test('classifying an imported row into a normal transaction creates traceable RA
   assert.equal(db.state.importReviewRules[0].normalizedDescription, 'coffee shop');
 });
 
+test('transaction approval requires an allocation bucket', async () => {
+  const db = createDbDouble({
+    importedTransactions: [importedRow()],
+  });
+
+  await assert.rejects(
+    () => classifyImportedTransaction({
+      db,
+      householdId: 'household_1',
+      importedTransactionId: 'import_1',
+      input: {
+        classification_type: 'transaction',
+      },
+    }),
+    /category_id is required/,
+  );
+});
+
 test('classifying an imported row into a debt payment creates a linked debt payment record', async () => {
   const db = createDbDouble({
     importedTransactions: [importedRow({ amount: '-100.00', description: 'Visa payment', rawDescription: 'Visa payment', normalizedDescription: 'visa payment' })],
@@ -207,6 +226,8 @@ test('classifying an imported row into a debt payment creates a linked debt paym
   assert.equal(result.linked_transaction_id, 'txn_1');
   assert.equal(db.state.debtPayments.length, 1);
   assert.equal(db.state.debtPayments[0].debtId, 'debt_1');
+  assert.equal(db.state.transactions[0].categoryId, 'bucket_debt_payoff');
+  assert.equal(db.state.importReviewRules.length, 0);
 });
 
 test('goal funding classification links the import to a goal and bucket transaction', async () => {
