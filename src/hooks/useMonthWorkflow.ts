@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { getAllocationCategories } from "../api/allocationCategoriesApi";
+import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
 import { getDebts } from "../api/debtsApi";
 import { getGoals } from "../api/goalsApi";
@@ -103,7 +103,7 @@ export function useMonthWorkflow(activeMonth: string) {
       getTransactionsForHistoryRange(historyRange.from, historyRange.to),
       getImportedTransactions(),
       getMonthlyReviews(historyRange),
-      getAllocationCategories().catch((error) => {
+      getAllocationCategoriesAsOf(activeRange.to).catch((error) => {
         if (error instanceof ApiError && error.status === 404) {
           return [];
         }

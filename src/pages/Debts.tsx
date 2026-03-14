@@ -17,6 +17,7 @@ import { formatCurrency, percentPaidOff } from "../lib/format";
 import { normalizeMoneyInput, validateApr, validateNonNegativeMoney, validatePositiveMoney, validateRequiredText } from "../lib/validation";
 
 export function Debts() {
+  // Debt balances stay current-only for now; month switching does not backdate debt snapshots yet.
   const { data, error, isLoading, reload } = useAsyncData(() => getDebts(), []);
   const [form, setForm] = useState({
     name: "",

@@ -9,6 +9,9 @@ export interface HealthResponse {
 
 export interface AllocationCategory {
   id: string;
+  snapshotId?: string | null;
+  effectiveFrom?: string | null;
+  supersededAt?: string | null;
   slug: string;
   label: string;
   sortOrder: number;
@@ -29,9 +32,18 @@ export interface AllocationCategoryWriteItem {
 
 export interface AllocationCategoriesResponse {
   items: AllocationCategory[];
+  history?: AllocationCategorySnapshot[];
 }
 
 export interface AllocationCategoriesWriteResponse {
+  items: AllocationCategory[];
+  history?: AllocationCategorySnapshot[];
+}
+
+export interface AllocationCategorySnapshot {
+  snapshotId: string;
+  effectiveFrom: string | null;
+  supersededAt: string | null;
   items: AllocationCategory[];
 }
 

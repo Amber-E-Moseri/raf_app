@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ApiError } from "../api/client";
-import { getAllocationCategories, saveAllocationCategories } from "../api/allocationCategoriesApi";
+import {
+  getAllocationCategories,
+  getAllocationCategoryHistory,
+  saveAllocationCategories,
+} from "../api/allocationCategoriesApi";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { SuccessNotice } from "../components/feedback/SuccessNotice";
@@ -11,7 +15,11 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { formatPercentWithDigits } from "../lib/format";
-import type { AllocationCategory, AllocationCategoryWriteItem } from "../lib/types";
+import type {
+  AllocationCategory,
+  AllocationCategorySnapshot,
+  AllocationCategoryWriteItem,
+} from "../lib/types";
 
 interface DraftCategory extends AllocationCategory {
   isNew: boolean;
@@ -156,7 +164,9 @@ export function AllocationPreferences() {
   const [updateEndpointMissing, setUpdateEndpointMissing] = useState(false);
   const [isAdvancedMode, setIsAdvancedMode] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [newCategoryForm, setNewCategoryForm] = useState<NewCategoryFormState>(DEFAULT_NEW_CATEGORY_FORM);
+  const [history, setHistory] = useState<AllocationCategorySnapshot[]>([]);
 
   async function loadCategories() {
     setIsLoading(true);
@@ -164,8 +174,12 @@ export function AllocationPreferences() {
     setUpdateEndpointMissing(false);
 
     try {
-      const items = await getAllocationCategories();
+      const [items, snapshots] = await Promise.all([
+        getAllocationCategories(),
+        getAllocationCategoryHistory(),
+      ]);
       setCategories(items.map(toDraftCategory));
+      setHistory(snapshots);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         setLoadError("The backend does not currently expose allocation category endpoints.");
@@ -247,6 +261,7 @@ export function AllocationPreferences() {
   function resetDrafts() {
     setSaveError(null);
     setSaveSuccess(null);
+    setIsConfirmModalOpen(false);
     void loadCategories();
   }
 
@@ -295,6 +310,7 @@ export function AllocationPreferences() {
 
       await saveAllocationCategories(payload);
       setSaveSuccess("Allocation preferences saved.");
+      setIsConfirmModalOpen(false);
       await loadCategories();
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
@@ -536,13 +552,52 @@ export function AllocationPreferences() {
                   <Button type="button" variant="secondary" onClick={resetDrafts} disabled={isLoading || isSaving}>
                     Cancel
                   </Button>
-                  <Button type="button" disabled={!canSave || isSaving} onClick={() => void handleSave()}>
+                  <Button type="button" disabled={!canSave || isSaving} onClick={() => setIsConfirmModalOpen(true)}>
                     {isSaving ? "Saving..." : "Save Preferences"}
                   </Button>
                 </div>
               </div>
             </div>
           ) : null}
+        </Card>
+
+        <Card title="Allocation History" subtitle="Historical snapshots stay read-only and continue powering prior months.">
+          {history.length ? (
+            <div className="space-y-3">
+              {history.map((snapshot) => (
+                <div key={snapshot.snapshotId} className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-raf-ink">
+                        {snapshot.effectiveFrom ?? "Unknown start"}{snapshot.supersededAt ? ` to ${snapshot.supersededAt}` : " to present"}
+                      </p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        Prior months continue using this snapshot for reporting accuracy.
+                      </p>
+                    </div>
+                    <Badge tone={snapshot.supersededAt ? "neutral" : "success"}>
+                      {snapshot.supersededAt ? "Historical" : "Current"}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {snapshot.items
+                      .filter((item) => item.isActive)
+                      .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug))
+                      .map((item) => (
+                        <span key={item.id} className="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs text-stone-600">
+                          {item.label} {formatPercentWithDigits(item.allocationPercent, 2)}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No history yet"
+              message="Your saved allocation snapshots will appear here after the first update."
+            />
+          )}
         </Card>
 
         {saveError ? <ErrorState title="Failed to save allocation preferences" message={saveError} /> : null}
@@ -625,6 +680,26 @@ export function AllocationPreferences() {
               </Button>
               <Button type="button" disabled={!newCategoryForm.label.trim()} onClick={addCategoryFromModal}>
                 Add Category
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {isConfirmModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4">
+          <div className="w-full max-w-lg rounded-[28px] border border-stone-200 bg-white p-6 shadow-2xl">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-stone-500">Allocation Update</p>
+            <h3 className="mt-2 text-xl font-bold tracking-tight text-raf-ink">Update allocation?</h3>
+            <p className="mt-3 text-sm text-stone-600">
+              Updating your allocation will apply from today. Your previous allocation will still be used for all prior months.
+              This will not change any historical reports.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <Button type="button" variant="secondary" onClick={() => setIsConfirmModalOpen(false)} disabled={isSaving}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={() => void handleSave()} disabled={isSaving}>
+                {isSaving ? "Updating..." : "Update allocation"}
               </Button>
             </div>
           </div>

@@ -7,6 +7,7 @@ import {
   replaceHouseholdAllocationCategories,
 } from '../lib/household/allocationCategories.js';
 import { computeDepositAllocations } from '../lib/raf/computeDepositAllocations.js';
+import { createInMemoryDb } from '../lib/server/inMemoryDb.js';
 
 function createDbDouble(categories) {
   const state = {
@@ -247,4 +248,44 @@ test('household allocation category routes expose GET and PUT payloads', async (
 
   assert.equal(putResponse.status, 200);
   assert.equal(Array.isArray((await putResponse.json()).items), true);
+});
+
+test('GET /household/allocation-categories returns the historical snapshot for asOf dates', async () => {
+  const db = createInMemoryDb();
+
+  await replaceHouseholdAllocationCategories({
+    db,
+    householdId: db.defaultHouseholdId,
+    effectiveDate: '2026-03-01',
+    input: {
+      items: [
+        { slug: 'savings', label: 'Savings', allocationPercent: '0.2000', sortOrder: 1, isActive: true },
+        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.2500', sortOrder: 2, isActive: true },
+        { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
+        { slug: 'investment', label: 'Investment', allocationPercent: '0.0500', sortOrder: 4, isActive: true },
+        { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isActive: true },
+        { slug: 'buffer', label: 'Buffer', allocationPercent: '0.2500', sortOrder: 9, isActive: true },
+      ],
+    },
+  });
+
+  const currentResponse = await GET(
+    new Request('http://localhost/api/v1/household/allocation-categories', {
+      headers: { 'x-household-id': db.defaultHouseholdId },
+    }),
+    { db },
+  );
+  const historicalResponse = await GET(
+    new Request('http://localhost/api/v1/household/allocation-categories?asOf=2026-02-15', {
+      headers: { 'x-household-id': db.defaultHouseholdId },
+    }),
+    { db },
+  );
+
+  const current = await currentResponse.json();
+  const historical = await historicalResponse.json();
+
+  assert.equal(current.items.find((item) => item.slug === 'savings').allocationPercent, '0.2000');
+  assert.equal(historical.items.find((item) => item.slug === 'savings').allocationPercent, '0.1000');
+  assert.equal(Array.isArray(current.history), true);
 });

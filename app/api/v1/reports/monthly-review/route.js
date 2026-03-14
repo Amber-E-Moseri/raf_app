@@ -19,6 +19,8 @@ export async function GET(request, context = {}) {
       db: getDb(context),
       householdId: getHouseholdId(request, context),
       month: searchParams.get('month'),
+      year: searchParams.get('year'),
+      periodMonth: searchParams.get('monthNumber') ?? searchParams.get('month_num') ?? searchParams.get('monthIndex'),
     });
 
     return json(result, 200);

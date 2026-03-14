@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-import { getAllocationCategories } from "../api/allocationCategoriesApi";
+import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
 import { getDashboardReport, getFinancialHealthReport } from "../api/reportsApi";
@@ -59,7 +59,7 @@ function transactionTone(transaction: Transaction) {
 }
 
 export function Dashboard() {
-  const { activeMonthLabel, activeRange } = usePeriod();
+  const { activeMonthLabel, activeRange, isCurrentMonth, jumpToCurrentMonth } = usePeriod();
   const { from, to } = activeRange;
   const monthWorkflow = useMonthWorkflow(activeRange.from.slice(0, 7));
 
@@ -74,7 +74,7 @@ export function Dashboard() {
     let categories: AllocationCategory[] = [];
 
     try {
-      categories = await getAllocationCategories();
+      categories = await getAllocationCategoriesAsOf(to);
     } catch (loadError) {
       if (!(loadError instanceof ApiError) || loadError.status !== 404) {
         throw loadError;
@@ -153,6 +153,14 @@ export function Dashboard() {
 
   return (
     <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+      {!isCurrentMonth ? (
+        <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+          Viewing {activeMonthLabel} - this is a historical snapshot.{" "}
+          <button type="button" className="font-medium text-[var(--primary-color)]" onClick={jumpToCurrentMonth}>
+            Back to current month
+          </button>
+        </div>
+      ) : null}
       {monthWorkflow.data.reminderMonth ? <MonthReminderBanner monthKey={monthWorkflow.data.reminderMonth.monthKey} /> : null}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryMetricCard

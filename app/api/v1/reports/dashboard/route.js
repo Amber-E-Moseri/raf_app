@@ -20,6 +20,8 @@ export async function GET(request, context = {}) {
       householdId: getHouseholdId(request, context),
       from: searchParams.get('from'),
       to: searchParams.get('to'),
+      year: searchParams.get('year'),
+      month: searchParams.get('month'),
     });
 
     return json(result, 200);

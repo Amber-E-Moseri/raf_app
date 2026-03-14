@@ -3,7 +3,12 @@ const monthLabelFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
-export const PERIOD_STORAGE_KEY = "raf_active_month";
+export const PERIOD_STORAGE_KEY = "raf_active_period";
+
+export interface Period {
+  year: number;
+  month: number;
+}
 
 export function getCurrentMonthKey(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -15,6 +20,18 @@ export function isMonthKey(value: string | null | undefined): value is string {
 
 export function normalizeMonthKey(value: string | null | undefined, fallback = getCurrentMonthKey()) {
   return isMonthKey(value) ? value : fallback;
+}
+
+export function monthKeyToPeriod(monthKey: string): Period {
+  const normalized = normalizeMonthKey(monthKey);
+  return {
+    year: Number(normalized.slice(0, 4)),
+    month: Number(normalized.slice(5, 7)),
+  };
+}
+
+export function periodToMonthKey(period: Period) {
+  return `${period.year}-${String(period.month).padStart(2, "0")}`;
 }
 
 export function monthKeyToDate(monthKey: string) {
@@ -29,6 +46,15 @@ export function shiftMonthKey(monthKey: string, offset: number) {
   const next = monthKeyToDate(monthKey);
   next.setUTCMonth(next.getUTCMonth() + offset);
   return next.toISOString().slice(0, 7);
+}
+
+export function isFutureMonthKey(monthKey: string, now = new Date()) {
+  return compareMonthKeys(monthKey, getCurrentMonthKey(now)) > 0;
+}
+
+export function normalizeStoredPeriod(value: string | null | undefined, now = new Date()) {
+  const normalized = normalizeMonthKey(value, getCurrentMonthKey(now));
+  return isFutureMonthKey(normalized, now) ? getCurrentMonthKey(now) : normalized;
 }
 
 export function compareMonthKeys(left: string, right: string) {
@@ -47,10 +73,10 @@ export function monthRangeFromKey(monthKey: string) {
   };
 }
 
-export function buildMonthOptions(activeMonth: string, monthsBack = 18, monthsForward = 12) {
+export function buildMonthOptions(activeMonth: string, monthsBack = 18, monthsForward = 0) {
   const currentMonth = getCurrentMonthKey();
   const earliestAnchor = compareMonthKeys(activeMonth, currentMonth) <= 0 ? activeMonth : currentMonth;
-  const latestAnchor = compareMonthKeys(activeMonth, currentMonth) >= 0 ? activeMonth : currentMonth;
+  const latestAnchor = currentMonth;
   const startMonth = shiftMonthKey(earliestAnchor, -monthsBack);
   const endMonth = shiftMonthKey(latestAnchor, monthsForward);
   const options = [];

@@ -117,7 +117,15 @@ function NavGroup({ label, items }: { label: string; items: Array<{ to: string; 
 }
 
 export function AppLayout() {
-  const { activeMonth, activeMonthLabel, goToNextMonth, goToPreviousMonth, jumpToCurrentMonth, setActiveMonth } = usePeriod();
+  const {
+    activeMonth,
+    activeMonthLabel,
+    isCurrentMonth,
+    nextMonth,
+    prevMonth,
+    jumpToCurrentMonth,
+    setActiveMonth,
+  } = usePeriod();
   const [isPeriodMenuOpen, setIsPeriodMenuOpen] = useState(false);
   const monthOptions = useMemo(() => buildMonthOptions(activeMonth), [activeMonth]);
 
@@ -155,11 +163,16 @@ export function AppLayout() {
               {isPeriodMenuOpen ? (
                 <div className="mt-2 rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-3 shadow-panel">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <button type="button" className="text-[11px] font-medium text-stone-500" onClick={goToPreviousMonth}>
+                    <button type="button" className="text-[11px] font-medium text-stone-500" onClick={prevMonth}>
                       Previous
                     </button>
                     <span className="text-[11px] font-semibold text-raf-ink">{activeMonthLabel}</span>
-                    <button type="button" className="text-[11px] font-medium text-stone-500" onClick={goToNextMonth}>
+                    <button
+                      type="button"
+                      className={`text-[11px] font-medium ${isCurrentMonth ? "cursor-not-allowed text-stone-300" : "text-stone-500"}`}
+                      onClick={nextMonth}
+                      disabled={isCurrentMonth}
+                    >
                       Next
                     </button>
                   </div>
@@ -254,11 +267,16 @@ export function AppLayout() {
                 {isPeriodMenuOpen ? (
                   <div className="mt-2 rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-3 shadow-panel">
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <button type="button" className="text-[11px] font-medium text-stone-500" onClick={goToPreviousMonth}>
+                      <button type="button" className="text-[11px] font-medium text-stone-500" onClick={prevMonth}>
                         Previous
                       </button>
                       <span className="text-[11px] font-semibold text-raf-ink">{activeMonthLabel}</span>
-                      <button type="button" className="text-[11px] font-medium text-stone-500" onClick={goToNextMonth}>
+                      <button
+                        type="button"
+                        className={`text-[11px] font-medium ${isCurrentMonth ? "cursor-not-allowed text-stone-300" : "text-stone-500"}`}
+                        onClick={nextMonth}
+                        disabled={isCurrentMonth}
+                      >
                         Next
                       </button>
                     </div>

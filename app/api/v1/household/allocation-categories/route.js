@@ -18,9 +18,11 @@ function getDb(context) {
 
 export async function GET(request, context = {}) {
   try {
+    const { searchParams } = new URL(request.url);
     const result = await listHouseholdAllocationCategories({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
+      asOf: searchParams.get('asOf'),
     });
 
     return json(result, 200);

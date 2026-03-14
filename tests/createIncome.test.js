@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { GET, POST } from '../app/api/v1/income/route.js';
 import { DELETE, PATCH } from '../app/api/v1/income/[id]/route.js';
 import { createIncome, deleteIncome, listIncome, updateIncome } from '../lib/income/createIncome.js';
+import { replaceHouseholdAllocationCategories } from '../lib/household/allocationCategories.js';
+import { createInMemoryDb } from '../lib/server/inMemoryDb.js';
 
 function createDbDouble({
   categories,
@@ -375,4 +377,100 @@ test('income routes cover POST, GET, PATCH, and DELETE', async () => {
   );
 
   assert.equal(deleteResponse.status, 204);
+});
+
+test('deposit dated Feb 15 uses the February allocation snapshot after a March change', async () => {
+  const db = createInMemoryDb();
+
+  await replaceHouseholdAllocationCategories({
+    db,
+    householdId: db.defaultHouseholdId,
+    effectiveDate: '2026-03-01',
+    input: {
+      items: [
+        { slug: 'savings', label: 'Savings', allocationPercent: '0.2000', sortOrder: 1, isActive: true },
+        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.2000', sortOrder: 2, isActive: true },
+        { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
+        { slug: 'investment', label: 'Investment', allocationPercent: '0.1000', sortOrder: 4, isActive: true },
+        { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isActive: true },
+        { slug: 'buffer', label: 'Buffer', allocationPercent: '0.2500', sortOrder: 9, isActive: true },
+      ],
+    },
+  });
+
+  const result = await createIncome({
+    db,
+    householdId: db.defaultHouseholdId,
+    input: {
+      sourceName: 'Payroll',
+      amount: '100.00',
+      receivedDate: '2026-02-15',
+    },
+  });
+
+  assert.equal(result.allocations.find((item) => item.slug === 'savings')?.amount, '10.00');
+});
+
+test('deposit dated Mar 10 uses the March allocation snapshot after a March change', async () => {
+  const db = createInMemoryDb();
+
+  await replaceHouseholdAllocationCategories({
+    db,
+    householdId: db.defaultHouseholdId,
+    effectiveDate: '2026-03-01',
+    input: {
+      items: [
+        { slug: 'savings', label: 'Savings', allocationPercent: '0.2000', sortOrder: 1, isActive: true },
+        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.2000', sortOrder: 2, isActive: true },
+        { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
+        { slug: 'investment', label: 'Investment', allocationPercent: '0.1000', sortOrder: 4, isActive: true },
+        { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isActive: true },
+        { slug: 'buffer', label: 'Buffer', allocationPercent: '0.2500', sortOrder: 9, isActive: true },
+      ],
+    },
+  });
+
+  const result = await createIncome({
+    db,
+    householdId: db.defaultHouseholdId,
+    input: {
+      sourceName: 'Payroll',
+      amount: '100.00',
+      receivedDate: '2026-03-10',
+    },
+  });
+
+  assert.equal(result.allocations.find((item) => item.slug === 'savings')?.amount, '20.00');
+});
+
+test('same-day allocation changes take effect immediately for deposits on that day', async () => {
+  const db = createInMemoryDb();
+
+  await replaceHouseholdAllocationCategories({
+    db,
+    householdId: db.defaultHouseholdId,
+    effectiveDate: '2026-03-01',
+    input: {
+      items: [
+        { slug: 'savings', label: 'Savings', allocationPercent: '0.2000', sortOrder: 1, isActive: true },
+        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.2000', sortOrder: 2, isActive: true },
+        { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
+        { slug: 'investment', label: 'Investment', allocationPercent: '0.1000', sortOrder: 4, isActive: true },
+        { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isActive: true },
+        { slug: 'buffer', label: 'Buffer', allocationPercent: '0.2500', sortOrder: 9, isActive: true },
+      ],
+    },
+  });
+
+  const result = await createIncome({
+    db,
+    householdId: db.defaultHouseholdId,
+    input: {
+      sourceName: 'Payroll',
+      amount: '100.00',
+      receivedDate: '2026-03-01',
+    },
+  });
+
+  assert.equal(result.allocations.find((item) => item.slug === 'savings')?.amount, '20.00');
 });

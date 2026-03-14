@@ -15,8 +15,12 @@ test("app wiring includes the global period provider and month-aware pages", asy
   assert.match(layoutSource, /usePeriod\(\)/);
   assert.match(layoutSource, /setActiveMonth\(option\.value\)/);
   assert.match(layoutSource, /jumpToCurrentMonth\(\)/);
+  assert.match(layoutSource, /disabled=\{isCurrentMonth\}/);
   assert.match(layoutSource, /Current month/);
   assert.match(dashboardSource, /usePeriod\(\)/);
-  assert.match(transactionsSource, /const \{ activeMonth, activeMonthLabel, activeRange \} = usePeriod\(\)/);
-  assert.match(monthlyReviewSource, /const \{ activeMonth, activeMonthLabel \} = usePeriod\(\)/);
+  assert.match(dashboardSource, /historical snapshot/);
+  assert.match(transactionsSource, /usePeriod\(\)/);
+  assert.match(transactionsSource, /isCurrentMonth/);
+  assert.match(monthlyReviewSource, /usePeriod\(\)/);
+  assert.match(monthlyReviewSource, /jumpToCurrentMonth/);
 });

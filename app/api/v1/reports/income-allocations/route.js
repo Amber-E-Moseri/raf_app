@@ -18,7 +18,7 @@ export async function GET(request, context = {}) {
     const result = await getIncomeAllocationsReport({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
-      incomeId: searchParams.get('incomeId'),
+      incomeId: searchParams.get('incomeId') ?? searchParams.get('depositId'),
     });
 
     return json(result, 200);

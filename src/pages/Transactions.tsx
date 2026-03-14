@@ -212,7 +212,7 @@ function userFacingReviewError(message: string) {
 }
 
 export function Transactions() {
-  const { activeMonth, activeMonthLabel, activeRange } = usePeriod();
+  const { activeMonth, activeMonthLabel, activeRange, isCurrentMonth } = usePeriod();
   const { from: initialFrom, to: initialTo } = activeRange;
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([null]);
   const [fromDate, setFromDate] = useState(initialFrom);
@@ -659,6 +659,15 @@ export function Transactions() {
       setImportError("Only PDF bank statements are supported.");
       setImportSuccess(null);
       return;
+    }
+
+    if (!isCurrentMonth) {
+      const shouldContinue = window.confirm(
+        `You are viewing ${activeMonthLabel}. This import will be tagged using the statement transaction dates, which may not match the month you are currently viewing. Continue?`,
+      );
+      if (!shouldContinue) {
+        return;
+      }
     }
 
     setIsImporting(true);

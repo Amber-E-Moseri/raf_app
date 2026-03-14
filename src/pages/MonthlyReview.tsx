@@ -60,7 +60,7 @@ function buildReviewMonthRange(startMonth: string, endMonth: string) {
 }
 
 export function MonthlyReview() {
-  const { activeMonth, activeMonthLabel, setActiveMonth } = usePeriod();
+  const { activeMonth, activeMonthLabel, isCurrentMonth, jumpToCurrentMonth, setActiveMonth } = usePeriod();
   const initialMonth = useMemo(() => activeMonth ? `${activeMonth}-01` : defaultReviewMonth(), [activeMonth]);
   const [reviewMonth, setReviewMonth] = useState(initialMonth);
   const [batchStartMonth, setBatchStartMonth] = useState(initialMonth);
@@ -200,6 +200,14 @@ export function MonthlyReview() {
       title="Monthly Review"
       description={`Close ${activeMonthLabel} with a deliberate review step.`}
     >
+      {!isCurrentMonth ? (
+        <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+          Viewing {activeMonthLabel} - this is a historical snapshot.{" "}
+          <button type="button" className="font-medium text-[var(--primary-color)]" onClick={jumpToCurrentMonth}>
+            Back to current month
+          </button>
+        </div>
+      ) : null}
       {monthWorkflow.data?.reminderMonth ? <MonthReminderBanner monthKey={monthWorkflow.data.reminderMonth.monthKey} tone="danger" ctaLabel="Close month" /> : null}
       {monthWorkflow.data ? (
         <Card
@@ -236,6 +244,9 @@ export function MonthlyReview() {
             <Badge tone={monthWorkflow.data.activeMonthStatus.status === "closed" ? "success" : monthWorkflow.data.closeSummary.canClose ? "warning" : "danger"}>
               {monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}
             </Badge>
+            {monthWorkflow.data.activeMonthStatus.status === "closed" ? (
+              <span className="text-sm text-stone-500">Reviewed in Transactions for this month. Apply is locked.</span>
+            ) : null}
             <span className="text-sm text-stone-500">
               Closing a month uses the current surplus suggestion and keeps carry-forward visible through the next month's reserved balances.
             </span>
