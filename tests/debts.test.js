@@ -13,11 +13,12 @@ import {
   updateDebt,
 } from '../lib/debts/debts.js';
 
-function createDbDouble({ debts = [], debtPayments = [], debtAdjustments = [] } = {}) {
+function createDbDouble({ debts = [], debtPayments = [], debtAdjustments = [], household = { id: 'household_1', activeMonth: '2026-03-01' } } = {}) {
   const state = {
     debts: debts.map((debt) => ({ ...debt })),
     debtPayments: debtPayments.map((payment) => ({ ...payment })),
     debtAdjustments: debtAdjustments.map((adjustment) => ({ ...adjustment })),
+    household: { ...household },
     insertedDebt: null,
     updatedDebt: null,
     deletedDebtId: null,
@@ -77,6 +78,9 @@ function createDbDouble({ debts = [], debtPayments = [], debtAdjustments = [] } 
       state.deletedDebtId = debtId;
       state.debts = state.debts.filter((debt) => debt.id !== debtId);
     },
+    async getHousehold() {
+      return { ...state.household };
+    },
   };
 
   return {
@@ -110,6 +114,8 @@ test('createDebt creates a debt and returns money values as decimal strings', as
   assert.equal(result.monthlyPayment, '250.00');
   assert.equal(result.apr, 19.99);
   assert.equal(result.status, 'current');
+  assert.equal(result.paymentStatus, 'missed_payment');
+  assert.equal(result.paymentsThisMonth, '0.00');
   assert.ok(typeof result.monthsRemaining === 'number' && result.monthsRemaining > 0);
   assert.ok(typeof result.totalInterestRemaining === 'string' && Number(result.totalInterestRemaining) > 0);
   assert.match(result.estimatedPayoffDate, /^\d{4}-\d{2}-\d{2}$/);
@@ -213,8 +219,14 @@ test('listDebts derives currentBalance and returns summary totals from live paym
     totalPaidAllTime: '2500.00',
   });
   assert.equal(result.items[0].currentBalance, '4600.00');
+  assert.equal(result.items[0].paymentsThisMonth, '500.00');
+  assert.equal(result.items[0].interestChargedThisMonth, '100.00');
+  assert.equal(result.items[0].feesThisMonth, '0.00');
+  assert.equal(result.items[0].principalReductionThisMonth, '400.00');
+  assert.equal(result.items[0].paymentStatus, 'paying_down');
   assert.equal(result.items[1].currentBalance, '0.00');
   assert.equal(result.items[1].status, 'paid_off');
+  assert.equal(result.items[1].paymentStatus, 'paid_off');
   assert.equal(result.items[1].monthsRemaining, 0);
   assert.equal(result.items[1].totalInterestRemaining, '0.00');
 });
@@ -295,6 +307,66 @@ test('listDebts returns null payoff estimates when monthly payment does not beat
   assert.equal(result.items[0].estimatedPayoffDate, null);
   assert.equal(result.items[0].monthsRemaining, null);
   assert.equal(result.items[0].totalInterestRemaining, null);
+  assert.equal(result.items[0].paymentStatus, 'missed_payment');
+});
+
+test('listDebts marks debts under minimum when month payments are below the minimum payment', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Visa',
+        startingBalance: '1200.00',
+        apr: 12.5,
+        minimumPayment: '100.00',
+        monthlyPayment: '150.00',
+        sortOrder: 1,
+        isActive: true,
+      },
+    ],
+    debtPayments: [
+      { debtId: 'debt_1', paymentDate: '2026-03-09', amount: '50.00' },
+    ],
+  });
+
+  const result = await listDebts({ db, householdId: 'household_1' });
+
+  assert.equal(result.items[0].paymentStatus, 'under_minimum');
+  assert.equal(result.items[0].paymentsThisMonth, '50.00');
+  assert.equal(result.items[0].principalReductionThisMonth, '50.00');
+});
+
+test('listDebts marks debts at risk when payments do not cover monthly interest and fees', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Store Card',
+        startingBalance: '5000.00',
+        apr: 29.99,
+        minimumPayment: '80.00',
+        monthlyPayment: '150.00',
+        sortOrder: 1,
+        isActive: true,
+      },
+    ],
+    debtPayments: [
+      { debtId: 'debt_1', paymentDate: '2026-03-10', amount: '90.00' },
+    ],
+    debtAdjustments: [
+      { debtId: 'debt_1', householdId: 'household_1', amount: '120.00', adjustmentType: 'interest', effectiveDate: '2026-03-12', note: 'interest', createdAt: '2026-03-12T00:00:00.000Z' },
+      { debtId: 'debt_1', householdId: 'household_1', amount: '25.00', adjustmentType: 'fee', effectiveDate: '2026-03-13', note: 'late fee', createdAt: '2026-03-13T00:00:00.000Z' },
+    ],
+  });
+
+  const result = await listDebts({ db, householdId: 'household_1' });
+
+  assert.equal(result.items[0].paymentStatus, 'at_risk');
+  assert.equal(result.items[0].interestChargedThisMonth, '120.00');
+  assert.equal(result.items[0].feesThisMonth, '25.00');
+  assert.equal(result.items[0].principalReductionThisMonth, '0.00');
 });
 
 test('createDebtAdjustment records an auditable balance adjustment and updates derived balance', async () => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 
 import { createDebt, getDebts } from "../api/debtsApi";
 import { ErrorState } from "../components/feedback/ErrorState";
@@ -15,6 +15,58 @@ import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { formatCurrency, formatIsoDate, percentPaidOff } from "../lib/format";
 import { normalizeMoneyInput, validateApr, validateNonNegativeMoney, validatePositiveMoney, validateRequiredText } from "../lib/validation";
+
+function paymentStatusLabel(status?: string) {
+  switch (status) {
+    case "missed_payment":
+      return "Missed payment";
+    case "under_minimum":
+      return "Under minimum";
+    case "at_risk":
+      return "At risk";
+    case "paying_down":
+      return "Paying down";
+    case "paid_off":
+      return "Paid off";
+    default:
+      return "Current";
+  }
+}
+
+function paymentStatusTone(status?: string): "success" | "warning" | "danger" | "neutral" {
+  switch (status) {
+    case "paid_off":
+    case "paying_down":
+      return "success";
+    case "under_minimum":
+    case "at_risk":
+      return "warning";
+    case "missed_payment":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
+
+function payoffEstimateMessage(debt: { currentBalance: string; monthlyPayment: string; estimatedPayoffDate?: string | null; paymentStatus?: string }) {
+  if (Number(debt.currentBalance) <= 0) {
+    return "Debt has been paid off.";
+  }
+
+  if (Number(debt.monthlyPayment ?? "0") <= 0) {
+    return "Add a planned payment to estimate payoff.";
+  }
+
+  if (!debt.estimatedPayoffDate && debt.paymentStatus === "at_risk") {
+    return "Planned payment is too low to reduce principal.";
+  }
+
+  if (!debt.estimatedPayoffDate) {
+    return "Payoff estimate is unavailable.";
+  }
+
+  return null;
+}
 
 export function Debts() {
   // Debt balances stay current-only for now; month switching does not backdate debt snapshots yet.
@@ -193,45 +245,99 @@ export function Debts() {
             <section className="grid gap-4 xl:grid-cols-2">
               {data.items.map((debt) => {
                 const completion = percentPaidOff(debt.startingBalance, debt.currentBalance) ?? 0;
+                const estimateMessage = payoffEstimateMessage(debt);
 
                 return (
                   <Card key={debt.id} title={debt.name} subtitle={`APR ${debt.apr}%`}>
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                          <p className="text-[var(--text-muted)]">Starting balance</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.startingBalance)}</p>
-                        </div>
-                        <div>
                           <p className="text-[var(--text-muted)]">Current balance</p>
                           <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.currentBalance)}</p>
                         </div>
                         <div>
-                          <p className="text-[var(--text-muted)]">Monthly payment</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.monthlyPayment)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[var(--text-muted)]">Estimated payoff</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">
-                            {debt.estimatedPayoffDate ? formatIsoDate(debt.estimatedPayoffDate) : "Unavailable"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[var(--text-muted)]">Months remaining</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">
-                            {debt.monthsRemaining == null ? "Unavailable" : debt.monthsRemaining}
-                          </p>
+                          <p className="text-[var(--text-muted)]">Opening this month</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.openingBalance ?? debt.currentBalance)}</p>
                         </div>
                         <div>
                           <p className="text-[var(--text-muted)]">Minimum payment</p>
                           <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.minimumPayment)}</p>
                         </div>
                         <div>
-                          <p className="text-[var(--text-muted)]">Interest remaining</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">
-                            {debt.totalInterestRemaining == null ? "Unavailable" : formatCurrency(debt.totalInterestRemaining)}
-                          </p>
+                          <p className="text-[var(--text-muted)]">Planned payment</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.monthlyPayment)}</p>
                         </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">This month</p>
+                            <p className="mt-1 text-sm text-[var(--text-muted)]">Actual debt activity from linked payments and posted charges.</p>
+                          </div>
+                          <Badge tone={paymentStatusTone(debt.paymentStatus)}>{paymentStatusLabel(debt.paymentStatus)}</Badge>
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-[var(--text-muted)]">Payments this month</p>
+                            <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.paymentsThisMonth ?? "0.00")}</p>
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-muted)]">Interest charged</p>
+                            <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.interestChargedThisMonth ?? "0.00")}</p>
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-muted)]">Fees this month</p>
+                            <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.feesThisMonth ?? "0.00")}</p>
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-muted)]">Principal reduction</p>
+                            <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.principalReductionThisMonth ?? "0.00")}</p>
+                          </div>
+                        </div>
+                        {debt.paymentStatus === "missed_payment" ? (
+                          <p className="mt-3 text-sm text-[var(--text-muted)]">No payment recorded this month.</p>
+                        ) : null}
+                        {debt.paymentStatus === "under_minimum" ? (
+                          <p className="mt-3 text-sm text-[var(--text-muted)]">Payment is below the minimum payment.</p>
+                        ) : null}
+                        {debt.paymentStatus === "at_risk" ? (
+                          <p className="mt-3 text-sm text-[var(--text-muted)]">Payment is too low to meaningfully reduce principal.</p>
+                        ) : null}
+                      </div>
+
+                      <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Planned payoff</p>
+                          <p className="mt-1 text-sm text-[var(--text-muted)]">Forecast based on the planned monthly payment, separate from actual month activity.</p>
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-[var(--text-muted)]">Estimated payoff</p>
+                            <p className="mt-1 font-semibold text-[var(--text-strong)]">
+                              {debt.estimatedPayoffDate ? formatIsoDate(debt.estimatedPayoffDate) : "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-muted)]">Months remaining</p>
+                            <p className="mt-1 font-semibold text-[var(--text-strong)]">
+                              {debt.monthsRemaining == null ? "—" : debt.monthsRemaining}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-muted)]">Interest remaining</p>
+                            <p className="mt-1 font-semibold text-[var(--text-strong)]">
+                              {debt.totalInterestRemaining == null ? "—" : formatCurrency(debt.totalInterestRemaining)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[var(--text-muted)]">Starting balance</p>
+                            <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.startingBalance)}</p>
+                          </div>
+                        </div>
+                        {estimateMessage ? (
+                          <p className="mt-3 text-sm text-[var(--text-muted)]">{estimateMessage}</p>
+                        ) : null}
                       </div>
                       <div>
                         <div className="mb-2 flex items-center justify-between gap-3 text-sm">
@@ -243,8 +349,8 @@ export function Debts() {
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-[var(--text-muted)]">Status</span>
-                        <Badge tone={debt.status === "current" ? "success" : "neutral"}>{debt.status}</Badge>
+                        <span className="text-sm text-[var(--text-muted)]">Debt state</span>
+                        <Badge tone={debt.status === "paid_off" ? "success" : "neutral"}>{debt.status === "paid_off" ? "Paid off" : "Open"}</Badge>
                       </div>
                     </div>
                   </Card>
@@ -262,3 +368,5 @@ export function Debts() {
     </PageShell>
   );
 }
+
+

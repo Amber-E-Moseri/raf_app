@@ -220,6 +220,12 @@ export interface Debt {
   status: string;
   sortOrder: number;
   isActive?: boolean;
+  openingBalance?: string;
+  paymentsThisMonth?: string;
+  interestChargedThisMonth?: string;
+  feesThisMonth?: string;
+  principalReductionThisMonth?: string;
+  paymentStatus?: "current" | "missed_payment" | "under_minimum" | "at_risk" | "paying_down" | "paid_off";
   estimatedPayoffDate?: string | null;
   monthsRemaining?: number | null;
   totalInterestRemaining?: string | null;
