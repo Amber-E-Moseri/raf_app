@@ -1,6 +1,9 @@
+import { useMemo, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { APP_NAME } from "../../lib/constants";
+import { buildMonthOptions } from "../../lib/period";
+import { usePeriod } from "./PeriodProvider";
 
 const navigationGroups = [
   {
@@ -114,6 +117,10 @@ function NavGroup({ label, items }: { label: string; items: Array<{ to: string; 
 }
 
 export function AppLayout() {
+  const { activeMonth, activeMonthLabel, goToNextMonth, goToPreviousMonth, jumpToCurrentMonth, setActiveMonth } = usePeriod();
+  const [isPeriodMenuOpen, setIsPeriodMenuOpen] = useState(false);
+  const monthOptions = useMemo(() => buildMonthOptions(activeMonth), [activeMonth]);
+
   return (
     <div className="theme-shell min-h-screen">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-4 px-6 py-5 md:px-6 lg:flex-row">
@@ -136,9 +143,56 @@ export function AppLayout() {
                 <NavIcon type="user" />
               </NavLink>
             </div>
-            <div className="flex items-center justify-between rounded-full border border-[var(--border-color)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-medium text-stone-600">
-              <span>March 2026</span>
-              <span aria-hidden="true">v</span>
+            <div className="relative">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-full border border-[var(--border-color)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-medium text-stone-600"
+                onClick={() => setIsPeriodMenuOpen((current) => !current)}
+              >
+                <span>{activeMonthLabel}</span>
+                <span aria-hidden="true">v</span>
+              </button>
+              {isPeriodMenuOpen ? (
+                <div className="mt-2 rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-3 shadow-panel">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <button type="button" className="text-[11px] font-medium text-stone-500" onClick={goToPreviousMonth}>
+                      Previous
+                    </button>
+                    <span className="text-[11px] font-semibold text-raf-ink">{activeMonthLabel}</span>
+                    <button type="button" className="text-[11px] font-medium text-stone-500" onClick={goToNextMonth}>
+                      Next
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="mb-2 w-full rounded-xl border border-[var(--border-color)] px-3 py-2 text-[11px] font-medium text-stone-600 hover:bg-[var(--surface-elevated)]"
+                    onClick={() => {
+                      jumpToCurrentMonth();
+                      setIsPeriodMenuOpen(false);
+                    }}
+                  >
+                    Current month
+                  </button>
+                  <div className="max-h-56 space-y-1 overflow-y-auto">
+                    {monthOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[11px] ${
+                          option.value === activeMonth ? "bg-[var(--primary-soft)] text-[var(--primary-color)]" : "text-stone-600 hover:bg-[var(--surface-elevated)]"
+                        }`}
+                        onClick={() => {
+                          setActiveMonth(option.value);
+                          setIsPeriodMenuOpen(false);
+                        }}
+                      >
+                        <span>{option.label}</span>
+                        {option.value === activeMonth ? <span>Current</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div className="space-y-3 border-t border-[var(--border-color)] pt-3">
               {navigationGroups.map((group) => (
@@ -188,10 +242,57 @@ export function AppLayout() {
             </div>
 
             <div className="border-b border-[var(--border-color)] py-4">
-              <button type="button" className="flex w-full items-center justify-between rounded-full border border-[var(--border-color)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-medium text-stone-600">
-                <span>March 2026</span>
-                <span aria-hidden="true">v</span>
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-full border border-[var(--border-color)] bg-[var(--surface-elevated)] px-3 py-2 text-[11px] font-medium text-stone-600"
+                  onClick={() => setIsPeriodMenuOpen((current) => !current)}
+                >
+                  <span>{activeMonthLabel}</span>
+                  <span aria-hidden="true">v</span>
+                </button>
+                {isPeriodMenuOpen ? (
+                  <div className="mt-2 rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-3 shadow-panel">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <button type="button" className="text-[11px] font-medium text-stone-500" onClick={goToPreviousMonth}>
+                        Previous
+                      </button>
+                      <span className="text-[11px] font-semibold text-raf-ink">{activeMonthLabel}</span>
+                      <button type="button" className="text-[11px] font-medium text-stone-500" onClick={goToNextMonth}>
+                        Next
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="mb-2 w-full rounded-xl border border-[var(--border-color)] px-3 py-2 text-[11px] font-medium text-stone-600 hover:bg-[var(--surface-elevated)]"
+                      onClick={() => {
+                        jumpToCurrentMonth();
+                        setIsPeriodMenuOpen(false);
+                      }}
+                    >
+                      Current month
+                    </button>
+                    <div className="max-h-64 space-y-1 overflow-y-auto">
+                      {monthOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[11px] ${
+                            option.value === activeMonth ? "bg-[var(--primary-soft)] text-[var(--primary-color)]" : "text-stone-600 hover:bg-[var(--surface-elevated)]"
+                          }`}
+                          onClick={() => {
+                            setActiveMonth(option.value);
+                            setIsPeriodMenuOpen(false);
+                          }}
+                        >
+                          <span>{option.label}</span>
+                          {option.value === activeMonth ? <span>Current</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <nav className="space-y-4 py-4">

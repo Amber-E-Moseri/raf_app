@@ -5,14 +5,17 @@ import { getSurplusRecommendations } from "../api/reportsApi";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { LoadingState } from "../components/feedback/LoadingState";
+import { MonthReminderBanner } from "../components/feedback/MonthReminderBanner";
 import { SuccessNotice } from "../components/feedback/SuccessNotice";
 import { PageShell } from "../components/layout/PageShell";
+import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { Table } from "../components/ui/Table";
+import { useMonthWorkflow } from "../hooks/useMonthWorkflow";
 import { formatCurrency } from "../lib/format";
 import { validateFirstDayOfMonth } from "../lib/validation";
 import type { ApplyMonthlyReviewResponse, SurplusRecommendationsReport } from "../lib/types";
@@ -57,7 +60,8 @@ function buildReviewMonthRange(startMonth: string, endMonth: string) {
 }
 
 export function MonthlyReview() {
-  const initialMonth = useMemo(() => defaultReviewMonth(), []);
+  const { activeMonth, activeMonthLabel, setActiveMonth } = usePeriod();
+  const initialMonth = useMemo(() => activeMonth ? `${activeMonth}-01` : defaultReviewMonth(), [activeMonth]);
   const [reviewMonth, setReviewMonth] = useState(initialMonth);
   const [batchStartMonth, setBatchStartMonth] = useState(initialMonth);
   const [batchEndMonth, setBatchEndMonth] = useState(initialMonth);
@@ -75,6 +79,14 @@ export function MonthlyReview() {
     appliedCount: number;
     totalTransactions: number;
   } | null>(null);
+  const monthWorkflow = useMonthWorkflow(activeMonth);
+
+  useEffect(() => {
+    const nextMonth = `${activeMonth}-01`;
+    setReviewMonth(nextMonth);
+    setBatchStartMonth(nextMonth);
+    setBatchEndMonth(nextMonth);
+  }, [activeMonth]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -112,8 +124,8 @@ export function MonthlyReview() {
     const nextErrors = { reviewMonth: reviewMonthError };
     setFieldErrors(nextErrors);
 
-    if (reviewMonthError) {
-      setSubmitError(null);
+    if (reviewMonthError || monthWorkflow.data?.closeSummary.canClose === false) {
+      setSubmitError(reviewMonthError ? null : "Resolve imported rows before closing this month.");
       setResult(null);
       return;
     }
@@ -186,10 +198,52 @@ export function MonthlyReview() {
     <PageShell
       eyebrow="Closeout"
       title="Monthly Review"
-      description="Review the backend's surplus recommendation first, then apply the monthly review with a deliberate confirmation step."
+      description={`Close ${activeMonthLabel} with a deliberate review step.`}
     >
+      {monthWorkflow.data?.reminderMonth ? <MonthReminderBanner monthKey={monthWorkflow.data.reminderMonth.monthKey} tone="danger" ctaLabel="Close month" /> : null}
+      {monthWorkflow.data ? (
+        <Card
+          title="Month Status"
+          subtitle={`${monthWorkflow.data.activeMonthStatus.label} is currently ${monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}.`}
+        >
+          <div className="grid gap-4 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+              <p className="text-sm text-stone-500">Income total</p>
+              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.incomeTotal)}</p>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+              <p className="text-sm text-stone-500">Expense total</p>
+              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.expenseTotal)}</p>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+              <p className="text-sm text-stone-500">Debt payments</p>
+              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.debtPaymentsTotal)}</p>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+              <p className="text-sm text-stone-500">Protected and goal contributions</p>
+              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.protectedContributionsTotal)}</p>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+              <p className="text-sm text-stone-500">Remaining surplus or deficit</p>
+              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.remainingSurplusOrDeficit)}</p>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+              <p className="text-sm text-stone-500">Unresolved imported transactions</p>
+              <p className="mt-1 text-xl font-semibold text-raf-ink">{monthWorkflow.data.closeSummary.unresolvedImportedTransactions}</p>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Badge tone={monthWorkflow.data.activeMonthStatus.status === "closed" ? "success" : monthWorkflow.data.closeSummary.canClose ? "warning" : "danger"}>
+              {monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}
+            </Badge>
+            <span className="text-sm text-stone-500">
+              Closing a month uses the current surplus suggestion and keeps carry-forward visible through the next month's reserved balances.
+            </span>
+          </div>
+        </Card>
+      ) : null}
       <section className="grid gap-4 xl:grid-cols-[1fr,1.1fr]">
-        <Card title="Apply Monthly Review" subtitle="This posts to the backend monthly review apply endpoint.">
+        <Card title="Close Month" subtitle="This applies the monthly review and treats the month as closed once the backend saves it.">
           <div className="space-y-4">
             <Input
               label="Review month"
@@ -199,7 +253,11 @@ export function MonthlyReview() {
               error={fieldErrors.reviewMonth}
               onBlur={() => setFieldErrors((current) => ({ ...current, reviewMonth: validateFirstDayOfMonth(reviewMonth, "Review month") }))}
               onChange={(event) => {
-                setReviewMonth(event.target.value);
+                const nextMonth = event.target.value;
+                setReviewMonth(nextMonth);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(nextMonth)) {
+                  setActiveMonth(nextMonth.slice(0, 7));
+                }
                 setFieldErrors((current) => ({ ...current, reviewMonth: null }));
               }}
             />
@@ -213,16 +271,29 @@ export function MonthlyReview() {
               />
             </label>
             <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
-              Confirming this action asks the backend to calculate and persist the monthly review. The frontend does not
-              distribute surplus itself.
+              Confirming this action asks the backend to calculate and persist the monthly review for {activeMonthLabel}.
+              The frontend does not distribute surplus itself.
             </div>
-            <Button disabled={isSubmitting || isPreviewLoading} onClick={() => void handleSubmit()} type="button">
-              {isSubmitting ? <LoadingSpinner inline size="sm" label="Applying review..." /> : "Apply Monthly Review"}
+            <Button
+              disabled={
+                isSubmitting
+                || isPreviewLoading
+                || monthWorkflow.data?.closeSummary.canClose === false
+                || monthWorkflow.data?.activeMonthStatus.status === "closed"
+              }
+              onClick={() => void handleSubmit()}
+              type="button"
+            >
+              {isSubmitting
+                ? <LoadingSpinner inline size="sm" label="Closing month..." />
+                : monthWorkflow.data?.activeMonthStatus.status === "closed"
+                  ? "Month Closed"
+                  : "Close Month"}
             </Button>
           </div>
         </Card>
 
-        <Card title="Surplus Preview" subtitle="A read-only recommendation from the report endpoint before submission.">
+        <Card title="Surplus Suggestions" subtitle="Use this recommendation panel to understand where month-end surplus will be routed.">
           {isPreviewLoading ? <LoadingState label="Loading surplus recommendation..." /> : null}
           {!isPreviewLoading && previewError ? <ErrorState title="Failed to load monthly review preview" message={previewError} /> : null}
           {!isPreviewLoading && !previewError && preview ? (

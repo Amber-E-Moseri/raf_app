@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
@@ -10,12 +9,15 @@ import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
 import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
+import { MonthReminderBanner } from "../components/feedback/MonthReminderBanner";
 import { PageShell } from "../components/layout/PageShell";
+import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatCurrency, formatIsoDate, monthRange } from "../lib/format";
+import { useMonthWorkflow } from "../hooks/useMonthWorkflow";
+import { formatCurrency, formatIsoDate } from "../lib/format";
 import type {
   AllocationCategory,
   DashboardPeriod,
@@ -57,7 +59,9 @@ function transactionTone(transaction: Transaction) {
 }
 
 export function Dashboard() {
-  const { from, to } = useMemo(() => monthRange(), []);
+  const { activeMonthLabel, activeRange } = usePeriod();
+  const { from, to } = activeRange;
+  const monthWorkflow = useMonthWorkflow(activeRange.from.slice(0, 7));
 
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
     const [dashboard, financialHealth, incomeResponse, transactionsResponse] = await Promise.all([
@@ -92,18 +96,25 @@ export function Dashboard() {
     };
   }, [from, to]);
 
-  if (isLoading) {
+  if (isLoading || monthWorkflow.isLoading) {
     return (
-      <PageShell eyebrow="Overview" title="Dashboard" description="Monthly financial snapshot.">
+      <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
         <LoadingState label="Loading the current financial snapshot..." />
       </PageShell>
     );
   }
 
-  if (error || !data) {
+  if (error || !data || monthWorkflow.error || !monthWorkflow.data) {
     return (
-      <PageShell eyebrow="Overview" title="Dashboard" description="Monthly financial snapshot.">
-        <ErrorState title="Failed to load dashboard" message={error ?? "We could not load the current dashboard data. Please try again."} onRetry={() => void reload()} />
+      <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+        <ErrorState
+          title="Failed to load dashboard"
+          message={error ?? monthWorkflow.error ?? "We could not load the current dashboard data. Please try again."}
+          onRetry={() => {
+            void reload();
+            void monthWorkflow.reload();
+          }}
+        />
       </PageShell>
     );
   }
@@ -141,7 +152,8 @@ export function Dashboard() {
   const floorPercent = Math.max(0, Math.min(100, (savingsFloor / savingsMax) * 100));
 
   return (
-    <PageShell eyebrow="Overview" title="Dashboard" description="Monthly financial snapshot.">
+    <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+      {monthWorkflow.data.reminderMonth ? <MonthReminderBanner monthKey={monthWorkflow.data.reminderMonth.monthKey} /> : null}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryMetricCard
           title="Income this month"
@@ -153,9 +165,9 @@ export function Dashboard() {
         <SummaryMetricCard
           title="Net surplus"
           value={formatCurrency(latestSurplus)}
-          subtitle={`${data.dashboard.monthly_bucket_progress.length} buckets tracked`}
-          badge={data.latestPeriod?.alertStatus ?? "ok"}
-          tone={alertTone(data.latestPeriod?.alertStatus)}
+          subtitle={monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}
+          badge={monthWorkflow.data.activeMonthStatus.status}
+          tone={monthWorkflow.data.activeMonthStatus.status === "closed" ? "success" : alertTone(data.latestPeriod?.alertStatus)}
         />
         <SummaryMetricCard
           title="Active categories"

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
@@ -17,6 +17,7 @@ import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { SuccessNotice } from "../components/feedback/SuccessNotice";
 import { PageShell } from "../components/layout/PageShell";
+import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -26,7 +27,8 @@ import { MoneyInput } from "../components/ui/MoneyInput";
 import { Table } from "../components/ui/Table";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { DEFAULT_PAGE_SIZE } from "../lib/constants";
-import { formatCurrency, formatIsoDate, monthRange } from "../lib/format";
+import { formatCurrency, formatIsoDate } from "../lib/format";
+import { defaultReviewDateForMonth, getMonthKeyFromDate } from "../lib/period";
 import {
   normalizeMoneyInput,
   validateIsoDate,
@@ -171,7 +173,8 @@ function requiresGoalSelection(classificationType: ImportClassificationPayload["
 }
 
 export function Transactions() {
-  const { from: initialFrom, to: initialTo } = useMemo(() => monthRange(), []);
+  const { activeMonth, activeMonthLabel, activeRange } = usePeriod();
+  const { from: initialFrom, to: initialTo } = activeRange;
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([null]);
   const [fromDate, setFromDate] = useState(initialFrom);
   const [toDate, setToDate] = useState(initialTo);
@@ -203,6 +206,16 @@ export function Transactions() {
   const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
   const [reviewPendingId, setReviewPendingId] = useState<string | null>(null);
   const cursor = cursorHistory[cursorHistory.length - 1];
+
+  useEffect(() => {
+    setFromDate(activeRange.from);
+    setToDate(activeRange.to);
+    setCursorHistory([null]);
+    setForm((current) => ({
+      ...current,
+      transactionDate: defaultReviewDateForMonth(activeMonth),
+    }));
+  }, [activeMonth, activeRange.from, activeRange.to]);
 
   const { data, error, isLoading, reload } = useAsyncData<TransactionsViewModel>(async () => {
     const [transactions, debts, imports, fixedBills, goals] = await Promise.all([
@@ -265,7 +278,7 @@ export function Transactions() {
   }, [categoryLookup, data?.transactions.items, searchTerm, sortDirection, sortKey]);
 
   const importsSummary = useMemo(() => {
-    const imports = data?.imports ?? [];
+    const imports = (data?.imports ?? []).filter((item) => getMonthKeyFromDate(item.date) === activeMonth);
     const unreviewed = imports.filter((item) => item.status === "unreviewed").length;
     const dates = imports.map((item) => item.date).filter(Boolean).sort();
 
@@ -275,7 +288,12 @@ export function Transactions() {
       earliestDate: dates[0] ?? null,
       latestDate: dates.at(-1) ?? null,
     };
-  }, [data?.imports]);
+  }, [activeMonth, data?.imports]);
+
+  const visibleImports = useMemo(
+    () => (data?.imports ?? []).filter((item) => getMonthKeyFromDate(item.date) === activeMonth),
+    [activeMonth, data?.imports],
+  );
 
   function getReviewDraft(item: ImportedTransaction) {
     return reviewDrafts[item.id] ?? buildDraftFromImportedRow(item);
@@ -367,7 +385,7 @@ export function Transactions() {
 
       setSubmitSuccess("Transaction created.");
       setForm({
-        transactionDate: toDate,
+        transactionDate: defaultReviewDateForMonth(activeMonth),
         description: "",
         merchant: "",
         amount: "",
@@ -486,7 +504,7 @@ export function Transactions() {
     <PageShell
       eyebrow="Ledger"
       title="Transactions"
-      description="Create transactions manually, import bank statements, and review imported rows before they become completed RAF activity."
+      description={`${activeMonthLabel} transactions, imports, and review flow.`}
       actions={
         <div className="flex gap-2">
           <Button
@@ -723,8 +741,8 @@ export function Transactions() {
             </div>
             <p className="text-sm text-stone-500">
               {importsSummary.earliestDate && importsSummary.latestDate
-                ? `Current import range: ${formatIsoDate(importsSummary.earliestDate)} to ${formatIsoDate(importsSummary.latestDate)}`
-                : "No imported statement rows yet."}
+                ? `${activeMonthLabel} import range: ${formatIsoDate(importsSummary.earliestDate)} to ${formatIsoDate(importsSummary.latestDate)}`
+                : `No imported statement rows for ${activeMonthLabel}.`}
             </p>
           </div>
         </form>
@@ -761,7 +779,7 @@ export function Transactions() {
               <div className="mt-1 text-sm font-medium text-raf-ink">
                 {importsSummary.earliestDate && importsSummary.latestDate
                   ? `${formatIsoDate(importsSummary.earliestDate)} to ${formatIsoDate(importsSummary.latestDate)}`
-                  : "No rows imported"}
+                  : `No rows in ${activeMonthLabel}`}
               </div>
             </div>
           </div>
@@ -776,9 +794,9 @@ export function Transactions() {
           ) : isLoading ? (
             <LoadingState label="Loading imported rows..." />
           ) : !error && data ? (
-            data.imports.length ? (
+            visibleImports.length ? (
               <div className="space-y-4">
-                {data.imports.map((item) => {
+                {visibleImports.map((item) => {
                   const isInflow = Number(item.amount) > 0;
                   const isPending = reviewPendingId === item.id;
                   const draft = getReviewDraft(item);
@@ -999,8 +1017,8 @@ export function Transactions() {
               </div>
             ) : (
               <EmptyState
-                title="No imported rows yet"
-                message="Upload a PDF bank statement to import transactions for review alongside the ledger."
+                title="No imported rows for this month"
+                message="Upload a PDF bank statement or switch months to review imported rows for a different period."
               />
             )
           ) : null}
