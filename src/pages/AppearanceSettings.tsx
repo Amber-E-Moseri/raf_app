@@ -74,6 +74,9 @@ const themeGroups: Array<{
 ];
 
 function ruleActionLabel(rule: ImportReviewRule) {
+  if (rule.classification_type === "income") {
+    return "Add to income deposit";
+  }
   if (rule.classification_type === "transaction") {
     return "Approve as transaction";
   }
@@ -84,7 +87,7 @@ function ruleActionLabel(rule: ImportReviewRule) {
     return "Link to fixed bill";
   }
   if (rule.classification_type === "goal_funding") {
-    return "Link to goal funding";
+    return "Internal transfer to savings goal";
   }
   if (rule.classification_type === "duplicate") {
     return "Mark duplicate";

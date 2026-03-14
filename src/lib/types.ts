@@ -118,6 +118,7 @@ export interface ImportedTransaction {
   status: "unreviewed" | "classified" | "ignored" | string;
   classification_type: string | null;
   linked_transaction_id: string | null;
+  linked_income_entry_id?: string | null;
   linked_debt_id: string | null;
   linked_fixed_bill_id: string | null;
   linked_goal_id?: string | null;
@@ -157,7 +158,7 @@ export interface BankStatementImportResponse {
 }
 
 export interface ImportClassificationPayload {
-  classification_type: "transaction" | "debt_payment" | "fixed_bill_payment" | "goal_funding" | "duplicate" | "transfer" | "ignore";
+  classification_type: "income" | "transaction" | "debt_payment" | "fixed_bill_payment" | "goal_funding" | "duplicate" | "transfer" | "ignore";
   transaction_date?: string;
   description?: string;
   merchant?: string | null;

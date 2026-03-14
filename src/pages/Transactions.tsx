@@ -12,6 +12,7 @@ import {
   getImportedTransactions,
   updateImportReviewRule,
   importBankStatement,
+  unprocessImportedTransaction,
   unignoreImportedTransaction,
 } from "../api/importsApi";
 import { createTransaction, getTransactions } from "../api/transactionsApi";
@@ -107,7 +108,7 @@ function importedStatusTone(item: ImportedTransaction) {
 
 function importedStatusLabel(item: ImportedTransaction) {
   if (item.status === "unreviewed") {
-    return "Needs review";
+    return "Pending";
   }
   if (item.status === "ignored" || item.classification_type === "ignore") {
     return "Ignored";
@@ -131,6 +132,12 @@ function importStateNote(item: ImportedTransaction, draft: ImportReviewDraft) {
   return "Reviewed in Transactions";
 }
 
+function looksLikeSavingsTransfer(item: ImportedTransaction) {
+  const description = `${item.description} ${item.raw_description ?? ""}`.toLowerCase();
+  return Number(item.amount) < 0
+    && /(internal transfer|transfer|savings|move)/i.test(description);
+}
+
 function sortIndicator(active: boolean, direction: SortDirection) {
   if (!active) {
     return "Sort";
@@ -149,13 +156,15 @@ function compareValues(left: string | number, right: string | number, direction:
 
 function buildDraftFromImportedRow(item: ImportedTransaction): ImportReviewDraft {
   const appliedSuggestion = item.suggestion?.auto_apply ? item.suggestion : null;
+  const fallbackClassificationType = (item.classification_type as ImportClassificationPayload["classification_type"] | null)
+    ?? (looksLikeSavingsTransfer(item) ? "goal_funding" : Number(item.amount) > 0 ? "income" : "transaction");
 
   return {
-    classificationType: (appliedSuggestion?.classification_type as ImportClassificationPayload["classification_type"]) ?? "transaction",
+    classificationType: (appliedSuggestion?.classification_type as ImportClassificationPayload["classification_type"]) ?? fallbackClassificationType,
     categoryId: appliedSuggestion?.category_id ?? "",
-    debtId: appliedSuggestion?.linked_debt_id ?? "",
-    fixedBillId: appliedSuggestion?.linked_fixed_bill_id ?? "",
-    goalId: appliedSuggestion?.linked_goal_id ?? "",
+    debtId: appliedSuggestion?.linked_debt_id ?? item.linked_debt_id ?? "",
+    fixedBillId: appliedSuggestion?.linked_fixed_bill_id ?? item.linked_fixed_bill_id ?? "",
+    goalId: appliedSuggestion?.linked_goal_id ?? item.linked_goal_id ?? "",
     reviewNote: "",
     saveRuleMode: appliedSuggestion?.rule_type ?? "none",
     autoApplyRule: appliedSuggestion?.auto_apply ?? false,
@@ -179,6 +188,9 @@ function requiresGoalSelection(classificationType: ImportClassificationPayload["
 }
 
 function primaryReviewLabel(classificationType: ImportClassificationPayload["classification_type"]) {
+  if (classificationType === "income") {
+    return "Add to income";
+  }
   return classificationType === "transaction" ? "Approve" : "Apply";
 }
 
@@ -197,6 +209,9 @@ function userFacingReviewError(message: string) {
   const normalized = message.toLowerCase();
   if (normalized.includes("already been reviewed")) {
     return "This transaction is no longer available for review.";
+  }
+  if (normalized.includes("only processed imported transactions can be unprocessed")) {
+    return "Only processed transactions can be moved back to pending review.";
   }
   if (normalized.includes("only ignored imported transactions can be reopened")) {
     return "Only ignored items can be restored to the review queue.";
@@ -328,8 +343,8 @@ export function Transactions() {
       }
 
       if (sortKey === "category") {
-        const leftCategory = left.categoryId ? categoryLookup.get(left.categoryId) ?? left.categoryId : "Unassigned";
-        const rightCategory = right.categoryId ? categoryLookup.get(right.categoryId) ?? right.categoryId : "Unassigned";
+        const leftCategory = left.categoryId ? categoryLookup.get(left.categoryId) ?? left.categoryId : "";
+        const rightCategory = right.categoryId ? categoryLookup.get(right.categoryId) ?? right.categoryId : "";
         return compareValues(leftCategory, rightCategory, sortDirection);
       }
 
@@ -507,6 +522,10 @@ export function Transactions() {
       return "Debt payoff";
     }
 
+    if (draft.classificationType === "income") {
+      return "Auto-allocated";
+    }
+
     if (draft.classificationType === "fixed_bill_payment") {
       return "Via fixed bill";
     }
@@ -541,6 +560,10 @@ export function Transactions() {
       return draft.debtId ? debtLookup.get(draft.debtId) ?? draft.debtId : "Select debt";
     }
 
+    if (draft.classificationType === "income") {
+      return "Income deposit";
+    }
+
     if (draft.classificationType === "fixed_bill_payment") {
       return draft.fixedBillId ? fixedBillLookup.get(draft.fixedBillId) ?? draft.fixedBillId : "Select fixed bill";
     }
@@ -551,6 +574,10 @@ export function Transactions() {
 
     if (item.classification_type === "debt_payment" && item.linked_debt_id) {
       return debtLookup.get(item.linked_debt_id) ?? item.linked_debt_id;
+    }
+
+    if (item.classification_type === "income" && item.linked_income_entry_id) {
+      return "Income deposit";
     }
 
     if (item.classification_type === "fixed_bill_payment" && item.linked_fixed_bill_id) {
@@ -883,6 +910,26 @@ export function Transactions() {
     }
   }
 
+  async function handleUnprocessImportedRow(item: ImportedTransaction) {
+    setReviewPendingIds((current) => [...current, item.id]);
+    setReviewError(null);
+    setReviewSuccess(null);
+
+    try {
+      await unprocessImportedTransaction(item.id);
+      setImportsView("needs_review");
+      setExpandedImportIds((current) => ({ ...current, [item.id]: false }));
+      setOpenImportMenuId(null);
+      setOpenAdvancedMenuId(null);
+      setReviewSuccess("Processed transaction moved back to pending review.");
+      await reload();
+    } catch (requestError) {
+      setReviewError(userFacingReviewError(requestError instanceof Error ? requestError.message : "Could not unprocess transaction."));
+    } finally {
+      setReviewPendingIds((current) => current.filter((id) => id !== item.id));
+    }
+  }
+
   async function handleSaveRuleEdits(rule: ImportReviewRule | ImportReviewSuggestion) {
     const draft = getRuleDraft(rule);
     setPendingRuleId(rule.id);
@@ -1089,7 +1136,7 @@ export function Transactions() {
                 value={form.categoryId}
                 onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}
               >
-                <option value="">Unassigned</option>
+                <option value=""></option>
                 {(data?.categories ?? []).map((category) => (
                   <option key={category.id} value={category.id}>{category.label}</option>
                 ))}
@@ -1184,7 +1231,14 @@ export function Transactions() {
                 }}
               />
             </label>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+            <div
+              className="rounded-2xl border px-4 py-3 text-sm"
+              style={{
+                borderColor: "var(--border-color)",
+                background: "var(--surface-plain)",
+                color: "var(--text-muted)",
+              }}
+            >
               {selectedImportFile
                 ? `Selected file: ${selectedImportFile.name}`
                 : "Select a PDF file to prepare an import."}
@@ -1195,16 +1249,22 @@ export function Transactions() {
               </Button>
             </div>
           </div>
-          <div className="space-y-3 rounded-3xl border border-stone-200 bg-stone-50/80 p-5">
+          <div
+            className="space-y-3 rounded-3xl border p-5"
+            style={{
+              borderColor: "var(--border-color)",
+              background: "var(--surface-elevated)",
+            }}
+          >
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-stone-500">Review queue</h3>
-              <p className="mt-2 text-sm leading-6 text-stone-600">Imported rows stay separate from the ledger until you classify them into RAF buckets, debt payments, fixed bills, goals, duplicates, or transfers.</p>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">Review queue</h3>
+              <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">Imported rows stay separate from the ledger until you classify them into RAF buckets, debt payments, fixed bills, savings goals, duplicates, or transfers.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge tone="neutral">{importsSummary.total} total</Badge>
               <Badge tone={importsSummary.unreviewed > 0 ? "warning" : "success"}>{importsSummary.unreviewed} unreviewed</Badge>
             </div>
-            <p className="text-sm text-stone-500">
+            <p className="text-sm text-[var(--text-muted)]">
               {importsSummary.earliestDate && importsSummary.latestDate
                 ? `${activeMonthLabel} import range: ${formatIsoDate(importsSummary.earliestDate)} to ${formatIsoDate(importsSummary.latestDate)}`
                 : `No imported statement rows for ${activeMonthLabel}.`}
@@ -1230,7 +1290,13 @@ export function Transactions() {
         )}
       >
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3"
+            style={{
+              borderColor: "var(--border-color)",
+              background: "var(--surface-plain)",
+            }}
+          >
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1266,7 +1332,7 @@ export function Transactions() {
                 Processed ({processedImports.length})
               </button>
             </div>
-            <div className="text-sm text-stone-500">
+            <div className="text-sm text-[var(--text-muted)]">
               {importsSummary.earliestDate && importsSummary.latestDate
                 ? `${formatIsoDate(importsSummary.earliestDate)} to ${formatIsoDate(importsSummary.latestDate)}`
                 : `No imported rows in ${activeMonthLabel}`}
@@ -1277,7 +1343,14 @@ export function Transactions() {
           {reviewSuccess ? <SuccessNotice title="Imported row updated" message={reviewSuccess} /> : null}
 
           {!isImportsExpanded ? (
-            <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 px-4 py-4 text-sm text-stone-600">
+            <div
+              className="rounded-2xl border border-dashed px-4 py-4 text-sm"
+              style={{
+                borderColor: "var(--border-color)",
+                background: "var(--surface-plain)",
+                color: "var(--text-muted)",
+              }}
+            >
               Imported rows review is collapsed. Expand it to process the review queue and bulk-approve similar imports.
             </div>
           ) : isLoading ? (
@@ -1286,7 +1359,13 @@ export function Transactions() {
             importsInView.length ? (
               <div className="space-y-3">
                 {importsView === "needs_review" ? (
-                  <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+                  <div
+                    className="rounded-2xl border px-4 py-3"
+                    style={{
+                      borderColor: "var(--border-color)",
+                      background: "var(--surface-plain)",
+                    }}
+                  >
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <label className="inline-flex items-center gap-3 text-sm font-medium text-raf-ink">
                         <input
@@ -1335,14 +1414,20 @@ export function Transactions() {
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-sm text-stone-500">Select rows to assign a bucket and approve them in bulk.</span>
+                        <span className="text-sm text-[var(--text-muted)]">Select rows to assign a bucket and approve them in bulk.</span>
                       )}
                     </div>
                   </div>
                 ) : null}
 
-                <div className="overflow-hidden rounded-2xl border border-stone-200">
-                  <div className="hidden bg-stone-50 px-4 py-2.5 text-xs font-semibold text-stone-500 lg:grid lg:grid-cols-[36px,88px,minmax(0,320px),112px,132px,132px,112px,44px] lg:gap-3">
+                <div className="overflow-hidden rounded-2xl border" style={{ borderColor: "var(--border-color)" }}>
+                  <div
+                    className="hidden px-4 py-2.5 text-xs font-semibold lg:grid lg:grid-cols-[36px,88px,minmax(0,320px),112px,132px,132px,112px,44px] lg:gap-3"
+                    style={{
+                      background: "var(--surface-plain)",
+                      color: "var(--text-muted)",
+                    }}
+                  >
                     <span />
                     <span>Date</span>
                     <span>Description</span>
@@ -1352,7 +1437,13 @@ export function Transactions() {
                     <span>Primary action</span>
                     <span />
                   </div>
-                  <div className="divide-y divide-stone-200 bg-white">
+                  <div
+                    className="divide-y"
+                    style={{
+                      borderColor: "var(--border-color)",
+                      background: "var(--surface-color)",
+                    }}
+                  >
                     {importsInView.map((item) => {
                       const isInflow = Number(item.amount) > 0;
                       const isPending = reviewPendingIds.includes(item.id);
@@ -1445,7 +1536,15 @@ export function Transactions() {
                                   Unignore
                                 </Button>
                               ) : (
-                                <div className="text-sm text-stone-500">Processed</div>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="min-h-9 rounded-full px-3 py-1.5 text-xs"
+                                  disabled={isPending}
+                                  onClick={() => void handleUnprocessImportedRow(item)}
+                                >
+                                  Unprocess
+                                </Button>
                               )}
                             </div>
                             <div className="relative flex justify-end">
@@ -1473,6 +1572,15 @@ export function Transactions() {
                                       onClick={() => void handleUnignoreImportedRow(item)}
                                     >
                                       Unignore
+                                    </button>
+                                  ) : null}
+                                  {!needsReview && !isIgnored ? (
+                                    <button
+                                      type="button"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                      onClick={() => void handleUnprocessImportedRow(item)}
+                                    >
+                                      Unprocess transaction
                                     </button>
                                   ) : null}
                                   <button
@@ -1608,10 +1716,11 @@ export function Transactions() {
                                           goalId: "",
                                         })}
                                       >
-                                        <option value="transaction">Approve as transaction</option>
-                                        <option value="debt_payment">Link to debt payment</option>
+                                      <option value="income">Add to income deposit</option>
+                                      <option value="transaction">Approve as transaction</option>
+                                      <option value="debt_payment">Link to debt payment</option>
                                         {canLinkFixedBill ? <option value="fixed_bill_payment">Link to fixed bill</option> : null}
-                                        <option value="goal_funding">Link to goal funding</option>
+                                        <option value="goal_funding">Internal transfer -&gt; savings goal</option>
                                         <option value="duplicate">Mark duplicate</option>
                                         <option value="transfer">Mark transfer</option>
                                         <option value="ignore">Ignore</option>
@@ -1671,7 +1780,7 @@ export function Transactions() {
 
                                     {requiresGoalSelection(draft.classificationType) ? (
                                       <label className="block">
-                                        <span className="mb-2 block text-sm font-medium text-raf-ink">Goal</span>
+                                        <span className="mb-2 block text-sm font-medium text-raf-ink">Savings goal</span>
                                         <select
                                           className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
                                           value={draft.goalId}
@@ -1683,6 +1792,11 @@ export function Transactions() {
                                             <option key={goal.id} value={goal.id}>{goal.name}</option>
                                           ))}
                                         </select>
+                                        {looksLikeSavingsTransfer(item) ? (
+                                          <span className="mt-2 block text-xs text-stone-500">
+                                            This bank debit will be recorded as a positive contribution to the selected goal.
+                                          </span>
+                                        ) : null}
                                       </label>
                                     ) : null}
 
@@ -1768,9 +1882,21 @@ export function Transactions() {
                                   {isIgnored ? <Badge tone="neutral">Restore this item before editing</Badge> : null}
                                   {!isIgnored ? <Badge tone="neutral">Reviewed in Transactions</Badge> : null}
                                   {item.linked_transaction_id ? <Badge tone="neutral">Transaction linked</Badge> : null}
+                                  {item.linked_income_entry_id ? <Badge tone="success">Income added</Badge> : null}
                                   {item.linked_debt_id ? <Badge tone="warning">{debtLookup.get(item.linked_debt_id) ?? "Debt linked"}</Badge> : null}
                                   {item.linked_fixed_bill_id ? <Badge tone="neutral">{fixedBillLookup.get(item.linked_fixed_bill_id) ?? "Fixed bill linked"}</Badge> : null}
                                   {item.linked_goal_id ? <Badge tone="success">{goalLookup.get(item.linked_goal_id) ?? "Goal linked"}</Badge> : null}
+                                  {!isIgnored ? (
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      className="rounded-full px-3 py-1.5 text-xs"
+                                      disabled={isPending}
+                                      onClick={() => void handleUnprocessImportedRow(item)}
+                                    >
+                                      Unprocess transaction
+                                    </Button>
+                                  ) : null}
                                 </div>
                               )}
                             </div>
@@ -1842,7 +1968,7 @@ export function Transactions() {
               {visibleTransactions.map((transaction: Transaction) => {
                 const categoryLabel = transaction.categoryId
                   ? categoryLookup.get(transaction.categoryId) ?? transaction.categoryId
-                  : "Unassigned";
+                  : "";
 
                 return (
                   <tr key={transaction.id} className="hover:bg-stone-50/80">
@@ -1851,7 +1977,7 @@ export function Transactions() {
                       <div className="truncate">{transaction.description}</div>
                     </td>
                     <td className="w-[120px] px-4 py-3 text-sm">
-                      <Badge tone={categoryTone(categoryLabel)}>{categoryLabel}</Badge>
+                      {categoryLabel ? <Badge tone={categoryTone(categoryLabel)}>{categoryLabel}</Badge> : null}
                     </td>
                     <td className="w-[100px] px-4 py-3 text-sm">
                       <Badge tone={directionTone(transaction.direction)}>{transaction.direction}</Badge>

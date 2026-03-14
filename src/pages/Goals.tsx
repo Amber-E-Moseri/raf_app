@@ -81,7 +81,7 @@ function goalStatusTone(progress: GoalProgress | null) {
 
 function goalStatusLabel(progress: GoalProgress | null) {
   if (!progress) {
-    return "No reserved balance";
+    return "Nothing saved yet";
   }
 
   const remaining = Number(progress.remaining_amount);
@@ -208,11 +208,27 @@ export function Goals() {
     }
   }
 
+  async function handleUnarchive(goalId: string) {
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    try {
+      await updateGoal(goalId, { active: true });
+      setSaveMessage("Goal restored.");
+      await goalsData.reload();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Goal could not be restored.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <PageShell
       eyebrow="Planning"
       title="Goals"
-      description={`Track reserved progress toward goals for ${activeMonthLabel}.`}
+      description={`Track savings goals for ${activeMonthLabel}.`}
     >
       {goalsData.isLoading ? <LoadingState label="Loading goals..." /> : null}
       {!goalsData.isLoading && goalsData.error ? (
@@ -228,7 +244,7 @@ export function Goals() {
       {!goalsData.isLoading && !goalsData.error && goalsData.data ? (
         <section className="grid gap-4 xl:grid-cols-[1.4fr,0.9fr]">
           <div className="space-y-4">
-            <Card title="Goal Planning" subtitle="Goals are targets layered on top of allocation buckets. Reserved balances show how much is currently set aside toward each target.">
+            <Card title="Goal Planning" subtitle="Track simple savings targets connected to your planning buckets.">
               {activeGoals.length ? (
                 <div className="space-y-3">
                   {activeGoals.map((goal) => {
@@ -255,7 +271,13 @@ export function Goals() {
                             <Button type="button" variant="secondary" onClick={() => startEdit(goal)}>
                               Edit
                             </Button>
-                            <Button type="button" variant="ghost" disabled={isSaving} onClick={() => void handleArchive(goal.id)}>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="bg-[var(--surface-plain)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                              disabled={isSaving}
+                              onClick={() => void handleArchive(goal.id)}
+                            >
                               Archive
                             </Button>
                           </div>
@@ -267,7 +289,7 @@ export function Goals() {
                             <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(goal.target_amount)}</div>
                           </div>
                           <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
-                            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Reserved toward goal</div>
+                            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Saved so far</div>
                             <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(progress?.reserved_amount ?? "0.00")}</div>
                           </div>
                           <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
@@ -281,7 +303,10 @@ export function Goals() {
                             <span>Progress</span>
                             <span>{progressPercent.toFixed(0)}%</span>
                           </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-stone-200">
+                          <div
+                            className="h-2 overflow-hidden rounded-full"
+                            style={{ background: "var(--surface-elevated)" }}
+                          >
                             <div
                               className="h-full rounded-full bg-[var(--primary-color)] transition-[width] duration-200"
                               style={{ width: `${progressPercent}%` }}
@@ -299,7 +324,7 @@ export function Goals() {
               ) : goalsData.data.categories.length ? (
                 <EmptyState
                   title="No goals yet"
-                  message="Create a goal to track how much of a bucket is currently reserved toward a target."
+                  message="Create a goal to track progress toward a savings target."
                 />
               ) : (
                 <EmptyState
@@ -319,10 +344,21 @@ export function Goals() {
                         <div>
                           <div className="font-medium text-[var(--text-strong)]">{goal.name}</div>
                           <div className="mt-1 text-sm text-[var(--text-muted)]">
-                            {category?.label ?? goal.bucket_id} - Target {formatCurrency(goal.target_amount)}
+                            Linked bucket: {category?.label ?? goal.bucket_id} - Target {formatCurrency(goal.target_amount)}
                           </div>
                         </div>
-                        <Badge tone="neutral">Archived</Badge>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone="neutral">Archived</Badge>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="min-h-8 rounded-full bg-[var(--badge-neutral-bg)] px-3 py-1 text-xs text-[var(--badge-neutral-text)] ring-1 ring-[var(--badge-neutral-ring)] hover:bg-[var(--badge-neutral-bg)]"
+                            disabled={isSaving}
+                            onClick={() => void handleUnarchive(goal.id)}
+                          >
+                            Unarchive
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
@@ -335,8 +371,8 @@ export function Goals() {
             <Card
               title={editingGoalId ? "Edit Goal" : "Create Goal"}
               subtitle={editingGoalId
-                ? "Update the target, bucket link, or notes for this planning goal."
-                : "Create a planning target on top of an allocation bucket."}
+                ? "Update the target, linked bucket, or notes for this goal."
+                : "Create a simple savings target linked to one planning bucket."}
             >
               {goalsData.data.categories.length ? (
                 <div className="space-y-4">
@@ -412,11 +448,11 @@ export function Goals() {
               )}
             </Card>
 
-            <Card title="Planning Notes" subtitle="Goals track what is reserved inside RAF buckets.">
+            <Card title="Planning Notes" subtitle="Goals help you track savings progress without moving money outside RAF.">
               <div className="space-y-3 text-sm text-[var(--text-muted)]">
-                <p>Reserved toward goal reflects money currently sitting in the linked bucket for the selected period snapshot.</p>
-                <p>It does not imply money was transferred outside RAF unless actual transactions show that movement.</p>
-                <p>Use goals to track targets layered on top of your allocation plan, not as separate transfer accounts.</p>
+                <p>Saved so far reflects how much is currently sitting in the linked bucket for this snapshot.</p>
+                <p>If the bucket grows past the target, the goal stays at 100% and the extra money simply remains in that bucket.</p>
+                <p>Use goals as simple savings targets connected to your allocation plan.</p>
               </div>
             </Card>
           </div>

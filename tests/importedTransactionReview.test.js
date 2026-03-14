@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { GET as getImportRoute } from '../app/api/v1/imports/[id]/route.js';
 import { POST as classifyImportRoute } from '../app/api/v1/imports/[id]/classify/route.js';
 import { POST as ignoreImportRoute } from '../app/api/v1/imports/[id]/ignore/route.js';
+import { POST as unprocessImportRoute } from '../app/api/v1/imports/[id]/unprocess/route.js';
 import { POST as unignoreImportRoute } from '../app/api/v1/imports/[id]/unignore/route.js';
 import { GET as listImportsRoute } from '../app/api/v1/imports/route.js';
 import { DELETE as deleteImportRuleRoute, PATCH as patchImportRuleRoute } from '../app/api/v1/import-rules/[id]/route.js';
@@ -14,6 +15,7 @@ import {
   ignoreImportedTransaction,
   listReviewedImportedTransactions,
   reopenIgnoredImportedTransaction,
+  unprocessImportedTransaction,
 } from '../lib/imports/reviewImportedTransactions.js';
 import {
   deleteImportReviewRule,
@@ -37,6 +39,8 @@ function createDbDouble({
     importedTransactions: importedTransactions.map((row) => ({ ...row })),
     transactions: [],
     debtPayments: [],
+    incomeEntries: [],
+    incomeAllocations: [],
     importReviewRules: importReviewRules.map((row) => ({ ...row })),
   };
 
@@ -61,10 +65,39 @@ function createDbDouble({
       state.transactions.push(row);
       return { ...row };
     },
+    async getTransactionById({ householdId, transactionId }) {
+      return state.transactions.find((row) => row.householdId === householdId && row.id === transactionId) ?? null;
+    },
+    async deleteTransaction({ householdId, transactionId }) {
+      state.transactions = state.transactions.filter((row) => !(row.householdId === householdId && row.id === transactionId));
+    },
     async insertDebtPayment(payload) {
       const row = { id: `dp_${state.debtPayments.length + 1}`, ...payload };
       state.debtPayments.push(row);
       return { ...row };
+    },
+    async insertIncomeEntry(payload) {
+      const row = { id: `income_${state.incomeEntries.length + 1}`, ...payload };
+      state.incomeEntries.push(row);
+      return { ...row };
+    },
+    async insertIncomeAllocations(rows) {
+      const inserted = rows.map((row, index) => ({
+        id: `alloc_${state.incomeAllocations.length + index + 1}`,
+        ...row,
+      }));
+      state.incomeAllocations.push(...inserted);
+      return inserted.map((row) => ({ ...row }));
+    },
+    async getIncomeEntryById({ householdId, incomeId }) {
+      return state.incomeEntries.find((row) => row.householdId === householdId && row.id === incomeId) ?? null;
+    },
+    async deleteIncomeEntry({ householdId, incomeId }) {
+      state.incomeEntries = state.incomeEntries.filter((row) => !(row.householdId === householdId && row.id === incomeId));
+      state.incomeAllocations = state.incomeAllocations.filter((row) => !(row.householdId === householdId && row.incomeEntryId === incomeId));
+    },
+    async deleteDebtPaymentByTransactionId({ householdId, transactionId }) {
+      state.debtPayments = state.debtPayments.filter((row) => !(row.householdId === householdId && row.transactionId === transactionId));
     },
     async getDebtById({ householdId, debtId }) {
       return debts.find((row) => row.householdId === householdId && row.id === debtId) ?? null;
@@ -174,6 +207,7 @@ function importedRow(overrides = {}) {
     status: 'unreviewed',
     classificationType: null,
     linkedTransactionId: null,
+    linkedIncomeEntryId: null,
     linkedDebtId: null,
     linkedFixedBillId: null,
     linkedGoalId: null,
@@ -246,6 +280,30 @@ test('classifying an imported row into a normal transaction creates traceable RA
   assert.equal(db.state.importReviewRules[0].ruleType, 'suggestion');
 });
 
+test('classifying a positive imported credit as income creates an income entry and allocations', async () => {
+  const db = createDbDouble({
+    importedTransactions: [importedRow({ amount: '1200.00', description: 'Payroll Deposit', rawDescription: 'Payroll Deposit', normalizedDescription: 'payroll deposit' })],
+  });
+
+  const result = await classifyImportedTransaction({
+    db,
+    householdId: 'household_1',
+    importedTransactionId: 'import_1',
+    input: {
+      classification_type: 'income',
+      review_note: 'Imported payroll',
+    },
+  });
+
+  assert.equal(result.status, 'classified');
+  assert.equal(result.classification_type, 'income');
+  assert.equal(result.linked_income_entry_id, 'income_1');
+  assert.equal(db.state.transactions.length, 0);
+  assert.equal(db.state.incomeEntries.length, 1);
+  assert.equal(db.state.incomeEntries[0].sourceName, 'Payroll Deposit');
+  assert.equal(db.state.incomeAllocations.length > 0, true);
+});
+
 test('transaction approval requires an allocation bucket', async () => {
   const db = createDbDouble({
     importedTransactions: [importedRow()],
@@ -288,9 +346,9 @@ test('classifying an imported row into a debt payment creates a linked debt paym
   assert.equal(db.state.importReviewRules.length, 0);
 });
 
-test('goal funding classification links the import to a goal and bucket transaction', async () => {
+test('goal funding classification converts a savings transfer into a goal contribution credit', async () => {
   const db = createDbDouble({
-    importedTransactions: [importedRow({ amount: '250.00', description: 'Savings transfer', rawDescription: 'Savings transfer', normalizedDescription: 'savings transfer' })],
+    importedTransactions: [importedRow({ amount: '-250.00', description: 'Transfer to Savings', rawDescription: 'Transfer to Savings', normalizedDescription: 'transfer to savings' })],
     goals: [{ id: 'goal_1', householdId: 'household_1', bucketId: 'bucket_savings', name: 'Emergency Fund', active: true }],
   });
 
@@ -307,6 +365,9 @@ test('goal funding classification links the import to a goal and bucket transact
   assert.equal(result.linked_goal_id, 'goal_1');
   assert.equal(result.linked_transaction_id, 'txn_1');
   assert.equal(db.state.transactions[0].categoryId, 'bucket_savings');
+  assert.equal(db.state.transactions[0].direction, 'credit');
+  assert.equal(db.state.transactions[0].amount, '250.00');
+  assert.equal(db.state.transactions[0].description, 'Contribution to Emergency Fund');
 });
 
 test('duplicate and transfer review actions do not create RAF records', async () => {
@@ -386,6 +447,84 @@ test('ignored imported rows can be reopened and reviewed again', async () => {
 
   assert.equal(classified.status, 'classified');
   assert.equal(classified.linked_transaction_id, 'txn_1');
+});
+
+test('processed imported rows can be unprocessed and their linked RAF transaction is reversed', async () => {
+  const db = createDbDouble({
+    importedTransactions: [
+      importedRow({
+        status: 'classified',
+        classificationType: 'goal_funding',
+        linkedTransactionId: 'txn_1',
+        linkedGoalId: 'goal_1',
+        reviewedAt: '2026-03-13T00:00:00.000Z',
+      }),
+    ],
+  });
+  db.state.transactions.push({
+    id: 'txn_1',
+    householdId: 'household_1',
+    transactionDate: '2026-03-10',
+    description: 'Contribution to Emergency Fund',
+    merchant: 'Transfer to Savings',
+    amount: '250.00',
+    direction: 'credit',
+    categoryId: 'bucket_savings',
+    linkedDebtId: null,
+    source: 'import',
+  });
+
+  const reopened = await unprocessImportedTransaction({
+    db,
+    householdId: 'household_1',
+    importedTransactionId: 'import_1',
+  });
+
+  assert.equal(reopened.status, 'unreviewed');
+  assert.equal(reopened.classification_type, null);
+  assert.equal(reopened.linked_transaction_id, null);
+  assert.equal(reopened.linked_goal_id, null);
+  assert.equal(db.state.transactions.length, 0);
+});
+
+test('unprocessing an income-classified import deletes the linked income entry and allocations', async () => {
+  const db = createDbDouble({
+    importedTransactions: [
+      importedRow({
+        status: 'classified',
+        classificationType: 'income',
+        linkedIncomeEntryId: 'income_1',
+        reviewedAt: '2026-03-13T00:00:00.000Z',
+      }),
+    ],
+  });
+  db.state.incomeEntries.push({
+    id: 'income_1',
+    householdId: 'household_1',
+    sourceName: 'Payroll Deposit',
+    amount: '1200.00',
+    receivedDate: '2026-03-10',
+    notes: 'Imported payroll',
+  });
+  db.state.incomeAllocations.push({
+    id: 'alloc_1',
+    householdId: 'household_1',
+    incomeEntryId: 'income_1',
+    allocationCategoryId: 'bucket_living',
+    allocationPercent: '0.5000',
+    allocatedAmount: '600.00',
+  });
+
+  const reopened = await unprocessImportedTransaction({
+    db,
+    householdId: 'household_1',
+    importedTransactionId: 'import_1',
+  });
+
+  assert.equal(reopened.status, 'unreviewed');
+  assert.equal(reopened.linked_income_entry_id, null);
+  assert.equal(db.state.incomeEntries.length, 0);
+  assert.equal(db.state.incomeAllocations.length, 0);
 });
 
 test('import review rules can be listed, edited, and deleted', async () => {
@@ -557,6 +696,31 @@ test('import review routes expose list, single fetch, classify, and ignore', asy
     { db: unignoreDb, params: { id: 'import_1' } },
   );
   assert.equal(unignoreResponse.status, 200);
+
+  const unprocessDb = createDbDouble({
+    importedTransactions: [importedRow({ status: 'classified', classificationType: 'transaction', linkedTransactionId: 'txn_1' })],
+  });
+  unprocessDb.state.transactions.push({
+    id: 'txn_1',
+    householdId: 'household_1',
+    transactionDate: '2026-03-10',
+    description: 'Coffee Shop',
+    merchant: 'Coffee Shop',
+    amount: '12.99',
+    direction: 'debit',
+    categoryId: 'bucket_living',
+    linkedDebtId: null,
+    source: 'import',
+  });
+
+  const unprocessResponse = await unprocessImportRoute(
+    new Request('http://localhost/api/v1/imports/import_1/unprocess', {
+      method: 'POST',
+      headers: { 'x-household-id': 'household_1' },
+    }),
+    { db: unprocessDb, params: { id: 'import_1' } },
+  );
+  assert.equal(unprocessResponse.status, 200);
 });
 
 test('import rule routes expose list, update, and delete', async () => {

@@ -4,7 +4,7 @@ function buttonClasses(variant: "primary" | "secondary" | "ghost", disabled?: bo
   const base = "inline-flex min-h-11 items-center justify-center rounded-full px-4 py-2.5 text-sm font-semibold tracking-[0.01em] transition duration-200";
 
   if (disabled) {
-    return `${base} cursor-not-allowed bg-stone-300 text-stone-500 shadow-none`;
+    return `${base} cursor-not-allowed bg-[var(--surface-elevated)] text-[var(--text-muted)] ring-1 ring-[var(--border-color)] shadow-none`;
   }
 
   if (variant === "secondary") {

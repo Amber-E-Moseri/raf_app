@@ -41,6 +41,12 @@ export function unignoreImportedTransaction(importId: string) {
   });
 }
 
+export function unprocessImportedTransaction(importId: string) {
+  return postJson<ImportedTransaction>(`/imports/${importId}/unprocess`, {}, undefined, {
+    headers: importHeaders,
+  });
+}
+
 export function classifyImportedTransaction(importId: string, payload: ImportClassificationPayload) {
   return postJson<ImportedTransaction>(`/imports/${importId}/classify`, payload, undefined, {
     headers: importHeaders,

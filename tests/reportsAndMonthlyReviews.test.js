@@ -385,6 +385,52 @@ test('dashboard reporting includes monthly bucket progress and goal progress', a
   ]);
 });
 
+test('dashboard goal progress clamps overfunded goals at zero remaining and 100 percent progress', async () => {
+  const db = createDbDouble({
+    allocationCategories: [
+      { id: 'bucket_savings', label: 'Savings', slug: 'savings', isActive: true, sortOrder: 1 },
+    ],
+    incomeAllocations: [
+      { allocationCategoryId: 'bucket_savings', receivedDate: '2026-03-01', allocatedAmount: '750.00' },
+    ],
+    transactions: [],
+    goals: [
+      {
+        id: 'goal_1',
+        householdId: 'household_1',
+        bucketId: 'bucket_savings',
+        name: 'Emergency Fund',
+        targetAmount: '500.00',
+        targetDate: null,
+        notes: null,
+        active: true,
+      },
+    ],
+  });
+
+  const result = await getDashboardReport({
+    db,
+    householdId: 'household_1',
+    from: '2026-03-01',
+    to: '2026-03-01',
+  });
+
+  assert.deepEqual(result.goal_progress, [
+    {
+      goal_id: 'goal_1',
+      goal_name: 'Emergency Fund',
+      bucket_id: 'bucket_savings',
+      bucket: 'Savings',
+      bucket_name: 'Savings',
+      target_amount: '500.00',
+      reserved_amount: '750.00',
+      current_amount: '750.00',
+      remaining_amount: '0.00',
+      progress_percent: 100,
+    },
+  ]);
+});
+
 test('createMonthlyReview computes surplus distributions with remainder routed to emergency_fund', async () => {
   const db = createDbDouble({
     incomeEntries: [{ receivedDate: '2026-03-10', amount: '1000.00' }],

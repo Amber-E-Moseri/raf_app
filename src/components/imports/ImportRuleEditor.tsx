@@ -130,10 +130,11 @@ export function ImportRuleEditor({
               goalId: "",
             })}
           >
+            <option value="income">Add to income deposit</option>
             <option value="transaction">Approve as transaction</option>
             <option value="debt_payment">Link to debt payment</option>
             {canLinkFixedBill ? <option value="fixed_bill_payment">Link to fixed bill</option> : null}
-            <option value="goal_funding">Link to goal funding</option>
+            <option value="goal_funding">Internal transfer -&gt; savings goal</option>
             <option value="duplicate">Mark duplicate</option>
             <option value="transfer">Mark transfer</option>
             <option value="ignore">Ignore</option>
@@ -205,7 +206,7 @@ export function ImportRuleEditor({
 
         {requiresGoalSelection(draft.classificationType) ? (
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-raf-ink">Goal</span>
+            <span className="mb-2 block text-sm font-medium text-raf-ink">Savings goal</span>
             <select
               className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
               value={draft.goalId}

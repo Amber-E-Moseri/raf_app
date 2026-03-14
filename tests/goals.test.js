@@ -289,6 +289,39 @@ test('goal progress ignores target date windows and uses current reserved balanc
   assert.equal(result[0].progress_percent, 60);
 });
 
+test('goal progress clamps remaining at zero and progress at 100 when bucket balance exceeds target', async () => {
+  const db = createGoalsDb({
+    goals: [
+      {
+        id: 'goal_1',
+        householdId: 'household_1',
+        bucketId: 'bucket_savings',
+        name: 'Emergency Fund',
+        targetAmount: '500.00',
+        targetDate: null,
+        notes: null,
+        active: true,
+      },
+    ],
+    buckets: [
+      { id: 'bucket_savings', householdId: 'household_1', slug: 'savings', label: 'Savings', isActive: true, sortOrder: 1 },
+    ],
+    incomeAllocations: [
+      { incomeEntryId: 'income_1', allocationCategoryId: 'bucket_savings', allocatedAmount: '800.00' },
+    ],
+    transactions: [],
+  });
+
+  const result = await listGoalProgress({
+    db,
+    householdId: 'household_1',
+  });
+
+  assert.equal(result[0].reserved_amount, '800.00');
+  assert.equal(result[0].remaining_amount, '0.00');
+  assert.equal(result[0].progress_percent, 100);
+});
+
 test('goal routes expose GET, POST, PUT, and DELETE', async () => {
   const db = createDbDouble();
 
