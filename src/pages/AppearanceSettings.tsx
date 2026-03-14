@@ -28,9 +28,10 @@ import {
   APPEARANCE_MODE_OPTIONS,
   DEFAULT_APPEARANCE,
   FONT_OPTIONS,
+  INTERFACE_SCALE_OPTIONS,
   THEME_OPTIONS,
 } from "../lib/appearance";
-import type { AppearancePreferences } from "../lib/appearance";
+import type { AppearancePreferences, ThemeColor } from "../lib/appearance";
 import type {
   AllocationCategory,
   Debt,
@@ -53,13 +54,23 @@ const settingsTabs: Array<{ id: SettingsTab; label: string; description: string 
   {
     id: "preferences",
     label: "Preferences",
-    description: "Appearance preferences for this device.",
+    description: "Theme, typography, and scale for this device.",
   },
   {
     id: "import_rules",
     label: "Import Rules",
-    description: "Suggestions, reusable rules, and auto-apply controls for bank imports.",
+    description: "Suggestions, reusable rules, and auto-apply controls.",
   },
+];
+
+const themeGroups: Array<{
+  mood: string;
+  values: ThemeColor[];
+  helper: string;
+}> = [
+  { mood: "Professional", values: ["blue", "black"], helper: "Calm contrast for focused daily finance work." },
+  { mood: "Balanced", values: ["green"], helper: "RAF's default look with steady contrast and warmth." },
+  { mood: "Playful", values: ["pink"], helper: "A softer accent with a little more personality." },
 ];
 
 function ruleActionLabel(rule: ImportReviewRule) {
@@ -84,12 +95,14 @@ function ruleActionLabel(rule: ImportReviewRule) {
   return "Ignore";
 }
 
+function selectedCardClasses(selected: boolean) {
+  return selected
+    ? "border-[var(--primary-color)] bg-[var(--primary-soft)] shadow-focus"
+    : "border-[var(--border-color)] bg-[var(--surface-color)] hover:-translate-y-0.5 hover:shadow-lift";
+}
+
 export function AppearanceSettings() {
-  const {
-    preferences,
-    resetAppearance,
-    saveAppearance,
-  } = useAppearance();
+  const { preferences, saveAppearance } = useAppearance();
   const [activeTab, setActiveTab] = useState<SettingsTab>("preferences");
   const [draft, setDraft] = useState<AppearancePreferences>(preferences);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -125,7 +138,25 @@ export function AppearanceSettings() {
     draft.theme_color !== preferences.theme_color
     || draft.font_family !== preferences.font_family
     || draft.appearance_mode !== preferences.appearance_mode
+    || draft.interface_scale !== preferences.interface_scale
   ), [draft, preferences]);
+
+  const activeTheme = useMemo(
+    () => THEME_OPTIONS.find((option) => option.value === draft.theme_color) ?? THEME_OPTIONS[0],
+    [draft.theme_color],
+  );
+  const activeFont = useMemo(
+    () => FONT_OPTIONS.find((option) => option.value === draft.font_family) ?? FONT_OPTIONS[0],
+    [draft.font_family],
+  );
+  const activeScale = useMemo(
+    () => INTERFACE_SCALE_OPTIONS.find((option) => option.value === draft.interface_scale) ?? INTERFACE_SCALE_OPTIONS[1],
+    [draft.interface_scale],
+  );
+  const activeMode = useMemo(
+    () => APPEARANCE_MODE_OPTIONS.find((option) => option.value === draft.appearance_mode) ?? APPEARANCE_MODE_OPTIONS[0],
+    [draft.appearance_mode],
+  );
 
   function updateDraft(next: Partial<AppearancePreferences>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -137,7 +168,12 @@ export function AppearanceSettings() {
     setSaveMessage("Appearance settings updated.");
   }
 
-  function handleResetDraft() {
+  function handleCancel() {
+    setDraft(preferences);
+    setSaveMessage(null);
+  }
+
+  function handleRestoreDefaults() {
     setDraft(DEFAULT_APPEARANCE);
     setSaveMessage(null);
   }
@@ -214,118 +250,101 @@ export function AppearanceSettings() {
     <PageShell
       eyebrow="Settings"
       title="Settings"
-      description="Appearance preferences and import rule settings."
-      actions={activeTab === "preferences" ? (
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" onClick={handleResetDraft}>Reset form</Button>
-          <Button type="button" variant="secondary" onClick={resetAppearance}>Restore saved defaults</Button>
-          <Button type="button" disabled={!hasChanges} onClick={handleSave}>Save Appearance</Button>
-        </div>
-      ) : null}
+      description="Tune how RAF looks on this device and manage saved import rules."
     >
-      <section className="grid gap-4 xl:grid-cols-[220px,1fr]">
-        <Card title="Settings" subtitle="Appearance">
-          <div className="space-y-2">
-            {settingsTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                  activeTab === tab.id
-                    ? "border-[var(--primary-color)] bg-[var(--primary-soft)]"
-                    : "border-[var(--border-color)] bg-[var(--surface-color)]"
-                }`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <div className="text-sm font-semibold text-[var(--text-strong)]">{tab.label}</div>
-                <div className="mt-1 text-xs text-stone-500">{tab.description}</div>
-              </button>
-            ))}
-          </div>
-        </Card>
+      <section className="grid gap-7 xl:grid-cols-[minmax(180px,20%),minmax(0,45%),minmax(320px,35%)]">
+        <aside className="xl:sticky xl:top-6 xl:self-start">
+          <Card title="Settings Navigation" subtitle="Choose what you want to adjust.">
+            <div className="space-y-2">
+              {settingsTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`w-full rounded-[1.25rem] border px-4 py-3 text-left transition duration-200 ${selectedCardClasses(activeTab === tab.id)}`}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--text-strong)]">{tab.label}</div>
+                      <div className="mt-1 text-[12px] italic leading-5 text-[var(--text-muted)]">{tab.description}</div>
+                    </div>
+                    {activeTab === tab.id ? <Badge tone="success">Active</Badge> : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
+        </aside>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           {activeTab === "preferences" ? (
             <>
               {saveMessage ? <SuccessNotice title="Appearance updated" message={saveMessage} /> : null}
-              <section className="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
-                <Card title="Appearance Settings" subtitle="Choose a curated accent, font, and viewing mode, then confirm with Save Appearance.">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {THEME_OPTIONS.map((option) => {
-                      const selected = draft.theme_color === option.value;
 
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          className={`rounded-[1.5rem] border p-4 text-left transition duration-200 ${
-                            selected
-                              ? "border-[var(--primary-color)] bg-[var(--primary-soft)] shadow-focus"
-                              : "border-[var(--border-color)] bg-[var(--surface-color)] hover:-translate-y-0.5 hover:shadow-lift"
-                          }`}
-                          onClick={() => updateDraft({ theme_color: option.value })}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <span
-                                className="h-10 w-10 rounded-full border border-white/80 shadow-sm"
-                                style={{ background: `linear-gradient(135deg, ${option.swatch}, ${option.accent})` }}
-                              />
-                              <div>
-                                <div className="font-semibold text-[var(--text-strong)]">{option.label}</div>
-                                <div className="text-sm text-stone-500">{option.value} theme</div>
-                              </div>
-                            </div>
-                            {selected ? <Badge tone="success">Selected</Badge> : null}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Card>
-
-                <Card title="Live Preview" subtitle="Preview the selected appearance here, then save to apply it globally.">
-                  <div
-                    className="space-y-4 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] p-5"
-                    data-theme={draft.theme_color}
-                    data-font={draft.font_family}
-                    data-mode={draft.appearance_mode}
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">Current preset</div>
-                        <h3 className="mt-2 text-2xl font-semibold text-[var(--text-strong)]">RAF Preview</h3>
-                      </div>
-                      <Badge tone="neutral">{draft.appearance_mode}</Badge>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4">
-                        <div className="text-sm font-medium text-stone-500">Accent action</div>
-                        <button
-                          type="button"
-                          className="mt-3 inline-flex rounded-full bg-[var(--primary-color)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-contrast)] transition"
-                        >
-                          Record deposit
-                        </button>
-                      </div>
-                      <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4">
-                        <div className="text-sm font-medium text-stone-500">Data surface</div>
-                        <div className="mt-3 flex items-center justify-between rounded-2xl bg-[var(--surface-elevated)] px-3 py-2">
-                          <span className="text-sm text-[var(--text-strong)]">Buffer balance</span>
-                          <span className="text-sm font-semibold text-[var(--primary-color)]">$2,930.28</span>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-sm leading-6 text-stone-500">
-                      The selected font and theme apply to layout, navigation, cards, forms, and transaction screens.
+              <Card title="Appearance Settings">
+                <div className="space-y-6">
+                  <div className="border-b border-[var(--border-color)] pb-6">
+                    <div className="text-[17px] font-semibold text-[var(--text-strong)]">Theme</div>
+                    <p className="mt-2 max-w-2xl text-[13px] italic leading-6 text-[var(--text-muted)]">
+                      Choose a mood that fits how you want RAF to feel while you review income, allocations, and transactions.
                     </p>
                   </div>
-                </Card>
-              </section>
 
-              <section className="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
-                <Card title="Font Family" subtitle="Pick a display language that suits how you read financial information.">
-                  <div className="space-y-3">
+                  <div className="space-y-5">
+                    {themeGroups.map((group) => (
+                      <div key={group.mood} className="space-y-3">
+                        <div>
+                          <div className="text-sm font-semibold text-[var(--text-strong)]">{group.mood}</div>
+                          <p className="mt-1 text-[12px] italic text-[var(--text-muted)]">{group.helper}</p>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {group.values.map((themeValue) => {
+                            const option = THEME_OPTIONS.find((item) => item.value === themeValue);
+                            if (!option) {
+                              return null;
+                            }
+                            const selected = draft.theme_color === option.value;
+
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`rounded-[1.5rem] border p-5 text-left transition duration-200 ${selectedCardClasses(selected)}`}
+                                onClick={() => updateDraft({ theme_color: option.value })}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-start gap-4">
+                                    <span
+                                      className="h-12 w-12 shrink-0 rounded-2xl border border-white/80 shadow-sm"
+                                      style={{ background: `linear-gradient(145deg, ${option.swatch}, ${option.accent})` }}
+                                    />
+                                    <div>
+                                      <div className="text-base font-semibold text-[var(--text-strong)]">{option.label}</div>
+                                      <div className="mt-1 text-[13px] italic text-[var(--text-muted)]">{group.mood} theme</div>
+                                    </div>
+                                  </div>
+                                  {selected ? <Badge tone="success">Selected</Badge> : null}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="Font Settings">
+                <div className="space-y-5">
+                  <div className="border-b border-[var(--border-color)] pb-6">
+                    <div className="text-[17px] font-semibold text-[var(--text-strong)]">Font family</div>
+                    <p className="mt-2 max-w-2xl text-[13px] italic leading-6 text-[var(--text-muted)]">
+                      Pick the reading voice you want across RAF. The preview updates instantly so dense financial data stays easy to judge.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3">
                     {FONT_OPTIONS.map((option) => {
                       const selected = draft.font_family === option.value;
 
@@ -333,21 +352,26 @@ export function AppearanceSettings() {
                         <button
                           key={option.value}
                           type="button"
-                          data-font={option.value}
-                          className={`w-full rounded-[1.5rem] border px-4 py-4 text-left transition duration-200 ${
-                            selected
-                              ? "border-[var(--primary-color)] bg-[var(--primary-soft)] shadow-focus"
-                              : "border-[var(--border-color)] bg-[var(--surface-color)] hover:-translate-y-0.5 hover:shadow-lift"
-                          }`}
+                          className={`rounded-[1.5rem] border p-5 text-left transition duration-200 ${selectedCardClasses(selected)}`}
                           onClick={() => updateDraft({ font_family: option.value })}
                         >
                           <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <div className="text-lg font-semibold text-[var(--text-strong)]" style={{ fontFamily: `var(--font-${option.value})` }}>
+                            <div className="space-y-2">
+                              <div
+                                className="text-lg font-semibold text-[var(--text-strong)]"
+                                style={{ fontFamily: `var(--font-${option.value})` }}
+                              >
                                 {option.label}
                               </div>
-                              <div className="mt-1 text-sm text-stone-500" style={{ fontFamily: `var(--font-${option.value})` }}>
+                              <p className="text-[13px] italic leading-6 text-[var(--text-muted)]">
                                 {option.preview}
+                              </p>
+                              <div
+                                className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]"
+                                style={{ fontFamily: `var(--font-${option.value})` }}
+                              >
+                                <div className="font-medium">Groceries — $42.18</div>
+                                <div className="mt-1 text-[12px] text-[var(--text-muted)]">Mar 7 • Personal Spending</div>
                               </div>
                             </div>
                             {selected ? <Badge tone="success">Selected</Badge> : null}
@@ -356,37 +380,87 @@ export function AppearanceSettings() {
                       );
                     })}
                   </div>
-                </Card>
+                </div>
+              </Card>
 
-                <Card title="Appearance Mode" subtitle="Switch between light and dark surfaces while keeping the RAF color system intact.">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {APPEARANCE_MODE_OPTIONS.map((option) => {
-                      const selected = draft.appearance_mode === option.value;
+              <Card title="Interface Scale">
+                <div className="space-y-5">
+                  <div className="border-b border-[var(--border-color)] pb-6">
+                    <div className="text-[17px] font-semibold text-[var(--text-strong)]">Scale</div>
+                    <p className="mt-2 max-w-2xl text-[13px] italic leading-6 text-[var(--text-muted)]">
+                      Adjust how compact or spacious the interface feels without changing the structure of the application.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {INTERFACE_SCALE_OPTIONS.map((option) => {
+                      const selected = draft.interface_scale === option.value;
 
                       return (
                         <button
                           key={option.value}
                           type="button"
-                          className={`rounded-[1.5rem] border p-4 text-left transition duration-200 ${
-                            selected
-                              ? "border-[var(--primary-color)] bg-[var(--primary-soft)] shadow-focus"
-                              : "border-[var(--border-color)] bg-[var(--surface-color)] hover:-translate-y-0.5 hover:shadow-lift"
-                          }`}
-                          onClick={() => updateDraft({ appearance_mode: option.value })}
+                          className={`rounded-[1.5rem] border p-5 text-left transition duration-200 ${selectedCardClasses(selected)}`}
+                          onClick={() => updateDraft({ interface_scale: option.value })}
                         >
-                          <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="font-semibold text-[var(--text-strong)]">{option.label}</div>
-                              <div className="mt-1 text-sm text-stone-500">{option.description}</div>
+                              <div className="text-base font-semibold text-[var(--text-strong)]">{option.label}</div>
+                              <div className="mt-1 text-[13px] italic leading-6 text-[var(--text-muted)]">{option.description}</div>
                             </div>
-                            {selected ? <Badge tone="success">Active</Badge> : null}
+                            {selected ? <Badge tone="success">Selected</Badge> : null}
                           </div>
                         </button>
                       );
                     })}
                   </div>
-                </Card>
-              </section>
+
+                  <div className="border-t border-[var(--border-color)] pt-6">
+                    <div className="text-[17px] font-semibold text-[var(--text-strong)]">Mode</div>
+                    <p className="mt-2 text-[13px] italic leading-6 text-[var(--text-muted)]">
+                      Light and dark mode update the preview instantly so you can compare contrast before saving.
+                    </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {APPEARANCE_MODE_OPTIONS.map((option) => {
+                        const selected = draft.appearance_mode === option.value;
+
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`rounded-[1.5rem] border p-5 text-left transition duration-200 ${selectedCardClasses(selected)}`}
+                            onClick={() => updateDraft({ appearance_mode: option.value })}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-base font-semibold text-[var(--text-strong)]">{option.label}</div>
+                                <div className="mt-1 text-[13px] italic leading-6 text-[var(--text-muted)]">{option.description}</div>
+                              </div>
+                              {selected ? <Badge tone="success">Active</Badge> : null}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              <div className="sticky bottom-4 z-10 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-color)]/95 p-4 shadow-panel backdrop-blur">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--text-strong)]">Ready to save your appearance?</div>
+                    <p className="mt-1 text-[12px] italic text-[var(--text-muted)]">
+                      Save applies these changes globally. Cancel restores the current saved appearance.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="ghost" onClick={handleRestoreDefaults}>Restore saved defaults</Button>
+                    <Button type="button" variant="secondary" disabled={!hasChanges} onClick={handleCancel}>Cancel</Button>
+                    <Button type="button" disabled={!hasChanges} onClick={handleSave}>Save Appearance</Button>
+                  </div>
+                </div>
+              </div>
             </>
           ) : (
             <>
@@ -480,6 +554,112 @@ export function AppearanceSettings() {
             </>
           )}
         </div>
+
+        <aside className="xl:sticky xl:top-6 xl:self-start">
+          {activeTab === "preferences" ? (
+            <Card title="Live Preview">
+              <div
+                className="space-y-5 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] p-6"
+                data-theme={draft.theme_color}
+                data-font={draft.font_family}
+                data-mode={draft.appearance_mode}
+                data-scale={draft.interface_scale}
+              >
+                <div className="space-y-4 border-b border-[var(--border-color)] pb-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="neutral">{`Theme: ${activeTheme.label}`}</Badge>
+                    <Badge tone="neutral">{`Font: ${activeFont.label}`}</Badge>
+                    <Badge tone="neutral">{`Size: ${activeScale.label}`}</Badge>
+                    <Badge tone="neutral">{`Mode: ${activeMode.label}`}</Badge>
+                  </div>
+                  <div>
+                    <div className="text-[18px] font-semibold text-[var(--text-strong)]">RAF Finance preview</div>
+                    <p className="mt-2 text-[13px] italic leading-6 text-[var(--text-muted)]">
+                      This preview mirrors the kinds of cards, balances, and transaction rows you see across RAF.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-5 shadow-panel">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[12px] font-medium text-[var(--text-muted)]">Accent action</div>
+                        <div className="mt-1 text-base font-semibold text-[var(--text-strong)]">Record deposit</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex rounded-full bg-[var(--primary-color)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-contrast)] shadow-sm"
+                      >
+                        Record deposit
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-5 shadow-panel">
+                    <div className="text-[12px] font-medium text-[var(--text-muted)]">Financial data surface</div>
+                    <div className="mt-4 flex items-end justify-between gap-4">
+                      <div>
+                        <div className="text-sm text-[var(--text-muted)]">Buffer balance</div>
+                        <div className="mt-2 text-[2rem] font-semibold tracking-tight text-[var(--text-strong)]">$2,930.28</div>
+                      </div>
+                      <Badge tone="success">Healthy</Badge>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-5 shadow-panel">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="text-[12px] font-medium text-[var(--text-muted)]">Transaction example</div>
+                        <div className="mt-3 space-y-1">
+                          <div className="text-sm text-[var(--text-muted)]">Mar 7</div>
+                          <div className="text-base font-semibold text-[var(--text-strong)]">Gas Station</div>
+                          <div className="text-sm text-[var(--text-muted)]">Personal Spending</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-semibold text-[var(--text-strong)]">-$45.00</div>
+                        <div className="mt-2 text-[12px] italic text-[var(--text-muted)]">Synced from import review</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.5rem] border border-dashed border-[var(--border-color)] bg-[var(--surface-color)] px-4 py-4">
+                    <div className="text-[12px] font-medium text-[var(--text-muted)]">Preview guidance</div>
+                    <p className="mt-2 text-[13px] italic leading-6 text-[var(--text-muted)]">
+                      Try a darker mode with a larger interface scale if you review imports late at night, or pair a tighter scale with Inter for denser monthly work.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ) : (
+            <Card title="Rule Management">
+              <div className="space-y-4 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] p-6">
+                <div>
+                  <div className="text-[18px] font-semibold text-[var(--text-strong)]">Import rule controls</div>
+                  <p className="mt-2 text-[13px] italic leading-6 text-[var(--text-muted)]">
+                    Suggestions remain review-only. Reusable rules can be enabled, disabled, edited, or converted back to suggestions at any time.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4">
+                    <div className="text-sm font-semibold text-[var(--text-strong)]">Suggestion</div>
+                    <div className="mt-1 text-[13px] italic text-[var(--text-muted)]">Prefills the next similar import but never auto-applies it.</div>
+                  </div>
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4">
+                    <div className="text-sm font-semibold text-[var(--text-strong)]">Reusable rule</div>
+                    <div className="mt-1 text-[13px] italic text-[var(--text-muted)]">Keeps the same review intent saved for later, with auto-apply always visible and reversible.</div>
+                  </div>
+                  <div className="rounded-[1.5rem] border border-dashed border-[var(--border-color)] bg-[var(--surface-color)] p-4">
+                    <div className="text-sm font-semibold text-[var(--text-strong)]">Safety reminder</div>
+                    <div className="mt-1 text-[13px] italic text-[var(--text-muted)]">Rules shape future review drafts, but they do not remove the audit trail for imported transactions.</div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+        </aside>
       </section>
     </PageShell>
   );

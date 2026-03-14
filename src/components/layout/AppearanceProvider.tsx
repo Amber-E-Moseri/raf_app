@@ -6,7 +6,7 @@ import {
   DEFAULT_APPEARANCE,
   parseAppearancePreferences,
 } from "../../lib/appearance";
-import type { AppearanceMode, AppearancePreferences, FontFamilyOption, ThemeColor } from "../../lib/appearance";
+import type { AppearancePreferences } from "../../lib/appearance";
 
 interface AppearanceContextValue {
   preferences: AppearancePreferences;
@@ -27,11 +27,13 @@ function applyAppearance(preferences: AppearancePreferences) {
   root.dataset.theme = preferences.theme_color;
   root.dataset.font = preferences.font_family;
   root.dataset.mode = preferences.appearance_mode;
+  root.dataset.scale = preferences.interface_scale;
 
   if (appRoot) {
     appRoot.dataset.theme = preferences.theme_color;
     appRoot.dataset.font = preferences.font_family;
     appRoot.dataset.mode = preferences.appearance_mode;
+    appRoot.dataset.scale = preferences.interface_scale;
   }
 }
 

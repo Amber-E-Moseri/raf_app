@@ -8,6 +8,7 @@ import { AddIncome } from "./pages/AddIncome";
 import { AppearanceSettings } from "./pages/AppearanceSettings";
 import { Dashboard } from "./pages/Dashboard";
 import { Debts } from "./pages/Debts";
+import { Goals } from "./pages/Goals";
 import { MonthlyReview } from "./pages/MonthlyReview";
 import { NotFound } from "./pages/NotFound";
 import { Profile } from "./pages/Profile";
@@ -30,6 +31,7 @@ export default function App() {
               <Route path="income/new" element={<AddIncome />} />
               <Route path="transactions" element={<Transactions />} />
               <Route path="debts" element={<Debts />} />
+              <Route path="goals" element={<Goals />} />
               <Route path="monthly-review" element={<MonthlyReview />} />
               <Route path="*" element={<NotFound />} />
             </Route>

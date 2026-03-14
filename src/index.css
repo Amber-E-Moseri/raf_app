@@ -12,6 +12,7 @@
 
   --font-family: var(--font-inter);
   --font-display: var(--font-playfair-display);
+  --ui-scale: 1;
 
   --primary-color: #1f7a4f;
   --primary-color-strong: #15583a;
@@ -42,6 +43,7 @@
     var(--background-base);
   color: var(--text-color);
   font-family: var(--font-family);
+  font-size: calc(16px * var(--ui-scale));
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -165,6 +167,22 @@ select {
   --badge-success-bg: rgba(31, 122, 79, 0.22);
   --badge-success-text: #ecfdf5;
   --badge-success-ring: rgba(31, 122, 79, 0.45);
+}
+
+[data-scale="small"] {
+  --ui-scale: 0.94;
+}
+
+[data-scale="medium"] {
+  --ui-scale: 1;
+}
+
+[data-scale="large"] {
+  --ui-scale: 1.08;
+}
+
+[data-scale] {
+  font-size: calc(16px * var(--ui-scale));
 }
 
 @layer base {

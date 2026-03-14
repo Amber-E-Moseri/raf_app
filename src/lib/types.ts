@@ -269,6 +269,24 @@ export interface GoalListResponse {
   items: Goal[];
 }
 
+export interface GoalCreateRequest {
+  bucket_id: string;
+  name: string;
+  target_amount: string;
+  target_date?: string | null;
+  notes?: string | null;
+  active?: boolean;
+}
+
+export interface GoalUpdateRequest {
+  bucket_id?: string;
+  name?: string;
+  target_amount?: string;
+  target_date?: string | null;
+  notes?: string | null;
+  active?: boolean;
+}
+
 export interface DashboardPeriod {
   month: string;
   incomeTotal: string;

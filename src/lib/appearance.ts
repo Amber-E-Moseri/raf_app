@@ -1,11 +1,13 @@
 export type ThemeColor = "green" | "pink" | "blue" | "black";
 export type FontFamilyOption = "inter" | "barlow" | "playfair-display" | "libre-franklin";
 export type AppearanceMode = "light" | "dark";
+export type InterfaceScale = "small" | "medium" | "large";
 
 export interface AppearancePreferences {
   theme_color: ThemeColor;
   font_family: FontFamilyOption;
   appearance_mode: AppearanceMode;
+  interface_scale: InterfaceScale;
 }
 
 export const APPEARANCE_STORAGE_KEY = "raf_appearance_preferences";
@@ -14,6 +16,7 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   theme_color: "green",
   font_family: "inter",
   appearance_mode: "light",
+  interface_scale: "medium",
 };
 
 export const THEME_OPTIONS: Array<{
@@ -48,6 +51,16 @@ export const APPEARANCE_MODE_OPTIONS: Array<{
   { value: "dark", label: "Dark", description: "Lower-glare surfaces for night sessions." },
 ];
 
+export const INTERFACE_SCALE_OPTIONS: Array<{
+  value: InterfaceScale;
+  label: string;
+  description: string;
+}> = [
+  { value: "small", label: "Small", description: "Fits more data into every view." },
+  { value: "medium", label: "Medium", description: "Balanced spacing for daily use." },
+  { value: "large", label: "Large", description: "More breathing room and larger text." },
+];
+
 export function parseAppearancePreferences(rawValue: string | null): AppearancePreferences {
   if (!rawValue) {
     return DEFAULT_APPEARANCE;
@@ -64,11 +77,15 @@ export function parseAppearancePreferences(rawValue: string | null): AppearanceP
     const appearance_mode = APPEARANCE_MODE_OPTIONS.some((option) => option.value === parsed.appearance_mode)
       ? parsed.appearance_mode as AppearanceMode
       : DEFAULT_APPEARANCE.appearance_mode;
+    const interface_scale = INTERFACE_SCALE_OPTIONS.some((option) => option.value === parsed.interface_scale)
+      ? parsed.interface_scale as InterfaceScale
+      : DEFAULT_APPEARANCE.interface_scale;
 
     return {
       theme_color,
       font_family,
       appearance_mode,
+      interface_scale,
     };
   } catch {
     return DEFAULT_APPEARANCE;
