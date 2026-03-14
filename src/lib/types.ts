@@ -370,6 +370,8 @@ export interface DashboardReport {
   total_expected_fixed_bills_this_month: string;
   bucket_balances: BucketBalance[];
   monthly_bucket_progress: MonthlyBucketProgress[];
+  ytd_bucket_progress: MonthlyBucketProgress[];
+  ttd_bucket_progress: MonthlyBucketProgress[];
   goal_progress: GoalProgress[];
 }
 

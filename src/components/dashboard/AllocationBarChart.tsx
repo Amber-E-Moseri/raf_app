@@ -4,34 +4,35 @@ import { formatCurrency, formatPercentWithDigits } from "../../lib/format";
 import { Card } from "../ui/Card";
 import { EmptyState } from "../ui/EmptyState";
 
+export interface BucketScopeMetrics {
+  allocated: string | null;
+  added: string | null;
+  reservedForGoals: string | null;
+  used: string | null;
+  available: string | null;
+  remaining: string | null;
+}
+
 export interface AllocationBarDatum {
   bucketId: string;
   slug?: string | null;
   label: string;
   allocationPercent: string | null;
-  allocatedThisMonth: string | null;
-  addedThisMonth: string | null;
-  reservedForGoalsThisMonth: string | null;
-  availableThisMonth: string | null;
-  usedThisMonth: string | null;
-  remainingThisMonth: string | null;
-  ttdBalance?: string | null;
-  percentOfTotal?: number | null;
-  percentUsedThisMonth: number | null;
-  percentReservedForGoalsThisMonth?: number | null;
+  thisMonth: BucketScopeMetrics;
 }
 
 interface AllocationBarChartProps {
   items: AllocationBarDatum[];
+  activeMonthLabel: string;
 }
 
 function barColor(index: number) {
   const colors = [
     "bg-emerald-500",
-    "bg-lime-500",
-    "bg-amber-500",
-    "bg-sky-500",
-    "bg-teal-500",
+    "bg-blue-500",
+    "bg-amber-600",
+    "bg-violet-500",
+    "bg-pink-500",
     "bg-stone-500",
   ];
 
@@ -43,108 +44,92 @@ function parseMoney(value: string | null | undefined) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-export function AllocationBarChart({ items }: AllocationBarChartProps) {
-  const validItems = items.filter((item) => item.allocationPercent != null || item.availableThisMonth != null || item.remainingThisMonth != null);
+export function AllocationBarChart({ items, activeMonthLabel }: AllocationBarChartProps) {
+  const validItems = items.filter((item) => item.allocationPercent != null || item.thisMonth.allocated != null || item.thisMonth.available != null);
+  const totalAllocated = validItems.reduce((sum, item) => {
+    const allocated = parseMoney(item.thisMonth.allocated);
+    const added = parseMoney(item.thisMonth.added);
+    return sum + allocated + added;
+  }, 0);
 
   return (
-    <Card
-      title="Allocation buckets"
-      actions={<button type="button" className="text-[11px] font-medium text-stone-500">Edit -&gt;</button>}
-    >
+    <Card title="Allocation buckets">
       {validItems.length ? (
-        <div className="space-y-3">
-          {validItems.map((item, index) => {
-            const allocationPercent = item.allocationPercent ? formatPercentWithDigits(item.allocationPercent, 2) : null;
-            const allocated = parseMoney(item.allocatedThisMonth);
-            const added = parseMoney(item.addedThisMonth);
-            const reserved = parseMoney(item.reservedForGoalsThisMonth);
-            const spent = parseMoney(item.usedThisMonth);
-            const available = Math.max(parseMoney(item.availableThisMonth), 0);
-            const used = reserved + spent;
-            const ttdBalance = parseMoney(item.ttdBalance);
-            const totalForBar = Math.max(allocated + added, 0);
-            const usedWidth = totalForBar === 0 ? 0 : Math.max(0, Math.min(100, (used / totalForBar) * 100));
-            const hasAdded = added > 0;
-            const allocatedLabel = hasAdded
-              ? `${formatCurrency((allocated + added).toFixed(2))} (includes ${formatCurrency(added.toFixed(2))} added)`
-              : formatCurrency(allocated.toFixed(2));
+        <div>
+          <div className="space-y-3">
+            {validItems.map((item, index) => {
+              const allocationPercent = item.allocationPercent ? formatPercentWithDigits(item.allocationPercent, 2).replace(".00", "") : null;
+              const allocated = parseMoney(item.thisMonth.allocated);
+              const added = parseMoney(item.thisMonth.added);
+              const currentMonthAmount = allocated + added;
+              const reserved = parseMoney(item.thisMonth.reservedForGoals);
+              const spent = parseMoney(item.thisMonth.used);
+              const available = Math.max(parseMoney(item.thisMonth.available), 0);
+              const barBase = currentMonthAmount > 0 ? currentMonthAmount : reserved + spent;
+              const progress = barBase === 0 ? 0 : Math.max(0, Math.min(100, ((reserved + spent) / barBase) * 100));
 
-            return (
-              <Link
-                key={item.bucketId}
-                to={item.slug
-                  ? `/transactions?categorySlug=${encodeURIComponent(item.slug)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`
-                  : `/transactions?categoryId=${encodeURIComponent(item.bucketId)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`}
-                className="group block rounded-[1.4rem] border px-4 py-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-lift active:translate-y-0"
-                style={{
-                  borderColor: "var(--border-color)",
-                  background: "var(--surface-plain)",
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`mt-1 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md ${barColor(index)}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
+              return (
+                <Link
+                  key={item.bucketId}
+                  to={item.slug
+                    ? `/transactions?categorySlug=${encodeURIComponent(item.slug)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`
+                    : `/transactions?categoryId=${encodeURIComponent(item.bucketId)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`}
+                  className="group block rounded-[1.35rem] border px-4 py-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-lift active:translate-y-0"
+                  style={{
+                    borderColor: "var(--border-color)",
+                    background: "var(--surface-plain)",
+                  }}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-4">
+                      <div className="flex min-w-[152px] items-center gap-3">
+                        <div className={`h-[18px] w-[18px] shrink-0 rounded-md ${barColor(index)}`} />
+                        <div className="min-w-0">
                           <div className="truncate text-[15px] font-semibold text-[var(--text-strong)]">{item.label}</div>
                         </div>
-                        <div className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">
-                          {allocationPercent ? `${allocationPercent.replace(".00", "")} of monthly allocation` : "Monthly bucket"}
-                        </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        <div className="text-right">
-                          <div className="text-[11px] font-medium text-[var(--text-muted)]">Available</div>
-                          <div className="mt-1 text-[18px] font-semibold tracking-tight text-[var(--text-strong)]">
-                            {formatCurrency(available.toFixed(2))}
+
+                      <div className="flex min-w-0 flex-1 items-center gap-4">
+                        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
+                          <div
+                            className={`h-full rounded-full ${barColor(index)} transition-all duration-300`}
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+
+                        <div className="flex min-w-[116px] items-baseline justify-end gap-3 text-right">
+                          <div className="text-[11px] font-medium text-[var(--text-muted)]">
+                            {allocationPercent ?? "--"}
+                          </div>
+                          <div className="text-[18px] font-semibold tracking-tight text-[var(--text-strong)]">
+                            {formatCurrency(currentMonthAmount.toFixed(2))}
                           </div>
                         </div>
-                        <div className="pt-1 text-[16px] text-[var(--text-muted)] transition group-hover:text-[var(--text-strong)]">
-                          &gt;
-                        </div>
                       </div>
                     </div>
 
-                    <div className="mt-4">
-                      <div className="mb-2 flex items-center justify-between gap-3 text-[10px] font-medium text-[var(--text-muted)]">
-                        <span>Used this month</span>
-                        <span>{formatCurrency(used.toFixed(2))}</span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
-                        <div
-                          className={`h-full rounded-full ${barColor(index)} transition-all duration-500`}
-                          style={{ width: `${usedWidth}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 text-[11px] text-[var(--text-muted)]">
-                      <span>Allocated {allocatedLabel}</span>
-                      <span>{" · "}</span>
-                      <span>Goals {formatCurrency(reserved.toFixed(2))}</span>
-                      <span>{" · "}</span>
+                    <div className="pl-[30px] text-[11px] text-[var(--text-muted)]">
                       <span>Spent {formatCurrency(spent.toFixed(2))}</span>
-                    </div>
-                    <div className="mt-2 text-[11px] text-[var(--text-muted)]">
-                      <span>TTD balance {formatCurrency(ttdBalance.toFixed(2))}</span>
-                      {item.percentOfTotal != null ? (
-                        <>
-                          <span>{" · "}</span>
-                          <span>Share {item.percentOfTotal.toFixed(0)}%</span>
-                        </>
-                      ) : null}
+                      <span>{" | "}</span>
+                      <span>Goals {formatCurrency(reserved.toFixed(2))}</span>
+                      <span>{" | "}</span>
+                      <span>Available {formatCurrency(available.toFixed(2))}</span>
                     </div>
                   </div>
-                </div>
-              </Link>
-            );
-          })}
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 flex items-center justify-between border-t border-[var(--border-color)] pt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
+            <span>{activeMonthLabel} | {validItems.length} buckets</span>
+            <span>{formatCurrency(totalAllocated.toFixed(2))} allocated</span>
+          </div>
         </div>
       ) : (
         <EmptyState
           title="No bucket usage data yet"
-          message="Once the current month has allocations, this view will show how much is left in each bucket."
+          message="Once the current month has allocations, this view will show the current bucket distribution."
         />
       )}
     </Card>

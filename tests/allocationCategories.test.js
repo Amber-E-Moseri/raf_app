@@ -58,7 +58,8 @@ function defaultCategories() {
     { id: 'cat_spending', slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isSystem: true, isActive: true, isBuffer: false },
     { id: 'cat_investment', slug: 'investment', label: 'Investment', allocationPercent: '0.1000', sortOrder: 4, isSystem: false, isActive: true, isBuffer: false },
     { id: 'cat_debt', slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isSystem: false, isActive: true, isBuffer: false },
-    { id: 'cat_buffer', slug: 'buffer', label: 'Buffer', allocationPercent: '0.2500', sortOrder: 9, isSystem: true, isActive: true, isBuffer: true },
+    { id: 'cat_partnership', slug: 'partnership', label: 'Partnership', allocationPercent: '0.1500', sortOrder: 6, isSystem: false, isActive: true, isBuffer: false },
+    { id: 'cat_buffer', slug: 'buffer', label: 'Buffer', allocationPercent: '0.1000', sortOrder: 9, isSystem: true, isActive: true, isBuffer: true },
   ];
 }
 
@@ -70,7 +71,7 @@ test('listHouseholdAllocationCategories returns formatted category rows', async 
     householdId: 'household_1',
   });
 
-  assert.equal(result.items.length, 6);
+  assert.equal(result.items.length, 7);
   assert.deepEqual(result.items[0], {
     id: 'cat_savings',
     name: 'Savings',

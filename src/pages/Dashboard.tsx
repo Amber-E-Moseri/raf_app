@@ -174,8 +174,6 @@ export function Dashboard() {
       label: category.label,
       percent: category.allocationPercent,
       allocatedAmount: latestAllocationAmounts.get(category.slug) ?? null,
-      currentBalance: bucketBalancesBySlug.get(category.slug)?.balance ?? null,
-      percentOfTotal: bucketBalancesBySlug.get(category.slug)?.percent_of_total ?? null,
       monthlyProgress: monthlyProgressByBucketId.get(category.id) ?? null,
     }))
     : [];
@@ -298,21 +296,20 @@ export function Dashboard() {
       <section className="grid gap-4 lg:grid-cols-[1.6fr,1fr]">
         <div className="space-y-4">
           <AllocationBarChart
+            activeMonthLabel={activeMonthLabel}
             items={allocationRows.map((row) => ({
               bucketId: row.bucketId,
               slug: row.slug,
               label: row.label,
               allocationPercent: row.percent,
-              allocatedThisMonth: row.monthlyProgress?.allocated_this_month ?? row.allocatedAmount ?? null,
-              addedThisMonth: row.monthlyProgress?.added_this_month ?? "0.00",
-              reservedForGoalsThisMonth: row.monthlyProgress?.reserved_for_goals_this_month ?? "0.00",
-              availableThisMonth: row.monthlyProgress?.available_this_month ?? row.currentBalance ?? null,
-              usedThisMonth: row.monthlyProgress?.used_this_month ?? null,
-              remainingThisMonth: row.monthlyProgress?.remaining_this_month ?? row.currentBalance ?? null,
-              ttdBalance: row.currentBalance ?? "0.00",
-              percentOfTotal: row.percentOfTotal ?? null,
-              percentUsedThisMonth: row.monthlyProgress?.percent_used_this_month ?? null,
-              percentReservedForGoalsThisMonth: row.monthlyProgress?.percent_reserved_for_goals_this_month ?? null,
+              thisMonth: {
+                allocated: row.monthlyProgress?.allocated_this_month ?? row.allocatedAmount ?? null,
+                added: row.monthlyProgress?.added_this_month ?? "0.00",
+                reservedForGoals: row.monthlyProgress?.reserved_for_goals_this_month ?? "0.00",
+                available: row.monthlyProgress?.available_this_month ?? null,
+                used: row.monthlyProgress?.used_this_month ?? null,
+                remaining: row.monthlyProgress?.remaining_this_month ?? null,
+              },
             }))}
           />
         </div>
@@ -481,6 +478,7 @@ export function Dashboard() {
           </Card>
         </div>
       </section>
+
     </PageShell>
   );
 }

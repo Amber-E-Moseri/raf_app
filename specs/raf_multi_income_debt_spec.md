@@ -323,13 +323,13 @@ Seeded automatically on household creation.
 |---|---|---|---|
 | savings | Savings | 0.1000 | true |
 | tithe | Tithe | 0.1000 | false |
-| partnership | Partnership | 0.0500 | false |
+| partnership | Partnership | 0.1500 | false |
 | offerings | Offerings | 0.0500 | false |
 | fixed_bills | Fixed Bills | 0.3000 | true |
 | personal_spending | Personal Spending | 0.1500 | true |
 | investment | Investment | 0.1000 | false |
 | debt_payoff | Debt Payoff | 0.1000 | false |
-| buffer | Buffer | 0.0500 | true |
+| buffer | Buffer | 0.1000 | true |
 
 Total: **1.0000**
 

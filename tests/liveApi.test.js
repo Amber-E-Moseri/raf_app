@@ -442,9 +442,10 @@ test('POST /api/v1/income creates deterministic allocations and GET /api/v1/inco
         { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
         { slug: 'investment', label: 'Investment', allocationPercent: '0.1000', sortOrder: 4, isActive: true },
         { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isActive: true },
-        { slug: 'buffer', label: 'Operating Buffer', allocationPercent: '0.2500', sortOrder: 9, isActive: true },
+        { slug: 'partnership', label: 'Partnership', allocationPercent: '0.1500', sortOrder: 6, isActive: true },
+        { slug: 'buffer', label: 'Operating Buffer', allocationPercent: '0.1000', sortOrder: 9, isActive: true },
         ...listedCategories.data.items
-          .filter((item) => !['savings', 'fixed_bills', 'personal_spending', 'investment', 'debt_payoff', 'buffer'].includes(item.slug))
+          .filter((item) => !['savings', 'fixed_bills', 'personal_spending', 'investment', 'debt_payoff', 'partnership', 'buffer'].includes(item.slug))
           .map((item) => ({
             slug: item.slug,
             label: item.label,
