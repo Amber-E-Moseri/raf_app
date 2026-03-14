@@ -103,6 +103,11 @@ test('createDebt creates a debt and returns money values as decimal strings', as
       apr: '19.99',
       minimumPayment: '100',
       monthlyPayment: '250',
+      statementDay: 10,
+      paymentDueDay: 31,
+      lateFeeAmount: '35',
+      autoPostInterest: true,
+      autoPostLateFee: true,
       sortOrder: 3,
     },
   });
@@ -113,6 +118,11 @@ test('createDebt creates a debt and returns money values as decimal strings', as
   assert.equal(result.minimumPayment, '100.00');
   assert.equal(result.monthlyPayment, '250.00');
   assert.equal(result.apr, 19.99);
+  assert.equal(result.statementDay, 10);
+  assert.equal(result.paymentDueDay, 31);
+  assert.equal(result.lateFeeAmount, '35.00');
+  assert.equal(result.autoPostInterest, true);
+  assert.equal(result.autoPostLateFee, true);
   assert.equal(result.status, 'current');
   assert.equal(result.paymentStatus, 'missed_payment');
   assert.equal(result.paymentsThisMonth, '0.00');
@@ -367,6 +377,67 @@ test('listDebts marks debts at risk when payments do not cover monthly interest 
   assert.equal(result.items[0].interestChargedThisMonth, '120.00');
   assert.equal(result.items[0].feesThisMonth, '25.00');
   assert.equal(result.items[0].principalReductionThisMonth, '0.00');
+});
+
+test('listDebts auto-posts interest on the statement cycle when enabled', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Auto Interest Card',
+        startingBalance: '1200.00',
+        apr: 12,
+        minimumPayment: '50.00',
+        monthlyPayment: '100.00',
+        statementDay: 10,
+        paymentDueDay: 25,
+        lateFeeAmount: '35.00',
+        autoPostInterest: true,
+        autoPostLateFee: false,
+        sortOrder: 1,
+        isActive: true,
+        createdAt: '2026-03-01T00:00:00.000Z',
+      },
+    ],
+  });
+
+  const result = await listDebts({ db, householdId: 'household_1' });
+
+  assert.equal(result.items[0].interestChargedThisMonth, '12.00');
+  assert.equal(result.items[0].currentBalance, '1212.00');
+  assert.equal(result.items[0].nextStatementDate, '2026-04-10');
+  assert.equal(result.items[0].nextPaymentDueDate, '2026-03-25');
+});
+
+test('listDebts auto-posts late fee when due cycle is missed and auto late fee is enabled', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Late Fee Card',
+        startingBalance: '2000.00',
+        apr: 18,
+        minimumPayment: '100.00',
+        monthlyPayment: '125.00',
+        statementDay: 5,
+        paymentDueDay: 20,
+        lateFeeAmount: '30.00',
+        autoPostInterest: false,
+        autoPostLateFee: true,
+        sortOrder: 1,
+        isActive: true,
+        createdAt: '2026-03-01T00:00:00.000Z',
+      },
+    ],
+  });
+
+  const result = await listDebts({ db, householdId: 'household_1' });
+
+  assert.equal(result.items[0].feesThisMonth, '30.00');
+  assert.equal(result.items[0].currentBalance, '2030.00');
+  assert.equal(result.items[0].paymentStatus, 'missed_payment');
 });
 
 test('createDebtAdjustment records an auditable balance adjustment and updates derived balance', async () => {

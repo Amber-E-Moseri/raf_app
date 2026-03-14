@@ -217,6 +217,11 @@ export interface Debt {
   apr: number;
   minimumPayment: string;
   monthlyPayment: string;
+  statementDay?: number | null;
+  paymentDueDay?: number | null;
+  lateFeeAmount?: string;
+  autoPostInterest?: boolean;
+  autoPostLateFee?: boolean;
   status: string;
   sortOrder: number;
   isActive?: boolean;
@@ -225,7 +230,10 @@ export interface Debt {
   interestChargedThisMonth?: string;
   feesThisMonth?: string;
   principalReductionThisMonth?: string;
+  closingBalance?: string;
   paymentStatus?: "current" | "missed_payment" | "under_minimum" | "at_risk" | "paying_down" | "paid_off";
+  nextStatementDate?: string | null;
+  nextPaymentDueDate?: string | null;
   estimatedPayoffDate?: string | null;
   monthsRemaining?: number | null;
   totalInterestRemaining?: string | null;
@@ -237,6 +245,11 @@ export interface DebtCreateRequest {
   apr: number | string;
   minimumPayment: string;
   monthlyPayment: string;
+  statementDay?: number;
+  paymentDueDay?: number;
+  lateFeeAmount?: string;
+  autoPostInterest?: boolean;
+  autoPostLateFee?: boolean;
   sortOrder?: number;
 }
 
