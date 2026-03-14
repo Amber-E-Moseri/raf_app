@@ -10,6 +10,12 @@ export interface GoalAchievementBadge {
   label: string;
 }
 
+export interface GoalMilestone {
+  id: "first_contribution" | "halfway_there" | "goal_completed";
+  label: string;
+  completed: boolean;
+}
+
 const GOAL_ACHIEVEMENTS_STORAGE_KEY = "raf_goal_achievements";
 
 type GoalAchievementState = Record<string, GoalAchievementRecord>;
@@ -95,13 +101,33 @@ export function getGoalAchievementBadges(goals: Goal[], achievementState: GoalAc
     badges.push({ id: "first_goal", label: "First Goal Completed" });
   }
 
-  if (completedGoals.some((goal) => goal.name.toLowerCase().includes("emergency fund"))) {
-    badges.push({ id: "emergency_fund", label: "Emergency Fund Secured" });
-  }
-
-  if (completedGoals.length >= 5) {
-    badges.push({ id: "five_goals", label: "5 Goals Achieved" });
-  }
-
   return badges;
+}
+
+export function getGoalMilestones(progress: GoalProgress | null): GoalMilestone[] {
+  const paidSoFar = Number(progress?.current_amount ?? "0");
+  const targetAmount = Number(progress?.target_amount ?? "0");
+  const ratio = targetAmount > 0 ? paidSoFar / targetAmount : 0;
+
+  return [
+    {
+      id: "first_contribution",
+      label: "First Contribution",
+      completed: paidSoFar > 0,
+    },
+    {
+      id: "halfway_there",
+      label: "Halfway There",
+      completed: ratio >= 0.5,
+    },
+    {
+      id: "goal_completed",
+      label: "Goal Completed",
+      completed: paidSoFar >= targetAmount && targetAmount > 0,
+    },
+  ];
+}
+
+export function countCompletedGoalMilestones(progress: GoalProgress | null) {
+  return getGoalMilestones(progress).filter((milestone) => milestone.completed).length;
 }

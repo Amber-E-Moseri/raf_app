@@ -10,12 +10,15 @@ import { LoadingState } from "../components/feedback/LoadingState";
 import { PageShell } from "../components/layout/PageShell";
 import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
+  countCompletedGoalMilestones,
   getGoalAchievementBadges,
   getGoalsAchievedCount,
+  getGoalMilestones,
   readGoalAchievements,
   syncGoalAchievements,
   writeGoalAchievements,
@@ -42,9 +45,7 @@ interface CompletedGoalSummary {
   badges: Array<{ label: string; tone: "success" | "neutral" }>;
 }
 
-function completedMilestones(progressPercent: number) {
-  return [25, 50, 100].filter((threshold) => progressPercent >= threshold).length;
-}
+const VISIBLE_ACHIEVEMENTS_LIMIT = 5;
 
 export function Profile() {
   const { activeRange } = usePeriod();
@@ -78,6 +79,8 @@ export function Profile() {
   }, [activeRange.from, activeRange.to]);
 
   const [goalAchievementState, setGoalAchievementState] = useState(() => readGoalAchievements());
+  const [selectedAchievementGoalId, setSelectedAchievementGoalId] = useState<string | null>(null);
+  const [showAllAchievements, setShowAllAchievements] = useState(false);
 
   useEffect(() => {
     if (!data) {
@@ -116,10 +119,6 @@ export function Profile() {
           goalBadges.push({ label: "First Goal Completed", tone: "success" });
         }
 
-        if (goal.name.toLowerCase().includes("emergency fund")) {
-          goalBadges.push({ label: "Emergency Fund Secured", tone: "neutral" });
-        }
-
         if (!goalBadges.length) {
           goalBadges.push({ label: "Target Reached", tone: "success" });
         }
@@ -129,7 +128,7 @@ export function Profile() {
           progress,
           completedAt: achievement.completed_at,
           categoryLabel: categoryLookup.get(goal.bucket_id) ?? progress.bucket_name ?? goal.bucket_id,
-          milestonesCompleted: completedMilestones(progress.progress_percent),
+          milestonesCompleted: countCompletedGoalMilestones(progress),
           badges: goalBadges,
         };
       })
@@ -139,6 +138,10 @@ export function Profile() {
     return completedEntries;
   }, [data, goalAchievementState]);
   const completedMilestonesCount = completedGoals.reduce((total, item) => total + item.milestonesCompleted, 0);
+  const visibleCompletedGoals = showAllAchievements
+    ? completedGoals
+    : completedGoals.slice(0, VISIBLE_ACHIEVEMENTS_LIMIT);
+  const selectedAchievement = completedGoals.find((item) => item.goal.id === selectedAchievementGoalId) ?? null;
 
   return (
     <PageShell
@@ -193,7 +196,15 @@ export function Profile() {
             </Card>
           </section>
 
-          <Card title="Goals Achieved" subtitle="Completed goal milestones and unlocked achievements.">
+          <Card
+            title="Goals Achieved"
+            subtitle="Completed goal milestones and unlocked achievements."
+            actions={completedGoals.length > VISIBLE_ACHIEVEMENTS_LIMIT ? (
+              <Button type="button" variant="ghost" onClick={() => setShowAllAchievements((current) => !current)}>
+                {showAllAchievements ? "Show recent only" : "View all achievements -&gt;"}
+              </Button>
+            ) : undefined}
+          >
             {completedGoals.length ? (
               <div className="space-y-5">
                 <div className="grid gap-3 md:grid-cols-3">
@@ -211,55 +222,29 @@ export function Profile() {
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  {completedGoals.map((item) => (
-                    <div
+                <div className="space-y-2">
+                  {visibleCompletedGoals.map((item) => (
+                    <button
                       key={item.goal.id}
-                      className="rounded-2xl border border-[var(--border-color)] p-4 shadow-sm"
+                      type="button"
+                      className="flex w-full items-start justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-left transition hover:shadow-sm"
                       style={{ background: "var(--surface-plain)" }}
+                      onClick={() => setSelectedAchievementGoalId(item.goal.id)}
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="text-base font-semibold text-[var(--text-strong)]">{item.goal.name}</div>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <Badge tone="neutral">{item.categoryLabel}</Badge>
-                            {item.badges.map((badge) => (
-                              <Badge key={`${item.goal.id}-${badge.label}`} tone={badge.tone}>{badge.label}</Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <Badge tone="success">Target Reached</Badge>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 md:grid-cols-[1.2fr,1.2fr,0.8fr]">
-                        <div>
-                          <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Target amount</div>
-                          <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(item.goal.target_amount)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress achieved</div>
-                          <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">
-                            {formatCurrency(item.progress.current_amount)} / {formatCurrency(item.goal.target_amount)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Milestones completed</div>
-                          <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{item.milestonesCompleted} of 3</div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-[var(--text-strong)]">{item.goal.name}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                          <span>{item.categoryLabel}</span>
+                          {item.badges.map((badge) => (
+                            <Badge key={`${item.goal.id}-${badge.label}`} tone={badge.tone}>{badge.label}</Badge>
+                          ))}
+                          <Badge tone="success">Target Reached</Badge>
+                          {item.goal.active === false ? <Badge tone="neutral">Archived</Badge> : null}
+                          <span>{new Date(item.completedAt).toLocaleDateString()}</span>
                         </div>
                       </div>
-
-                      <div className="mt-4">
-                        <div
-                          className="h-2 overflow-hidden rounded-full"
-                          style={{ background: "var(--surface-elevated)" }}
-                        >
-                          <div
-                            className="h-full rounded-full bg-[var(--primary-color)]"
-                            style={{ width: `${Math.min(item.progress.progress_percent, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
+                      <div className="shrink-0 text-sm text-[var(--text-muted)]">View</div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -270,6 +255,67 @@ export function Profile() {
               />
             )}
           </Card>
+
+          {selectedAchievement ? (
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 px-4 py-6">
+              <div
+                className="w-full max-w-2xl rounded-[1.75rem] border border-[var(--border-color)] p-5 shadow-xl"
+                style={{ background: "var(--surface-color)" }}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-lg font-semibold text-[var(--text-strong)]">{selectedAchievement.goal.name}</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge tone="neutral">{selectedAchievement.categoryLabel}</Badge>
+                      <Badge tone="success">Target Reached</Badge>
+                      {selectedAchievement.goal.active === false ? <Badge tone="neutral">Archived</Badge> : null}
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="min-h-9 min-w-9 rounded-full px-0 text-[var(--text-muted)] hover:bg-[var(--surface-plain)] hover:text-[var(--text-strong)]"
+                    aria-label="Close achievement details"
+                    onClick={() => setSelectedAchievementGoalId(null)}
+                  >
+                    X
+                  </Button>
+                </div>
+
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Target amount</div>
+                    <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(selectedAchievement.goal.target_amount)}</div>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress achieved</div>
+                    <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">
+                      {formatCurrency(selectedAchievement.progress.current_amount)} / {formatCurrency(selectedAchievement.goal.target_amount)}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Milestone breakdown</div>
+                    <div className="mt-2 space-y-2">
+                      {getGoalMilestones(selectedAchievement.progress).map((milestone) => (
+                        <div key={milestone.id} className="flex items-center justify-between gap-3 text-sm">
+                          <span className={milestone.completed ? "text-[var(--text-strong)]" : "text-[var(--text-muted)]"}>
+                            {milestone.label}
+                          </span>
+                          <span className={milestone.completed ? "text-emerald-600" : "text-[var(--text-muted)]"}>
+                            {milestone.completed ? "✓" : "○"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Completed on</div>
+                    <div className="mt-2 text-sm text-[var(--text-strong)]">{new Date(selectedAchievement.completedAt).toLocaleDateString()}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
       {!isLoading && !error && !data ? (

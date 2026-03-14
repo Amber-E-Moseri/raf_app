@@ -19,6 +19,7 @@ import { Input } from "../components/ui/Input";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { formatCurrency } from "../lib/format";
 import {
+  getGoalMilestones,
   markGoalCelebrationSeen,
   readGoalAchievements,
   syncGoalAchievements,
@@ -114,6 +115,14 @@ function goalStatusLabel(progress: GoalProgress | null) {
   return "Early progress";
 }
 
+function nextMilestoneLabel(progress: GoalProgress | null) {
+  return getGoalMilestones(progress).find((milestone) => !milestone.completed)?.label ?? "All milestones completed";
+}
+
+function goalProgressFill() {
+  return "color-mix(in srgb, var(--primary-color) 72%, var(--text-strong))";
+}
+
 export function Goals() {
   const { activeMonthLabel, activeRange } = usePeriod();
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
@@ -121,6 +130,7 @@ export function Goals() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [expandedRecentActivity, setExpandedRecentActivity] = useState<Record<string, boolean>>({});
   const [celebratingGoalIds, setCelebratingGoalIds] = useState<Record<string, boolean>>({});
   const [goalCelebrationMessages, setGoalCelebrationMessages] = useState<Record<string, boolean>>({});
@@ -344,6 +354,11 @@ export function Goals() {
     }));
   }
 
+  const selectedGoal = activeGoals.find((goal) => goal.id === selectedGoalId) ?? null;
+  const selectedGoalProgress = selectedGoal ? (progressLookup.get(selectedGoal.id) ?? null) : null;
+  const selectedGoalMilestones = getGoalMilestones(selectedGoalProgress);
+  const selectedGoalRecentTransactions = selectedGoal ? (recentActivityByGoalId.get(selectedGoal.id) ?? []).slice(0, 5) : [];
+
   async function handleSubmit() {
     if (!canSubmit) {
       return;
@@ -501,6 +516,14 @@ export function Goals() {
                             ) : null}
                           </div>
                           <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="bg-[var(--surface-plain)] text-[var(--text-strong)] hover:bg-[var(--surface-elevated)]"
+                              onClick={() => setSelectedGoalId(goal.id)}
+                            >
+                              View details
+                            </Button>
                             <Button type="button" variant="secondary" onClick={() => startEdit(goal)}>
                               Edit
                             </Button>
@@ -539,8 +562,8 @@ export function Goals() {
                             style={{ background: "var(--surface-elevated)" }}
                           >
                             <div
-                              className="h-full rounded-full bg-[var(--primary-color)] transition-[width] duration-200"
-                              style={{ width: `${progressPercent}%` }}
+                              className="h-full rounded-full transition-[width] duration-200"
+                              style={{ width: `${progressPercent}%`, background: goalProgressFill() }}
                             />
                           </div>
                         </div>
@@ -732,13 +755,144 @@ export function Goals() {
 
             <Card title="Planning Notes" subtitle="Goals help you track savings progress without moving money outside RAF.">
               <div className="space-y-3 text-sm text-[var(--text-muted)]">
-                <p>Saved so far reflects how much is currently sitting in the linked bucket for this snapshot.</p>
-                <p>If the bucket grows past the target, the goal stays at 100% and the extra money simply remains in that bucket.</p>
-                <p>Use goals as simple savings targets connected to your allocation plan.</p>
+                <p>Paid so far is based only on transactions explicitly linked to the goal.</p>
+                <p>Linked bucket and bucket balance stay visible for planning context, but they do not count as goal progress on their own.</p>
+                <p>Each goal tracks just three milestones so progress stays simple and easy to follow.</p>
               </div>
             </Card>
           </div>
         </section>
+      ) : null}
+
+      {selectedGoal && selectedGoalProgress ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 px-4 py-6">
+          <div
+            className="w-full max-w-3xl rounded-[1.75rem] border border-[var(--border-color)] p-5 shadow-xl"
+            style={{ background: "var(--surface-color)" }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-lg font-semibold text-[var(--text-strong)]">{selectedGoal.name}</div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Badge tone="neutral">
+                    {categoryLookup.get(selectedGoal.bucket_id)?.label ?? selectedGoalProgress.bucket_name ?? selectedGoal.bucket_id}
+                  </Badge>
+                  <Badge tone={goalStatusTone(selectedGoalProgress)}>{goalStatusLabel(selectedGoalProgress)}</Badge>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                className="min-h-9 min-w-9 rounded-full px-0 text-[var(--text-muted)] hover:bg-[var(--surface-plain)] hover:text-[var(--text-strong)]"
+                aria-label="Close goal details"
+                onClick={() => setSelectedGoalId(null)}
+              >
+                X
+              </Button>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Target amount</div>
+                <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(selectedGoal.target_amount)}</div>
+              </div>
+              <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Paid so far</div>
+                <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">
+                  {formatCurrency(selectedGoalProgress.current_amount)}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+              <div className="flex items-center justify-between gap-3 text-sm text-[var(--text-muted)]">
+                <span>Progress</span>
+                <span>{Math.max(0, Math.min(selectedGoalProgress.progress_percent, 100)).toFixed(0)}%</span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-elevated)" }}>
+                <div
+                  className="h-full rounded-full transition-[width] duration-200"
+                  style={{
+                    width: `${Math.max(0, Math.min(selectedGoalProgress.progress_percent, 100))}%`,
+                    background: goalProgressFill(),
+                  }}
+                />
+              </div>
+              <p className="mt-3 text-sm italic text-[var(--text-muted)]">
+                Next milestone: {nextMilestoneLabel(selectedGoalProgress)}
+              </p>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+              <div className="text-sm font-semibold text-[var(--text-strong)]">Milestones</div>
+              <div className="mt-3 space-y-2">
+                {selectedGoalMilestones.map((milestone) => (
+                  <div
+                    key={milestone.id}
+                    className="flex items-center justify-between gap-3 rounded-2xl border px-3 py-2"
+                    style={{
+                      background: milestone.completed ? "var(--badge-success-bg)" : "var(--surface-color)",
+                      borderColor: milestone.completed ? "var(--badge-success-ring)" : "var(--border-color)",
+                    }}
+                  >
+                    <div className={`text-sm ${milestone.completed ? "text-[var(--badge-success-text)]" : "text-[var(--text-muted)]"}`}>
+                      {milestone.label}
+                    </div>
+                    <div className={`text-sm font-semibold ${milestone.completed ? "text-[var(--badge-success-text)]" : "text-[var(--text-muted)]"}`}>
+                      {milestone.completed ? "✓" : "○"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 text-left"
+                onClick={() => selectedGoal && toggleRecentActivity(selectedGoal.id)}
+              >
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-strong)]">Recent transactions</div>
+                  <div className="mt-1 text-xs italic text-[var(--text-muted)]">Latest 5 goal-linked items</div>
+                </div>
+                <div className="text-sm text-[var(--text-muted)]">
+                  {expandedRecentActivity[selectedGoal.id] ? "Hide" : "Show"} {selectedGoalRecentTransactions.length ? `(${selectedGoalRecentTransactions.length})` : ""}
+                </div>
+              </button>
+              {expandedRecentActivity[selectedGoal.id] ? (
+                selectedGoalRecentTransactions.length ? (
+                  <div className="mt-3 space-y-2">
+                    {selectedGoalRecentTransactions.map((transaction) => (
+                      <div
+                        key={transaction.id}
+                        className="flex items-start justify-between gap-3 border-b border-[var(--border-color)] pb-2 last:border-b-0 last:pb-0"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-[var(--text-strong)]">{transaction.description}</div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                            <span>{transaction.date}</span>
+                            {transaction.source === "pdf_import" ? <span>PDF import</span> : null}
+                          </div>
+                        </div>
+                        <div className={`shrink-0 text-sm font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
+                          {transaction.direction === "credit" ? "+" : "-"}
+                          {formatCurrency(transaction.amount)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-[var(--text-muted)]">No goal-linked transactions for {activeMonthLabel}.</p>
+                )
+              ) : null}
+            </div>
+
+            {selectedGoal.notes ? (
+              <p className="mt-4 text-sm italic text-[var(--text-muted)]">{selectedGoal.notes}</p>
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </PageShell>
   );
