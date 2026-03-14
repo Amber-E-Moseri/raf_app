@@ -154,7 +154,7 @@ export function AllocationPreferences() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [updateEndpointMissing, setUpdateEndpointMissing] = useState(false);
-  const [expandedAdvanced, setExpandedAdvanced] = useState<Record<string, boolean>>({});
+  const [isAdvancedMode, setIsAdvancedMode] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newCategoryForm, setNewCategoryForm] = useState<NewCategoryFormState>(DEFAULT_NEW_CATEGORY_FORM);
 
@@ -232,13 +232,6 @@ export function AllocationPreferences() {
     setSaveSuccess(null);
   }
 
-  function toggleAdvanced(id: string) {
-    setExpandedAdvanced((current) => ({
-      ...current,
-      [id]: !current[id],
-    }));
-  }
-
   function openAddCategoryModal() {
     setNewCategoryForm(DEFAULT_NEW_CATEGORY_FORM);
     setIsAddModalOpen(true);
@@ -249,6 +242,12 @@ export function AllocationPreferences() {
   function closeAddCategoryModal() {
     setIsAddModalOpen(false);
     setNewCategoryForm(DEFAULT_NEW_CATEGORY_FORM);
+  }
+
+  function resetDrafts() {
+    setSaveError(null);
+    setSaveSuccess(null);
+    void loadCategories();
   }
 
   function addCategoryFromModal() {
@@ -263,22 +262,17 @@ export function AllocationPreferences() {
     });
 
     setCategories((current) => [...current, draft]);
-    setExpandedAdvanced((current) => ({
-      ...current,
-      [draft.id]: false,
-    }));
     closeAddCategoryModal();
   }
 
   function removeDraftCategory(id: string) {
     setCategories((current) => current.filter((category) => category.id !== id));
-    setExpandedAdvanced((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
     setSaveError(null);
     setSaveSuccess(null);
+  }
+
+  function deleteCategory(id: string) {
+    removeDraftCategory(id);
   }
 
   async function handleSave() {
@@ -320,14 +314,9 @@ export function AllocationPreferences() {
       title="Allocation Preferences"
       description="Adjust bucket percentages and keep the active total balanced."
       actions={(
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="secondary" onClick={openAddCategoryModal}>
-            Add Category
-          </Button>
-          <Button type="button" disabled={!canSave || isSaving} onClick={() => void handleSave()}>
-            {isSaving ? "Saving..." : "Save Preferences"}
-          </Button>
-        </div>
+        <Button type="button" variant="ghost" onClick={() => setIsAdvancedMode((current) => !current)}>
+          {isAdvancedMode ? "Hide Advanced" : "Show Advanced"}
+        </Button>
       )}
     >
       <section className="grid gap-4">
@@ -385,116 +374,100 @@ export function AllocationPreferences() {
               {categories.map((category) => {
                 const errors = validation.get(category.id) ?? {};
                 const percentInput = toPercentInput(category.allocationPercent);
-                const isAdvancedOpen = expandedAdvanced[category.id] ?? false;
 
                 return (
                   <div
                     key={category.id}
-                    className={`rounded-3xl border border-stone-200 bg-stone-50 p-5 transition ${category.isActive ? "" : "opacity-80"}`.trim()}
+                    className={`rounded-3xl border border-stone-200 bg-stone-50 p-4 transition ${category.isActive ? "" : "opacity-70"}`.trim()}
                   >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <label className="block">
-                              <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
-                                Category name
-                              </span>
-                              <input
-                                className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                value={category.label}
-                                onChange={(event) => updateCategory(category.id, (current) => {
-                                  const nextLabel = event.target.value;
-                                  return {
-                                    ...current,
-                                    label: nextLabel,
-                                    slug: current.isNew && !current.slugEdited ? slugify(nextLabel) : current.slug,
-                                  };
-                                })}
-                              />
-                            </label>
-                            {errors.label ? <p className="mt-2 text-xs text-rose-600">{errors.label}</p> : null}
-                          </div>
+                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr),132px,180px,180px] xl:items-center">
+                      <div className="min-w-0">
+                        <label className="block">
+                          <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                            Category name
+                          </span>
+                          <input
+                            className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                            value={category.label}
+                            onChange={(event) => updateCategory(category.id, (current) => {
+                              const nextLabel = event.target.value;
+                              return {
+                                ...current,
+                                label: nextLabel,
+                                slug: current.isNew && !current.slugEdited ? slugify(nextLabel) : current.slug,
+                              };
+                            })}
+                          />
+                        </label>
+                        {errors.label ? <p className="mt-2 text-xs text-rose-600">{errors.label}</p> : null}
+                      </div>
+
+                      <label className="block">
+                        <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                          Percentage
+                        </span>
+                        <div className="relative">
+                          <input
+                            className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 pr-10 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={percentInput}
+                            onChange={(event) => updateCategory(category.id, (current) => ({
+                              ...current,
+                              allocationPercent: toFractionString(event.target.value),
+                            }))}
+                          />
+                          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-stone-500">%</span>
+                        </div>
+                        {errors.allocationPercent ? <p className="mt-2 text-xs text-rose-600">{errors.allocationPercent}</p> : null}
+                      </label>
+
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                          Active
+                        </span>
+                        <div className="flex items-center justify-between rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink">
+                          <label className="flex items-center gap-3">
+                            <span className="min-w-[26px] text-xs font-medium uppercase tracking-[0.12em] text-stone-500">
+                              {category.isActive ? "On" : "Off"}
+                            </span>
+                            <input
+                              type="checkbox"
+                              className="peer sr-only"
+                              checked={category.isActive}
+                              onChange={(event) => updateCategory(category.id, (current) => ({
+                                ...current,
+                                isActive: event.target.checked,
+                              }))}
+                            />
+                            <span className="relative inline-flex h-7 w-12 items-center rounded-full bg-stone-300 transition peer-checked:bg-[var(--primary-color)]">
+                              <span className="absolute left-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
+                            </span>
+                          </label>
+                          <Badge tone={category.isActive ? "success" : "neutral"}>
+                            {category.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                          Controls
+                        </span>
+                        <div className="flex items-center justify-between rounded-2xl border border-stone-300 bg-white px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <Badge tone={category.isActive ? "success" : "neutral"}>
-                              {category.isActive ? "Active" : "Inactive"}
-                            </Badge>
                             {category.isSystem ? <Badge tone="warning">System</Badge> : <Badge tone="neutral">Custom</Badge>}
                           </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr),148px,120px]">
-                          <label className="block">
-                            <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
-                              Percentage slider
-                            </span>
-                            <div className="rounded-2xl border border-stone-300 bg-white px-4 py-4">
-                              <input
-                                className="h-2 w-full cursor-pointer accent-[var(--primary-color)]"
-                                type="range"
-                                min="0"
-                                max="100"
-                                step="0.25"
-                                value={percentInput}
-                                onChange={(event) => updateCategory(category.id, (current) => ({
-                                  ...current,
-                                  allocationPercent: toFractionString(event.target.value),
-                                }))}
-                              />
-                            </div>
-                          </label>
-
-                          <label className="block">
-                            <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
-                              Percentage
-                            </span>
-                            <div className="relative">
-                              <input
-                                className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 pr-10 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max="100"
-                                value={percentInput}
-                                onChange={(event) => updateCategory(category.id, (current) => ({
-                                  ...current,
-                                  allocationPercent: toFractionString(event.target.value),
-                                }))}
-                              />
-                              <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-stone-500">%</span>
-                            </div>
-                            {errors.allocationPercent ? <p className="mt-2 text-xs text-rose-600">{errors.allocationPercent}</p> : null}
-                          </label>
-
-                          <div className="flex flex-col gap-3">
-                            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
-                              Controls
-                            </span>
-                            <label className="flex items-center justify-between rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink">
-                              <span>Active</span>
-                              <input
-                                type="checkbox"
-                                checked={category.isActive}
-                                onChange={(event) => updateCategory(category.id, (current) => ({
-                                  ...current,
-                                  isActive: event.target.checked,
-                                }))}
-                              />
-                            </label>
-                            <button
-                              type="button"
-                              className="flex items-center justify-between rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink transition hover:border-stone-400"
-                              onClick={() => toggleAdvanced(category.id)}
-                            >
-                              <span>Advanced settings</span>
-                              <span className="text-base">{isAdvancedOpen ? "v" : ">"}</span>
-                            </button>
-                          </div>
+                          <span className="text-sm text-stone-600">
+                            {isAdvancedMode ? "Advanced open" : "Simple view"}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    {isAdvancedOpen ? (
+                    {isAdvancedMode ? (
                       <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
                         <div className="grid gap-4 md:grid-cols-[1fr,160px,auto]">
                           <label className="block">
@@ -529,20 +502,21 @@ export function AllocationPreferences() {
                             />
                             {errors.sortOrder ? <p className="mt-2 text-xs text-rose-600">{errors.sortOrder}</p> : null}
                           </label>
-                          <div className="flex items-end justify-start">
-                            {category.isNew ? (
+                          <div className="flex items-end justify-start gap-3">
+                            <p className="text-sm text-stone-500">
+                              Backend fields stay tucked away here unless you need them.
+                            </p>
+                            {!category.isSystem ? (
                               <Button
                                 type="button"
                                 variant="ghost"
                                 className="h-auto rounded-2xl px-0 py-0 text-rose-700"
-                                onClick={() => removeDraftCategory(category.id)}
+                                onClick={() => deleteCategory(category.id)}
                               >
-                                Remove category
+                                Delete category
                               </Button>
                             ) : (
-                              <p className="text-sm text-stone-500">
-                                Backend fields stay tucked away here unless you need them.
-                              </p>
+                              <span className="text-xs text-stone-500">System buckets stay protected.</span>
                             )}
                           </div>
                         </div>
@@ -551,6 +525,22 @@ export function AllocationPreferences() {
                   </div>
                 );
               })}
+
+              <div className="flex flex-col gap-4 border-t border-stone-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Button type="button" variant="secondary" onClick={openAddCategoryModal}>
+                    Add Category
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <Button type="button" variant="secondary" onClick={resetDrafts} disabled={isLoading || isSaving}>
+                    Cancel
+                  </Button>
+                  <Button type="button" disabled={!canSave || isSaving} onClick={() => void handleSave()}>
+                    {isSaving ? "Saving..." : "Save Preferences"}
+                  </Button>
+                </div>
+              </div>
             </div>
           ) : null}
         </Card>
