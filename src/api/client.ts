@@ -132,6 +132,40 @@ export async function putJson<T>(
   return parseResponse<T>(response);
 }
 
+export async function patchJson<T>(
+  path: string,
+  body: unknown,
+  headers?: Record<string, string>,
+  options?: RequestOptions,
+): Promise<T> {
+  const response = await performRequest(buildUrl(path, undefined, options), {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options?.headers ?? {}),
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  });
+
+  return parseResponse<T>(response);
+}
+
+export async function deleteJson<T>(
+  path: string,
+  options?: RequestOptions,
+): Promise<T> {
+  const response = await performRequest(buildUrl(path, undefined, options), {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options?.headers ?? {}),
+    },
+  });
+
+  return parseResponse<T>(response);
+}
+
 export async function postForm<T>(
   path: string,
   formData: FormData,

@@ -8,10 +8,18 @@ import { getFixedBills } from "../api/fixedBillsApi";
 import { getGoals } from "../api/goalsApi";
 import {
   classifyImportedTransaction,
+  deleteImportReviewRule,
   getImportedTransactions,
+  updateImportReviewRule,
   importBankStatement,
+  unignoreImportedTransaction,
 } from "../api/importsApi";
 import { createTransaction, getTransactions } from "../api/transactionsApi";
+import {
+  buildImportRuleDraft,
+  ImportRuleEditor,
+  mapRuleDraftToPayload,
+} from "../components/imports/ImportRuleEditor";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { LoadingState } from "../components/feedback/LoadingState";
@@ -42,6 +50,8 @@ import type {
   Goal,
   ImportedTransaction,
   ImportClassificationPayload,
+  ImportReviewRule,
+  ImportReviewSuggestion,
   Transaction,
   TransactionListResponse,
 } from "../lib/types";
@@ -62,7 +72,7 @@ interface ImportReviewDraft {
   fixedBillId: string;
   goalId: string;
   reviewNote: string;
-  rememberChoice: boolean;
+  saveRuleMode: "none" | "suggestion" | "reusable_rule";
   autoApplyRule: boolean;
 }
 
@@ -88,10 +98,6 @@ function importedStatusTone(item: ImportedTransaction) {
     return "warning";
   }
 
-  if (item.classification_type === "duplicate" || item.classification_type === "transfer") {
-    return "neutral";
-  }
-
   if (item.status === "ignored") {
     return "neutral";
   }
@@ -103,28 +109,26 @@ function importedStatusLabel(item: ImportedTransaction) {
   if (item.status === "unreviewed") {
     return "Needs review";
   }
-  if (item.classification_type === "ignore") {
+  if (item.status === "ignored" || item.classification_type === "ignore") {
     return "Ignored";
   }
-  if (item.classification_type === "duplicate") {
-    return "Duplicate";
+  return "Processed";
+}
+
+function importStateNote(item: ImportedTransaction, draft: ImportReviewDraft) {
+  if (item.status === "unreviewed") {
+    if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
+      return "Needs bucket";
+    }
+
+    return "Ready to review";
   }
-  if (item.classification_type === "transfer") {
-    return "Transfer";
+
+  if (item.status === "ignored") {
+    return "Restore this item before editing.";
   }
-  if (item.classification_type === "goal_funding") {
-    return "Goal linked";
-  }
-  if (item.classification_type === "debt_payment") {
-    return "Debt payment";
-  }
-  if (item.classification_type === "fixed_bill_payment") {
-    return "Fixed bill";
-  }
-  if (item.classification_type === "transaction") {
-    return "Approved";
-  }
-  return item.status;
+
+  return "Reviewed in Transactions";
 }
 
 function sortIndicator(active: boolean, direction: SortDirection) {
@@ -144,15 +148,17 @@ function compareValues(left: string | number, right: string | number, direction:
 }
 
 function buildDraftFromImportedRow(item: ImportedTransaction): ImportReviewDraft {
+  const appliedSuggestion = item.suggestion?.auto_apply ? item.suggestion : null;
+
   return {
-    classificationType: (item.suggestion?.classification_type as ImportClassificationPayload["classification_type"]) ?? "transaction",
-    categoryId: item.suggestion?.category_id ?? "",
-    debtId: item.suggestion?.linked_debt_id ?? "",
-    fixedBillId: item.suggestion?.linked_fixed_bill_id ?? "",
-    goalId: item.suggestion?.linked_goal_id ?? "",
+    classificationType: (appliedSuggestion?.classification_type as ImportClassificationPayload["classification_type"]) ?? "transaction",
+    categoryId: appliedSuggestion?.category_id ?? "",
+    debtId: appliedSuggestion?.linked_debt_id ?? "",
+    fixedBillId: appliedSuggestion?.linked_fixed_bill_id ?? "",
+    goalId: appliedSuggestion?.linked_goal_id ?? "",
     reviewNote: "",
-    rememberChoice: item.suggestion != null,
-    autoApplyRule: item.suggestion?.auto_apply ?? false,
+    saveRuleMode: appliedSuggestion?.rule_type ?? "none",
+    autoApplyRule: appliedSuggestion?.auto_apply ?? false,
   };
 }
 
@@ -177,15 +183,32 @@ function primaryReviewLabel(classificationType: ImportClassificationPayload["cla
 }
 
 function importRowStatus(item: ImportedTransaction, draft: ImportReviewDraft) {
-  if (item.status !== "unreviewed") {
-    return { label: "Approved", tone: "success" as const };
+  return {
+    label: importedStatusLabel(item),
+    tone: importedStatusTone(item),
+  } as const;
+}
+
+function canReviewImportedTransaction(item: ImportedTransaction) {
+  return item.status === "unreviewed";
+}
+
+function userFacingReviewError(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("already been reviewed")) {
+    return "This transaction is no longer available for review.";
+  }
+  if (normalized.includes("only ignored imported transactions can be reopened")) {
+    return "Only ignored items can be restored to the review queue.";
+  }
+  if (normalized.includes("not found")) {
+    return "This transaction is no longer available for review.";
+  }
+  if (normalized.includes("route not found")) {
+    return "This action is temporarily unavailable. Refresh the app and try again.";
   }
 
-  if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
-    return { label: "Needs bucket", tone: "warning" as const };
-  }
-
-  return { label: "Ready to approve", tone: "neutral" as const };
+  return message;
 }
 
 export function Transactions() {
@@ -222,11 +245,18 @@ export function Transactions() {
   const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
   const [reviewPendingIds, setReviewPendingIds] = useState<string[]>([]);
   const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
-  const [importsView, setImportsView] = useState<"needs_review" | "processed">("needs_review");
+  const [importsView, setImportsView] = useState<"needs_review" | "ignored" | "processed">("needs_review");
   const [expandedImportIds, setExpandedImportIds] = useState<Record<string, boolean>>({});
   const [bulkBucketId, setBulkBucketId] = useState("");
+  const [bulkRuleMode, setBulkRuleMode] = useState<"none" | "suggestion" | "reusable_rule">("none");
+  const [bulkAutoApply, setBulkAutoApply] = useState(false);
   const [isBulkReviewing, setIsBulkReviewing] = useState(false);
   const [openImportMenuId, setOpenImportMenuId] = useState<string | null>(null);
+  const [openAdvancedMenuId, setOpenAdvancedMenuId] = useState<string | null>(null);
+  const [dismissedRuleEffects, setDismissedRuleEffects] = useState<Record<string, boolean>>({});
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [ruleDrafts, setRuleDrafts] = useState<Record<string, ReturnType<typeof buildImportRuleDraft>>>({});
+  const [pendingRuleId, setPendingRuleId] = useState<string | null>(null);
   const cursor = cursorHistory[cursorHistory.length - 1];
 
   useEffect(() => {
@@ -330,12 +360,21 @@ export function Transactions() {
     [visibleImports],
   );
 
-  const processedImports = useMemo(
-    () => visibleImports.filter((item) => item.status !== "unreviewed"),
+  const ignoredImports = useMemo(
+    () => visibleImports.filter((item) => item.status === "ignored"),
     [visibleImports],
   );
 
-  const importsInView = importsView === "needs_review" ? needsReviewImports : processedImports;
+  const processedImports = useMemo(
+    () => visibleImports.filter((item) => item.status !== "unreviewed" && item.status !== "ignored"),
+    [visibleImports],
+  );
+
+  const importsInView = importsView === "needs_review"
+    ? needsReviewImports
+    : importsView === "ignored"
+      ? ignoredImports
+      : processedImports;
 
   const selectedNeedsReviewItems = useMemo(
     () => needsReviewImports.filter((item) => selectedImportIds.includes(item.id)),
@@ -394,14 +433,65 @@ export function Transactions() {
     setOpenImportMenuId((current) => current === importId ? null : importId);
   }
 
+  function toggleAdvancedMenu(importId: string) {
+    setOpenAdvancedMenuId((current) => current === importId ? null : importId);
+  }
+
   function applySuggestion(item: ImportedTransaction) {
     if (!item.suggestion) {
       return;
     }
 
+    setDismissedRuleEffects((current) => ({
+      ...current,
+      [item.id]: false,
+    }));
     setReviewDrafts((current) => ({
       ...current,
-      [item.id]: buildDraftFromImportedRow(item),
+      [item.id]: {
+        classificationType: item.suggestion?.classification_type as ImportClassificationPayload["classification_type"],
+        categoryId: item.suggestion?.category_id ?? "",
+        debtId: item.suggestion?.linked_debt_id ?? "",
+        fixedBillId: item.suggestion?.linked_fixed_bill_id ?? "",
+        goalId: item.suggestion?.linked_goal_id ?? "",
+        reviewNote: "",
+        saveRuleMode: item.suggestion?.rule_type ?? "none",
+        autoApplyRule: item.suggestion?.auto_apply ?? false,
+      },
+    }));
+  }
+
+  function resetRuleEffect(item: ImportedTransaction) {
+    setDismissedRuleEffects((current) => ({
+      ...current,
+      [item.id]: true,
+    }));
+    setReviewDrafts((current) => ({
+      ...current,
+      [item.id]: {
+        classificationType: "transaction",
+        categoryId: "",
+        debtId: "",
+        fixedBillId: "",
+        goalId: "",
+        reviewNote: "",
+        saveRuleMode: "none",
+        autoApplyRule: false,
+      },
+    }));
+  }
+
+  function getRuleDraft(rule: ImportReviewRule | ImportReviewSuggestion) {
+    return ruleDrafts[rule.id] ?? buildImportRuleDraft(rule);
+  }
+
+  function updateRuleDraft(rule: ImportReviewRule | ImportReviewSuggestion, patch: Partial<ReturnType<typeof buildImportRuleDraft>>) {
+    setRuleDrafts((current) => ({
+      ...current,
+      [rule.id]: {
+        ...(current[rule.id] ?? buildImportRuleDraft(rule)),
+        ...patch,
+      },
     }));
   }
 
@@ -588,8 +678,8 @@ export function Transactions() {
     }
   }
 
-  function buildImportClassificationPayload(item: ImportedTransaction) {
-    const draft = getReviewDraft(item);
+  function buildImportClassificationPayload(item: ImportedTransaction, draftOverride?: ImportReviewDraft) {
+    const draft = draftOverride ?? getReviewDraft(item);
     if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
       throw new Error("Select an allocation bucket before approving this imported row.");
     }
@@ -597,8 +687,9 @@ export function Transactions() {
     const payload: ImportClassificationPayload = {
       classification_type: draft.classificationType,
       review_note: draft.reviewNote.trim() || null,
-      remember_choice: draft.rememberChoice,
-      auto_apply_rule: draft.rememberChoice ? draft.autoApplyRule : false,
+      remember_choice: draft.saveRuleMode !== "none",
+      save_rule_mode: draft.saveRuleMode === "none" ? undefined : draft.saveRuleMode,
+      auto_apply_rule: draft.saveRuleMode === "reusable_rule" ? draft.autoApplyRule : false,
     };
 
     if (requiresCategorySelection(draft.classificationType)) {
@@ -635,18 +726,34 @@ export function Transactions() {
   }
 
   async function handleReviewImportedRow(item: ImportedTransaction) {
+    if (!canReviewImportedTransaction(item)) {
+      setReviewError(item.status === "ignored"
+        ? "This ignored item must be restored before editing."
+        : "This transaction is no longer available for review.");
+      setReviewSuccess(null);
+      return;
+    }
+
     try {
       const payload = buildImportClassificationPayload(item);
       await submitImportedReview(item, payload);
       setReviewSuccess("Imported row reviewed and saved.");
       await reload();
     } catch (requestError) {
-      setReviewError(requestError instanceof Error ? requestError.message : "Imported row review failed.");
+      setReviewError(userFacingReviewError(requestError instanceof Error ? requestError.message : "Imported row review failed."));
       setReviewSuccess(null);
     }
   }
 
   async function handleIgnoreImportedRow(item: ImportedTransaction) {
+    if (!canReviewImportedTransaction(item)) {
+      setReviewError(item.status === "ignored"
+        ? "This transaction is already ignored."
+        : "This transaction is no longer available for review.");
+      setReviewSuccess(null);
+      return;
+    }
+
     const currentDraft = getReviewDraft(item);
 
     setReviewDrafts((current) => ({
@@ -661,14 +768,15 @@ export function Transactions() {
       await submitImportedReview(item, {
         classification_type: "ignore",
         review_note: currentDraft.reviewNote.trim() || null,
-        remember_choice: false,
-        auto_apply_rule: false,
+        remember_choice: currentDraft.saveRuleMode !== "none",
+        save_rule_mode: currentDraft.saveRuleMode === "none" ? undefined : currentDraft.saveRuleMode,
+        auto_apply_rule: currentDraft.saveRuleMode === "reusable_rule" ? currentDraft.autoApplyRule : false,
       });
       setReviewSuccess("Imported row ignored.");
       setOpenImportMenuId(null);
       await reload();
     } catch (requestError) {
-      setReviewError(requestError instanceof Error ? requestError.message : "Ignore action failed.");
+      setReviewError(userFacingReviewError(requestError instanceof Error ? requestError.message : "Ignore action failed."));
       setReviewSuccess(null);
     }
   }
@@ -709,14 +817,20 @@ export function Transactions() {
 
     try {
       for (const item of selectedNeedsReviewItems) {
+        const effectiveDraft: ImportReviewDraft = {
+          ...getReviewDraft(item),
+          saveRuleMode: bulkRuleMode,
+          autoApplyRule: bulkRuleMode === "reusable_rule" ? bulkAutoApply : false,
+        };
         const payload = action === "ignore"
           ? {
             classification_type: "ignore" as const,
-            review_note: getReviewDraft(item).reviewNote.trim() || null,
-            remember_choice: false,
-            auto_apply_rule: false,
+            review_note: effectiveDraft.reviewNote.trim() || null,
+            remember_choice: effectiveDraft.saveRuleMode !== "none",
+            save_rule_mode: effectiveDraft.saveRuleMode === "none" ? undefined : effectiveDraft.saveRuleMode,
+            auto_apply_rule: effectiveDraft.saveRuleMode === "reusable_rule" ? effectiveDraft.autoApplyRule : false,
           }
-          : buildImportClassificationPayload(item);
+          : buildImportClassificationPayload(item, effectiveDraft);
 
         await submitImportedReview(item, payload);
       }
@@ -725,9 +839,85 @@ export function Transactions() {
       setReviewSuccess(`${action === "approve" ? "Approved" : "Ignored"} ${selectedNeedsReviewItems.length} imported row${selectedNeedsReviewItems.length === 1 ? "" : "s"}.`);
       await reload();
     } catch (requestError) {
-      setReviewError(requestError instanceof Error ? requestError.message : "Bulk review failed.");
+      setReviewError(userFacingReviewError(requestError instanceof Error ? requestError.message : "Bulk review failed."));
     } finally {
       setIsBulkReviewing(false);
+    }
+  }
+
+  async function handleUnignoreImportedRow(item: ImportedTransaction) {
+    setReviewPendingIds((current) => [...current, item.id]);
+    setReviewError(null);
+    setReviewSuccess(null);
+
+    try {
+      await unignoreImportedTransaction(item.id);
+      setImportsView("needs_review");
+      setExpandedImportIds((current) => ({ ...current, [item.id]: false }));
+      setOpenImportMenuId(null);
+      setOpenAdvancedMenuId(null);
+      setReviewSuccess("Ignored transaction moved back to the review queue.");
+      await reload();
+    } catch (requestError) {
+      setReviewError(userFacingReviewError(requestError instanceof Error ? requestError.message : "Could not reopen ignored transaction."));
+    } finally {
+      setReviewPendingIds((current) => current.filter((id) => id !== item.id));
+    }
+  }
+
+  async function handleSaveRuleEdits(rule: ImportReviewRule | ImportReviewSuggestion) {
+    const draft = getRuleDraft(rule);
+    setPendingRuleId(rule.id);
+    setReviewError(null);
+    setReviewSuccess(null);
+
+    try {
+      await updateImportReviewRule(rule.id, mapRuleDraftToPayload(draft));
+      setEditingRuleId(null);
+      setReviewSuccess("Import rule updated.");
+      await reload();
+    } catch (requestError) {
+      setReviewError(requestError instanceof Error ? requestError.message : "Import rule update failed.");
+    } finally {
+      setPendingRuleId(null);
+    }
+  }
+
+  async function handleDeleteRule(rule: ImportReviewRule | ImportReviewSuggestion) {
+    setPendingRuleId(rule.id);
+    setReviewError(null);
+    setReviewSuccess(null);
+
+    try {
+      await deleteImportReviewRule(rule.id);
+      setEditingRuleId((current) => current === rule.id ? null : current);
+      setOpenAdvancedMenuId(null);
+      setReviewSuccess("Import rule deleted.");
+      await reload();
+    } catch (requestError) {
+      setReviewError(requestError instanceof Error ? requestError.message : "Import rule delete failed.");
+    } finally {
+      setPendingRuleId(null);
+    }
+  }
+
+  async function handleRuleModeUpdate(rule: ImportReviewRule | ImportReviewSuggestion, nextMode: "suggestion" | "reusable_rule", autoApply: boolean) {
+    setPendingRuleId(rule.id);
+    setReviewError(null);
+    setReviewSuccess(null);
+
+    try {
+      await updateImportReviewRule(rule.id, {
+        rule_type: nextMode,
+        auto_apply: nextMode === "reusable_rule" ? autoApply : false,
+      });
+      setReviewSuccess(nextMode === "suggestion" ? "Rule converted to suggestion only." : autoApply ? "Auto-apply enabled." : "Auto-apply disabled.");
+      setOpenAdvancedMenuId(null);
+      await reload();
+    } catch (requestError) {
+      setReviewError(requestError instanceof Error ? requestError.message : "Import rule update failed.");
+    } finally {
+      setPendingRuleId(null);
     }
   }
 
@@ -1038,6 +1228,17 @@ export function Transactions() {
               <button
                 type="button"
                 className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
+                  importsView === "ignored"
+                    ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
+                    : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
+                }`}
+                onClick={() => setImportsView("ignored")}
+              >
+                Ignored ({ignoredImports.length})
+              </button>
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
                   importsView === "processed"
                     ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
                     : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
@@ -1080,28 +1281,43 @@ export function Transactions() {
                       {hasSelectedNeedsReview ? (
                         <div className="flex flex-wrap items-center gap-3">
                           <Badge tone="warning">{selectedNeedsReviewItems.length} selected</Badge>
-                          <label className="flex items-center gap-2 text-sm text-stone-600">
-                            <span>Assign bucket</span>
-                            <select
-                              className="rounded-full border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                              value={bulkBucketId}
-                              onChange={(event) => setBulkBucketId(event.target.value)}
-                            >
-                              <option value="">Choose bucket</option>
-                              {data.categories.map((category) => (
-                                <option key={category.id} value={category.id}>{category.label}</option>
-                              ))}
-                            </select>
-                          </label>
+                          <select
+                            className="rounded-full border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                            value={bulkBucketId}
+                            onChange={(event) => setBulkBucketId(event.target.value)}
+                          >
+                            <option value="">Choose bucket</option>
+                            {data.categories.map((category) => (
+                              <option key={category.id} value={category.id}>{category.label}</option>
+                            ))}
+                          </select>
                           <Button type="button" variant="secondary" disabled={!bulkBucketId || isBulkReviewing} onClick={handleBulkAssignBucket}>
-                            Assign bucket
+                            Assign
                           </Button>
+                          <select
+                            className="rounded-full border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                            value={bulkRuleMode}
+                            onChange={(event) => setBulkRuleMode(event.target.value as "none" | "suggestion" | "reusable_rule")}
+                          >
+                            <option value="none">No saved memory</option>
+                            <option value="suggestion">Suggest this choice next time</option>
+                            <option value="reusable_rule">Save as reusable rule</option>
+                          </select>
+                          <label className="inline-flex items-center gap-2 text-sm text-stone-600">
+                            <input
+                              type="checkbox"
+                              checked={bulkAutoApply}
+                              disabled={bulkRuleMode !== "reusable_rule"}
+                              onChange={(event) => setBulkAutoApply(event.target.checked)}
+                            />
+                            <span>{bulkAutoApply ? "Disable auto-apply" : "Enable auto-apply"}</span>
+                          </label>
                           <Button type="button" disabled={isBulkReviewing} onClick={() => void handleBulkReview("approve")}>
                             {isBulkReviewing ? <LoadingSpinner inline size="sm" label="Approving..." /> : "Approve Selected"}
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-sm text-stone-500">Select rows to assign, approve, ignore, or prefill from remembered rules.</span>
+                        <span className="text-sm text-stone-500">Select rows to assign a bucket and approve them in bulk.</span>
                       )}
                     </div>
                   </div>
@@ -1126,11 +1342,15 @@ export function Transactions() {
                       const status = importRowStatus(item, draft);
                       const isExpanded = expandedImportIds[item.id] ?? false;
                       const needsReview = item.status === "unreviewed";
+                      const isIgnored = item.status === "ignored";
                       const isMenuOpen = openImportMenuId === item.id;
+                      const isAdvancedOpen = openAdvancedMenuId === item.id;
+                      const activeRule = item.suggestion && !dismissedRuleEffects[item.id] ? item.suggestion : null;
+                      const isRuleEditing = editingRuleId === activeRule?.id;
 
                       return (
                         <div key={item.id}>
-                          <div className="grid gap-2 px-4 py-2.5 lg:grid-cols-[36px,88px,minmax(0,320px),112px,132px,132px,112px,44px] lg:items-start">
+                          <div className={`grid gap-2 px-4 py-2.5 lg:grid-cols-[36px,88px,minmax(0,320px),112px,132px,132px,112px,44px] lg:items-start ${isIgnored ? "bg-stone-50/70" : ""}`}>
                             <div className="flex items-center justify-center">
                               {needsReview ? (
                                 <input
@@ -1149,10 +1369,15 @@ export function Transactions() {
                               </div>
                               <div className="mt-1 flex flex-wrap items-center gap-2">
                                 <Badge tone={status.tone}>{status.label}</Badge>
-                                {!needsReview ? <Badge tone={importedStatusTone(item)}>{importedStatusLabel(item)}</Badge> : null}
-                                {item.suggestion ? <Badge tone="success">Suggested</Badge> : null}
+                                {activeRule?.auto_apply ? <Badge tone="success">Applied by rule</Badge> : null}
+                                {activeRule && !activeRule.auto_apply ? <Badge tone="neutral">{activeRule.rule_type === "reusable_rule" ? "Reusable rule" : "Suggestion"}</Badge> : null}
                               </div>
                               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+                                <span>{importStateNote(item, draft)}</span>
+                                {activeRule ? <span>Rule: "{activeRule.match_value ?? activeRule.normalized_description}"</span> : null}
+                                {activeRule?.auto_apply ? (
+                                  <button type="button" className="text-[var(--primary-color)]" onClick={() => resetRuleEffect(item)}>Undo</button>
+                                ) : null}
                                 {item.review_note ? <span>Note: {item.review_note}</span> : null}
                               </div>
                             </div>
@@ -1190,26 +1415,47 @@ export function Transactions() {
                                 >
                                   {isPending ? <LoadingSpinner inline size="sm" label="Saving..." /> : primaryReviewLabel(draft.classificationType)}
                                 </Button>
+                              ) : isIgnored ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="min-h-9 rounded-full px-3 py-1.5 text-xs"
+                                  disabled={isPending}
+                                  onClick={() => void handleUnignoreImportedRow(item)}
+                                >
+                                  Unignore
+                                </Button>
                               ) : (
                                 <div className="text-sm text-stone-500">Processed</div>
                               )}
                             </div>
                             <div className="relative flex justify-end">
                               <Button type="button" variant="ghost" className="min-h-9 rounded-full px-2 py-1.5 text-base leading-none" onClick={() => toggleImportMenu(item.id)}>
-                                ...
+                                •••
                               </Button>
                               {isMenuOpen ? (
-                                <div className="absolute right-0 top-10 z-10 min-w-[140px] rounded-2xl border border-stone-200 bg-white p-2 shadow-lg">
-                                  <button
-                                    type="button"
-                                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
-                                    onClick={() => {
-                                      setExpandedImportIds((current) => ({ ...current, [item.id]: true }));
-                                      setOpenImportMenuId(null);
-                                    }}
-                                  >
-                                    Edit
-                                  </button>
+                                <div className="absolute right-0 top-10 z-10 min-w-[190px] rounded-2xl border border-stone-200 bg-white p-2 shadow-lg">
+                                  {needsReview ? (
+                                    <button
+                                      type="button"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                      onClick={() => {
+                                        setExpandedImportIds((current) => ({ ...current, [item.id]: true }));
+                                        setOpenImportMenuId(null);
+                                      }}
+                                    >
+                                      Review transaction
+                                    </button>
+                                  ) : null}
+                                  {isIgnored ? (
+                                    <button
+                                      type="button"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                      onClick={() => void handleUnignoreImportedRow(item)}
+                                    >
+                                      Unignore
+                                    </button>
+                                  ) : null}
                                   <button
                                     type="button"
                                     className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
@@ -1226,8 +1472,63 @@ export function Transactions() {
                                       className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-700 hover:bg-stone-50"
                                       onClick={() => void handleIgnoreImportedRow(item)}
                                     >
-                                      Ignore
+                                      Ignore transaction
                                     </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                    onClick={() => toggleAdvancedMenu(item.id)}
+                                  >
+                                    Advanced {isAdvancedOpen ? "v" : ">"}
+                                  </button>
+                                  {isAdvancedOpen && activeRule ? (
+                                    <div className="mt-2 space-y-1 border-t border-stone-100 pt-2">
+                                      {activeRule.auto_apply ? (
+                                        <button
+                                          type="button"
+                                          className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                          onClick={() => void handleRuleModeUpdate(activeRule, "reusable_rule", false)}
+                                        >
+                                          Disable auto-apply
+                                        </button>
+                                      ) : activeRule.rule_type === "reusable_rule" ? (
+                                        <button
+                                          type="button"
+                                          className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                          onClick={() => void handleRuleModeUpdate(activeRule, "reusable_rule", true)}
+                                        >
+                                          Enable auto-apply
+                                        </button>
+                                      ) : null}
+                                      {activeRule.rule_type !== "suggestion" ? (
+                                        <button
+                                          type="button"
+                                          className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                          onClick={() => void handleRuleModeUpdate(activeRule, "suggestion", false)}
+                                        >
+                                          Convert to suggestion only
+                                        </button>
+                                      ) : null}
+                                      <button
+                                        type="button"
+                                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                        onClick={() => {
+                                          setEditingRuleId(activeRule.id);
+                                          setExpandedImportIds((current) => ({ ...current, [item.id]: true }));
+                                          setOpenImportMenuId(null);
+                                        }}
+                                      >
+                                        Edit rule
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-700 hover:bg-stone-50"
+                                        onClick={() => void handleDeleteRule(activeRule)}
+                                      >
+                                        Delete rule
+                                      </button>
+                                    </div>
                                   ) : null}
                                 </div>
                               ) : null}
@@ -1236,138 +1537,217 @@ export function Transactions() {
 
                           {isExpanded ? (
                             <div className="border-t border-stone-100 bg-stone-50 px-4 py-4">
-                              {item.suggestion ? (
+                              {activeRule ? (
                                 <div className="mb-4 rounded-2xl border border-stone-200 bg-white px-4 py-3">
                                   <div className="flex flex-wrap items-center justify-between gap-3">
                                     <div className="text-sm text-stone-600">
-                                      Remembered from a prior review of "{item.normalized_description ?? item.description.toLowerCase()}".
+                                      {activeRule.auto_apply ? "Applied by rule" : "Suggestion available"}: "{activeRule.match_value ?? activeRule.normalized_description}".
                                     </div>
+                                    <div className="flex flex-wrap gap-2">
                                     {needsReview ? (
                                       <Button type="button" variant="secondary" onClick={() => applySuggestion(item)}>
                                         Use suggestion
                                       </Button>
                                     ) : null}
+                                    {activeRule.auto_apply ? (
+                                      <Button type="button" variant="secondary" onClick={() => resetRuleEffect(item)}>
+                                        Undo
+                                      </Button>
+                                    ) : null}
+                                    </div>
                                   </div>
                                 </div>
                               ) : null}
 
-                              {needsReview ? (
-                                <div className="grid gap-4 lg:grid-cols-[220px,220px,220px,1fr]">
-                                  <label className="block">
-                                    <span className="mb-2 block text-sm font-medium text-raf-ink">Review action</span>
-                                    <select
-                                      className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                      value={draft.classificationType}
-                                      disabled={isPending || isBulkReviewing}
-                                      onChange={(event) => updateReviewDraft(item, {
-                                        classificationType: event.target.value as ImportClassificationPayload["classification_type"],
-                                        categoryId: "",
-                                        debtId: "",
-                                        fixedBillId: "",
-                                        goalId: "",
-                                      })}
-                                    >
-                                      <option value="transaction">Approve as transaction</option>
-                                      <option value="debt_payment">Link to debt payment</option>
-                                      <option value="fixed_bill_payment">Link to fixed bill</option>
-                                      <option value="goal_funding">Link to goal funding</option>
-                                      <option value="duplicate">Mark duplicate</option>
-                                      <option value="transfer">Mark transfer</option>
-                                      <option value="ignore">Ignore</option>
-                                    </select>
-                                  </label>
-
-                                  {requiresDebtSelection(draft.classificationType) ? (
+                              {needsReview && activeRule && isRuleEditing ? (
+                                <ImportRuleEditor
+                                  categories={data.categories}
+                                  debts={data.debts}
+                                  fixedBills={data.fixedBills}
+                                  goals={data.goals}
+                                  draft={getRuleDraft(activeRule)}
+                                  isSaving={pendingRuleId === activeRule.id}
+                                  saveLabel="Save rule"
+                                  onChange={(patch) => updateRuleDraft(activeRule, patch)}
+                                  onCancel={() => setEditingRuleId(null)}
+                                  onSave={() => void handleSaveRuleEdits(activeRule)}
+                                />
+                              ) : needsReview ? (
+                                <div className="rounded-2xl border border-stone-200 bg-white p-4">
+                                  <div className="grid gap-4 md:grid-cols-2">
                                     <label className="block">
-                                      <span className="mb-2 block text-sm font-medium text-raf-ink">Debt</span>
+                                      <span className="mb-2 block text-sm font-medium text-raf-ink">Review action</span>
                                       <select
                                         className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                        value={draft.debtId}
+                                        value={draft.classificationType}
                                         disabled={isPending || isBulkReviewing}
-                                        onChange={(event) => updateReviewDraft(item, { debtId: event.target.value })}
+                                        onChange={(event) => updateReviewDraft(item, {
+                                          classificationType: event.target.value as ImportClassificationPayload["classification_type"],
+                                          categoryId: "",
+                                          debtId: "",
+                                          fixedBillId: "",
+                                          goalId: "",
+                                        })}
                                       >
-                                        <option value="">Select debt</option>
-                                        {data.debts.map((debt) => (
-                                          <option key={debt.id} value={debt.id}>{debt.name}</option>
-                                        ))}
+                                        <option value="transaction">Approve as transaction</option>
+                                        <option value="debt_payment">Link to debt payment</option>
+                                        <option value="fixed_bill_payment">Link to fixed bill</option>
+                                        <option value="goal_funding">Link to goal funding</option>
+                                        <option value="duplicate">Mark duplicate</option>
+                                        <option value="transfer">Mark transfer</option>
+                                        <option value="ignore">Ignore</option>
                                       </select>
                                     </label>
-                                  ) : null}
 
-                                  {requiresFixedBillSelection(draft.classificationType) ? (
-                                    <label className="block">
-                                      <span className="mb-2 block text-sm font-medium text-raf-ink">Fixed bill</span>
-                                      <select
-                                        className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                        value={draft.fixedBillId}
-                                        disabled={isPending || isBulkReviewing}
-                                        onChange={(event) => updateReviewDraft(item, { fixedBillId: event.target.value })}
-                                      >
-                                        <option value="">Select fixed bill</option>
-                                        {data.fixedBills.map((bill) => (
-                                          <option key={bill.id} value={bill.id}>{bill.name}</option>
-                                        ))}
-                                      </select>
-                                    </label>
-                                  ) : null}
+                                    {requiresCategorySelection(draft.classificationType) ? (
+                                      <label className="block">
+                                        <span className="mb-2 block text-sm font-medium text-raf-ink">Bucket</span>
+                                        <select
+                                          className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                          value={draft.categoryId}
+                                          disabled={isPending || isBulkReviewing}
+                                          onChange={(event) => updateReviewDraft(item, { categoryId: event.target.value })}
+                                        >
+                                          <option value="">Select bucket</option>
+                                          {data.categories.map((category) => (
+                                            <option key={category.id} value={category.id}>{category.label}</option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                    ) : null}
 
-                                  {requiresGoalSelection(draft.classificationType) ? (
-                                    <label className="block">
-                                      <span className="mb-2 block text-sm font-medium text-raf-ink">Goal</span>
-                                      <select
-                                        className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                                        value={draft.goalId}
-                                        disabled={isPending || isBulkReviewing}
-                                        onChange={(event) => updateReviewDraft(item, { goalId: event.target.value })}
-                                      >
-                                        <option value="">Select goal</option>
-                                        {data.goals.map((goal) => (
-                                          <option key={goal.id} value={goal.id}>{goal.name}</option>
-                                        ))}
-                                      </select>
-                                    </label>
-                                  ) : null}
+                                    {requiresDebtSelection(draft.classificationType) ? (
+                                      <label className="block">
+                                        <span className="mb-2 block text-sm font-medium text-raf-ink">Debt</span>
+                                        <select
+                                          className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                          value={draft.debtId}
+                                          disabled={isPending || isBulkReviewing}
+                                          onChange={(event) => updateReviewDraft(item, { debtId: event.target.value })}
+                                        >
+                                          <option value="">Select debt</option>
+                                          {data.debts.map((debt) => (
+                                            <option key={debt.id} value={debt.id}>{debt.name}</option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                    ) : null}
 
-                                  <div className="grid gap-3 sm:grid-cols-2">
-                                    <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700">
-                                      <input
-                                        type="checkbox"
-                                        className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
-                                        checked={draft.rememberChoice}
-                                        disabled={isPending || isBulkReviewing}
-                                        onChange={(event) => updateReviewDraft(item, { rememberChoice: event.target.checked })}
+                                    {requiresFixedBillSelection(draft.classificationType) ? (
+                                      <label className="block">
+                                        <span className="mb-2 block text-sm font-medium text-raf-ink">Fixed bill</span>
+                                        <select
+                                          className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                          value={draft.fixedBillId}
+                                          disabled={isPending || isBulkReviewing}
+                                          onChange={(event) => updateReviewDraft(item, { fixedBillId: event.target.value })}
+                                        >
+                                          <option value="">Select fixed bill</option>
+                                          {data.fixedBills.map((bill) => (
+                                            <option key={bill.id} value={bill.id}>{bill.name}</option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                    ) : null}
+
+                                    {requiresGoalSelection(draft.classificationType) ? (
+                                      <label className="block">
+                                        <span className="mb-2 block text-sm font-medium text-raf-ink">Goal</span>
+                                        <select
+                                          className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                                          value={draft.goalId}
+                                          disabled={isPending || isBulkReviewing}
+                                          onChange={(event) => updateReviewDraft(item, { goalId: event.target.value })}
+                                        >
+                                          <option value="">Select goal</option>
+                                          {data.goals.map((goal) => (
+                                            <option key={goal.id} value={goal.id}>{goal.name}</option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                    ) : null}
+
+                                    <div className="md:col-span-2">
+                                      <Input
+                                        label="Review note"
+                                        name={`review-note-${item.id}`}
+                                        placeholder="Optional note"
+                                        value={draft.reviewNote}
+                                        onChange={(event) => updateReviewDraft(item, { reviewNote: event.target.value })}
                                       />
-                                      <span>
-                                        <span className="block font-medium text-raf-ink">Remember this choice</span>
-                                        <span className="mt-1 block text-stone-500">Keep this review decision ready as a suggestion next time.</span>
-                                      </span>
-                                    </label>
+                                    </div>
 
-                                    <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-700">
-                                      <input
-                                        type="checkbox"
-                                        className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
-                                        checked={draft.autoApplyRule}
-                                        disabled={!draft.rememberChoice || isPending || isBulkReviewing}
-                                        onChange={(event) => updateReviewDraft(item, { autoApplyRule: event.target.checked })}
-                                      />
-                                      <span>
-                                        <span className="block font-medium text-raf-ink">Allow auto-apply later</span>
-                                        <span className="mt-1 block text-stone-500">Store this rule as auto-applicable for future imports without using it silently today.</span>
-                                      </span>
-                                    </label>
+                                    <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+                                      <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
+                                        <input
+                                          type="radio"
+                                          name={`rule-mode-${item.id}`}
+                                          className="mt-1"
+                                          checked={draft.saveRuleMode === "suggestion"}
+                                          disabled={isPending || isBulkReviewing}
+                                          onChange={() => updateReviewDraft(item, { saveRuleMode: "suggestion", autoApplyRule: false })}
+                                        />
+                                        <span>
+                                          <span className="block font-medium text-raf-ink">Suggest this choice next time</span>
+                                          <span className="mt-1 block text-stone-500">Recommend this choice for similar future transactions but do not apply automatically.</span>
+                                        </span>
+                                      </label>
+
+                                      <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
+                                        <input
+                                          type="radio"
+                                          name={`rule-mode-${item.id}`}
+                                          className="mt-1"
+                                          checked={draft.saveRuleMode === "reusable_rule"}
+                                          disabled={isPending || isBulkReviewing}
+                                          onChange={() => updateReviewDraft(item, { saveRuleMode: "reusable_rule" })}
+                                        />
+                                        <span>
+                                          <span className="block font-medium text-raf-ink">Save as reusable rule</span>
+                                          <span className="mt-1 block text-stone-500">Save a rule that can be reused for similar transactions. Auto-apply can be enabled later.</span>
+                                        </span>
+                                      </label>
+                                      <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 md:col-span-2">
+                                        <input
+                                          type="checkbox"
+                                          className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
+                                          checked={draft.autoApplyRule}
+                                          disabled={draft.saveRuleMode !== "reusable_rule" || isPending || isBulkReviewing}
+                                          onChange={(event) => updateReviewDraft(item, { autoApplyRule: event.target.checked })}
+                                        />
+                                        <span>
+                                          <span className="block font-medium text-raf-ink">{draft.autoApplyRule ? "Disable auto-apply" : "Enable auto-apply"}</span>
+                                          <span className="mt-1 block text-stone-500">Auto-apply is always visible and reversible. Turn it off to keep this as suggestion behavior.</span>
+                                        </span>
+                                      </label>
+                                    </div>
                                   </div>
 
-                                  <Input
-                                    label="Review note"
-                                    name={`review-note-${item.id}`}
-                                    placeholder="Optional note"
-                                    value={draft.reviewNote}
-                                    onChange={(event) => updateReviewDraft(item, { reviewNote: event.target.value })}
-                                  />
+                                  <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      disabled={isPending || isBulkReviewing}
+                                      onClick={() => {
+                                        setExpandedImportIds((current) => ({ ...current, [item.id]: false }));
+                                        setOpenImportMenuId(null);
+                                      }}
+                                    >
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      disabled={isPending || isBulkReviewing}
+                                      onClick={() => void handleReviewImportedRow(item)}
+                                    >
+                                      {isPending ? <LoadingSpinner inline size="sm" label="Saving review..." /> : "Save Review"}
+                                    </Button>
+                                  </div>
                                 </div>
                               ) : (
                                 <div className="flex flex-wrap gap-2">
+                                  {isIgnored ? <Badge tone="neutral">Restore this item before editing</Badge> : null}
+                                  {!isIgnored ? <Badge tone="neutral">Reviewed in Transactions</Badge> : null}
                                   {item.linked_transaction_id ? <Badge tone="neutral">Transaction linked</Badge> : null}
                                   {item.linked_debt_id ? <Badge tone="warning">{debtLookup.get(item.linked_debt_id) ?? "Debt linked"}</Badge> : null}
                                   {item.linked_fixed_bill_id ? <Badge tone="neutral">{fixedBillLookup.get(item.linked_fixed_bill_id) ?? "Fixed bill linked"}</Badge> : null}
@@ -1384,10 +1764,12 @@ export function Transactions() {
               </div>
             ) : (
               <EmptyState
-                title={importsView === "needs_review" ? "No rows need review" : "No processed imports yet"}
+                title={importsView === "needs_review" ? "No rows need review" : importsView === "ignored" ? "No ignored imports" : "No processed imports yet"}
                 message={importsView === "needs_review"
                   ? "Upload a PDF bank statement or switch months to review imported rows for a different period."
-                  : "Approved, ignored, duplicate, and transfer rows will move here once they leave the review queue."}
+                  : importsView === "ignored"
+                    ? "Ignored transactions stay recoverable. Once a row is ignored, you can reopen it here."
+                    : "Approved, duplicate, transfer, and other processed rows will move here once they leave the review queue."}
               />
             )
           ) : null}

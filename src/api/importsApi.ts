@@ -4,8 +4,11 @@ import type {
   ImportedTransaction,
   ImportedTransactionListResponse,
   ImportClassificationPayload,
+  ImportReviewRule,
+  ImportReviewRuleListResponse,
+  ImportReviewRuleUpdatePayload,
 } from "../lib/types";
-import { getJson, postForm, postJson } from "./client";
+import { deleteJson, getJson, patchJson, postForm, postJson } from "./client";
 
 const importHeaders = {
   "x-household-id": DEFAULT_HOUSEHOLD_ID,
@@ -32,8 +35,32 @@ export function ignoreImportedTransaction(importId: string, reviewNote?: string)
   });
 }
 
+export function unignoreImportedTransaction(importId: string) {
+  return postJson<ImportedTransaction>(`/imports/${importId}/unignore`, {}, undefined, {
+    headers: importHeaders,
+  });
+}
+
 export function classifyImportedTransaction(importId: string, payload: ImportClassificationPayload) {
   return postJson<ImportedTransaction>(`/imports/${importId}/classify`, payload, undefined, {
+    headers: importHeaders,
+  });
+}
+
+export function getImportReviewRules() {
+  return getJson<ImportReviewRuleListResponse>("/import-rules", undefined, {
+    headers: importHeaders,
+  });
+}
+
+export function updateImportReviewRule(ruleId: string, payload: ImportReviewRuleUpdatePayload) {
+  return patchJson<ImportReviewRule>(`/import-rules/${ruleId}`, payload, undefined, {
+    headers: importHeaders,
+  });
+}
+
+export function deleteImportReviewRule(ruleId: string) {
+  return deleteJson<{ success: true }>(`/import-rules/${ruleId}`, {
     headers: importHeaders,
   });
 }

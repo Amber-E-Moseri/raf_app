@@ -120,14 +120,18 @@ export interface ImportedTransaction {
 export interface ImportReviewSuggestion {
   id: string;
   normalized_description: string;
+  match_type?: "contains" | "exact";
+  match_value?: string;
   classification_type: string;
   category_id: string | null;
   linked_debt_id: string | null;
   linked_fixed_bill_id: string | null;
   linked_goal_id: string | null;
+  rule_type?: "suggestion" | "reusable_rule";
   auto_apply: boolean;
   created_at: string;
   updated_at: string;
+  last_used_at?: string | null;
 }
 
 export interface ImportedTransactionListResponse {
@@ -150,8 +154,43 @@ export interface ImportClassificationPayload {
   fixed_bill_id?: string | null;
   goal_id?: string | null;
   remember_choice?: boolean;
+  save_rule_mode?: "suggestion" | "reusable_rule";
   auto_apply_rule?: boolean;
   review_note?: string | null;
+}
+
+export interface ImportReviewRule {
+  id: string;
+  household_id: string;
+  match_type: "contains" | "exact";
+  match_value: string;
+  normalized_description: string | null;
+  classification_type: ImportClassificationPayload["classification_type"];
+  category_id: string | null;
+  linked_debt_id: string | null;
+  linked_fixed_bill_id: string | null;
+  linked_goal_id: string | null;
+  rule_type: "suggestion" | "reusable_rule";
+  auto_apply: boolean;
+  created_at: string;
+  updated_at: string;
+  last_used_at: string | null;
+}
+
+export interface ImportReviewRuleListResponse {
+  items: ImportReviewRule[];
+}
+
+export interface ImportReviewRuleUpdatePayload {
+  match_value?: string;
+  match_type?: "contains" | "exact";
+  classification_type?: ImportClassificationPayload["classification_type"];
+  category_id?: string | null;
+  debt_id?: string | null;
+  fixed_bill_id?: string | null;
+  goal_id?: string | null;
+  rule_type?: "suggestion" | "reusable_rule";
+  auto_apply?: boolean;
 }
 
 export interface Debt {
