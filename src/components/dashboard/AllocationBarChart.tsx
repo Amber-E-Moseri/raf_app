@@ -68,7 +68,7 @@ export function AllocationBarChart({ items }: AllocationBarChartProps) {
             return (
               <Link
                 key={item.bucketId}
-                to="/allocation"
+                to={`/transactions?categoryId=${encodeURIComponent(item.bucketId)}#transactions-table`}
                 className="group block rounded-[1.4rem] border px-4 py-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-lift active:translate-y-0"
                 style={{
                   borderColor: "var(--border-color)",

@@ -10,10 +10,11 @@ import {
   updateTransaction,
 } from '../lib/transactions/createTransaction.js';
 
-function createDbDouble({ debt = null, goal = null, transactions = [], debtPayments = [] } = {}) {
+function createDbDouble({ debt = null, goal = null, transactions = [], debtPayments = [], importedTransactions = [] } = {}) {
   const state = {
     transactions: transactions.map((transaction) => ({ ...transaction })),
     debtPayments: debtPayments.map((payment) => ({ ...payment })),
+    importedTransactions: importedTransactions.map((row) => ({ ...row })),
     insertedTransaction: null,
     updatedTransaction: null,
     insertedDebtPayment: null,
@@ -90,6 +91,17 @@ function createDbDouble({ debt = null, goal = null, transactions = [], debtPayme
       state.deletedTransactionId = transactionId;
       state.transactions = state.transactions.filter((transaction) => transaction.id !== transactionId);
     },
+    async listImportedTransactions() {
+      return state.importedTransactions.map((row) => ({ ...row }));
+    },
+    async updateImportedTransaction({ importedTransactionId, patch }) {
+      const index = state.importedTransactions.findIndex((row) => row.id === importedTransactionId);
+      state.importedTransactions[index] = {
+        ...state.importedTransactions[index],
+        ...patch,
+      };
+      return state.importedTransactions[index];
+    },
   };
 
   return {
@@ -116,6 +128,7 @@ test('createTransaction creates a normal transaction without a debt payment row'
 
   assert.equal(result.id, 'txn_1');
   assert.equal(db.state.insertedDebtPayment, null);
+  assert.equal(result.source, 'manual');
 });
 
 test('createTransaction creates a debt payment row in the same transaction when linkedDebtId is present', async () => {
@@ -144,6 +157,7 @@ test('createTransaction creates a debt payment row in the same transaction when 
     paymentDate: '2026-03-12',
     amount: '250.00',
   });
+  assert.equal(result.source, 'manual');
 });
 
 test('createTransaction returns 404 when linked debt is missing', async () => {
@@ -186,6 +200,7 @@ test('createTransaction persists linkedGoalId when the goal matches the selected
 
   assert.equal(result.linkedGoalId, 'goal_1');
   assert.equal(db.state.insertedTransaction.linkedGoalId, 'goal_1');
+  assert.equal(result.source, 'manual');
 });
 
 test('createTransaction rejects linked goals that do not match the selected bucket', async () => {
@@ -248,6 +263,7 @@ test('updateTransaction removes the debt payment when linkedDebtId is removed', 
   assert.equal(result.linkedDebtId, null);
   assert.deepEqual(db.state.deletedDebtPaymentByTransactionId, ['txn_1']);
   assert.equal(db.state.debtPayments.length, 0);
+  assert.equal(result.source, 'manual');
 });
 
 test('deleteTransaction removes the corresponding debt payment in the same transaction', async () => {
@@ -285,6 +301,57 @@ test('deleteTransaction removes the corresponding debt payment in the same trans
   assert.equal(db.state.deletedTransactionId, 'txn_1');
 });
 
+test('deleteTransaction reopens the linked imported row when the deleted transaction came from import review', async () => {
+  const db = createDbDouble({
+    transactions: [
+      {
+        id: 'txn_1',
+        transactionDate: '2026-03-12',
+        description: 'Imported payment',
+        merchant: null,
+        amount: '100.00',
+        direction: 'debit',
+        categoryId: 'cat_fixed',
+        linkedDebtId: null,
+        linkedGoalId: null,
+        source: 'import',
+      },
+    ],
+    importedTransactions: [
+      {
+        id: 'import_1',
+        linkedTransactionId: 'txn_1',
+        status: 'classified',
+        classificationType: 'transaction',
+        linkedDebtId: null,
+        linkedFixedBillId: null,
+        linkedGoalId: null,
+        reviewedAt: '2026-03-12T00:00:00.000Z',
+        reviewNote: 'Saved',
+      },
+    ],
+  });
+
+  await deleteTransaction({
+    db,
+    householdId: 'household_1',
+    transactionId: 'txn_1',
+  });
+
+  assert.equal(db.state.deletedTransactionId, 'txn_1');
+  assert.deepEqual(db.state.importedTransactions[0], {
+    id: 'import_1',
+    linkedTransactionId: null,
+    status: 'unreviewed',
+    classificationType: null,
+    linkedDebtId: null,
+    linkedFixedBillId: null,
+    linkedGoalId: null,
+    reviewedAt: null,
+    reviewNote: null,
+  });
+});
+
 test('listTransactions returns items and nextCursor', async () => {
   const db = createDbDouble({
     transactions: [
@@ -298,6 +365,7 @@ test('listTransactions returns items and nextCursor', async () => {
         categoryId: 'cat_food',
         linkedDebtId: null,
         linkedGoalId: null,
+        source: 'manual',
       },
       {
         id: 'txn_2',
@@ -309,6 +377,7 @@ test('listTransactions returns items and nextCursor', async () => {
         categoryId: null,
         linkedDebtId: null,
         linkedGoalId: null,
+        source: 'manual',
       },
     ],
   });
@@ -337,6 +406,8 @@ test('listTransactions returns items and nextCursor', async () => {
         direction: 'debit',
         categoryId: 'cat_food',
         linkedDebtId: null,
+        linkedGoalId: null,
+        source: 'manual',
       },
       {
         id: 'txn_2',
@@ -347,6 +418,8 @@ test('listTransactions returns items and nextCursor', async () => {
         direction: 'credit',
         categoryId: null,
         linkedDebtId: null,
+        linkedGoalId: null,
+        source: 'manual',
       },
     ],
     nextCursor: null,

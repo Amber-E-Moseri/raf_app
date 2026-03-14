@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
@@ -15,7 +16,7 @@ import {
   unprocessImportedTransaction,
   unignoreImportedTransaction,
 } from "../api/importsApi";
-import { createTransaction, getTransactions } from "../api/transactionsApi";
+import { createTransaction, deleteTransaction, getTransactions, updateTransaction } from "../api/transactionsApi";
 import {
   buildImportRuleDraft,
   ImportRuleEditor,
@@ -75,6 +76,33 @@ interface ImportReviewDraft {
   reviewNote: string;
   saveRuleMode: "none" | "suggestion" | "reusable_rule";
   autoApplyRule: boolean;
+}
+
+interface TransactionEditState {
+  id: string;
+  transactionDate: string;
+  description: string;
+  merchant: string;
+  amount: string;
+  direction: "debit" | "credit";
+  categoryId: string;
+  linkedDebtId: string;
+  linkedGoalId: string;
+}
+
+interface TransactionTableRow {
+  id: string;
+  transactionDate: string;
+  description: string;
+  merchant: string | null;
+  amount: string;
+  direction: "debit" | "credit";
+  categoryId: string | null;
+  linkedDebtId: string | null;
+  linkedGoalId: string | null;
+  source?: string | null;
+  importedClassificationType?: string | null;
+  isImportOnly?: boolean;
 }
 
 type SortKey = "transactionDate" | "description" | "category" | "amount" | "direction";
@@ -144,6 +172,20 @@ function sortIndicator(active: boolean, direction: SortDirection) {
   }
 
   return direction === "asc" ? "Asc" : "Desc";
+}
+
+function mapTransactionToEditState(transaction: Transaction): TransactionEditState {
+  return {
+    id: transaction.id,
+    transactionDate: transaction.transactionDate,
+    description: transaction.description,
+    merchant: transaction.merchant ?? "",
+    amount: transaction.amount,
+    direction: transaction.direction,
+    categoryId: transaction.categoryId ?? "",
+    linkedDebtId: transaction.linkedDebtId ?? "",
+    linkedGoalId: transaction.linkedGoalId ?? "",
+  };
 }
 
 function compareValues(left: string | number, right: string | number, direction: SortDirection) {
@@ -229,11 +271,14 @@ function userFacingReviewError(message: string) {
 export function Transactions() {
   const { activeMonth, activeMonthLabel, activeRange, isCurrentMonth } = usePeriod();
   const { from: initialFrom, to: initialTo } = activeRange;
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const categoryFilterFromUrl = searchParams.get("categoryId") ?? "";
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([null]);
   const [fromDate, setFromDate] = useState(initialFrom);
   const [toDate, setToDate] = useState(initialTo);
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState(categoryFilterFromUrl);
   const [sortKey, setSortKey] = useState<SortKey>("transactionDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [quickFilter, setQuickFilter] = useState<"all" | "spend" | "income" | "transfer" | "debt">("all");
@@ -251,6 +296,9 @@ export function Transactions() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<TransactionEditState | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isDeletingTransaction, setIsDeletingTransaction] = useState<string | null>(null);
   const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
@@ -292,6 +340,26 @@ export function Transactions() {
     setImportsView("needs_review");
     setOpenImportMenuId(null);
   }, [activeMonth]);
+
+  useEffect(() => {
+    setCategoryFilter(categoryFilterFromUrl);
+    setCursorHistory([null]);
+  }, [categoryFilterFromUrl]);
+
+  useEffect(() => {
+    if (location.hash !== "#transactions-table") {
+      return;
+    }
+
+    const target = document.getElementById("transactions-table");
+    if (!target) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [categoryFilterFromUrl, location.hash]);
 
   const { data, error, isLoading, reload } = useAsyncData<TransactionsViewModel>(async () => {
     const [transactions, debts, imports, fixedBills, goals] = await Promise.all([
@@ -336,13 +404,66 @@ export function Transactions() {
     () => (data?.goals ?? []).filter((goal) => !form.categoryId || goal.bucket_id === form.categoryId),
     [data?.goals, form.categoryId],
   );
+  const goalsForEditedBucket = useMemo(
+    () => (data?.goals ?? []).filter((goal) => !editingTransaction?.categoryId || goal.bucket_id === editingTransaction.categoryId),
+    [data?.goals, editingTransaction?.categoryId],
+  );
 
   const visibleTransactions = useMemo(() => {
-    const filtered = (data?.transactions.items ?? []).filter((transaction) => (
-      transaction.description.toLowerCase().includes(searchTerm.trim().toLowerCase())
-    ));
+    const importOnlyRows: TransactionTableRow[] = (data?.imports ?? [])
+      .filter((item) => item.status !== "unreviewed")
+      .filter((item) => !item.linked_transaction_id)
+      .map((item) => ({
+        id: `import:${item.id}`,
+        transactionDate: item.date,
+        description: item.description,
+        merchant: item.raw_description ?? null,
+        amount: String(Math.abs(Number(item.amount ?? "0"))),
+        direction: Number(item.amount) >= 0 ? "credit" : "debit",
+        categoryId: item.classification_type === "transaction" ? null : null,
+        linkedDebtId: item.linked_debt_id ?? null,
+        linkedGoalId: item.linked_goal_id ?? null,
+        source: "import",
+        importedClassificationType: item.classification_type,
+        isImportOnly: true,
+      }));
 
-    return [...filtered].sort((left, right) => {
+    const combinedRows: TransactionTableRow[] = [
+      ...((data?.transactions.items ?? []) as TransactionTableRow[]),
+      ...importOnlyRows,
+    ];
+
+    const filtered = combinedRows.filter((transaction) => {
+      const normalizedSearch = searchTerm.trim().toLowerCase();
+      const matchesSearch = !normalizedSearch
+        || transaction.description.toLowerCase().includes(normalizedSearch)
+        || (transaction.merchant ?? "").toLowerCase().includes(normalizedSearch);
+
+      if (!matchesSearch) {
+        return false;
+      }
+
+      if (quickFilter === "spend") {
+        return transaction.direction === "debit" && !transaction.linkedDebtId;
+      }
+
+      if (quickFilter === "income") {
+        return transaction.direction === "credit";
+      }
+
+      if (quickFilter === "transfer") {
+        const description = `${transaction.description} ${transaction.merchant ?? ""}`.toLowerCase();
+        return /transfer|move|internal/i.test(description);
+      }
+
+      if (quickFilter === "debt") {
+        return Boolean(transaction.linkedDebtId);
+      }
+
+      return true;
+    });
+
+      return [...filtered].sort((left, right) => {
       if (sortKey === "amount") {
         return compareValues(Number(left.amount), Number(right.amount), sortDirection);
       }
@@ -407,6 +528,20 @@ export function Transactions() {
     const validIds = new Set(needsReviewImports.map((item) => item.id));
     setSelectedImportIds((current) => current.filter((id) => validIds.has(id)));
   }, [needsReviewImports]);
+
+  function updateCategoryFilter(nextCategoryId: string) {
+    setCategoryFilter(nextCategoryId);
+    setCursorHistory([null]);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (nextCategoryId) {
+        next.set("categoryId", nextCategoryId);
+      } else {
+        next.delete("categoryId");
+      }
+      return next;
+    }, { replace: true });
+  }
 
   function getReviewDraft(item: ImportedTransaction) {
     return reviewDrafts[item.id] ?? buildDraftFromImportedRow(item);
@@ -708,6 +843,52 @@ export function Transactions() {
     }
   }
 
+  async function handleSaveEditedTransaction() {
+    if (!editingTransaction) {
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setSubmitError(null);
+    setSubmitSuccess(null);
+
+    try {
+      await updateTransaction(editingTransaction.id, {
+        transactionDate: editingTransaction.transactionDate,
+        description: editingTransaction.description.trim(),
+        merchant: editingTransaction.merchant.trim() || null,
+        amount: normalizeMoneyInput(editingTransaction.amount) ?? editingTransaction.amount,
+        direction: editingTransaction.direction,
+        categoryId: editingTransaction.categoryId || null,
+        linkedDebtId: editingTransaction.linkedDebtId || null,
+        linkedGoalId: editingTransaction.linkedGoalId || null,
+      });
+      setSubmitSuccess("Transaction updated.");
+      setEditingTransaction(null);
+      await reload();
+    } catch (requestError) {
+      setSubmitError(requestError instanceof Error ? requestError.message : "Transaction could not be updated.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }
+
+  async function handleDeleteTransaction(transaction: Transaction) {
+    setIsDeletingTransaction(transaction.id);
+    setSubmitError(null);
+    setSubmitSuccess(null);
+
+    try {
+      await deleteTransaction(transaction.id);
+      setSubmitSuccess("Transaction deleted.");
+      await reload();
+    } catch (requestError) {
+      setSubmitError(requestError instanceof Error ? requestError.message : "Transaction could not be deleted.");
+    } finally {
+      setIsDeletingTransaction(null);
+    }
+  }
+
   async function handleImportUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedImportFile) {
@@ -896,8 +1077,10 @@ export function Transactions() {
 
     try {
       for (const item of selectedNeedsReviewItems) {
+        const currentDraft = getReviewDraft(item);
         const effectiveDraft: ImportReviewDraft = {
-          ...getReviewDraft(item),
+          ...currentDraft,
+          categoryId: currentDraft.categoryId || bulkBucketId || "",
           saveRuleMode: bulkRuleMode,
           autoApplyRule: bulkRuleMode === "reusable_rule" ? bulkAutoApply : false,
         };
@@ -910,6 +1093,10 @@ export function Transactions() {
             auto_apply_rule: effectiveDraft.saveRuleMode === "reusable_rule" ? effectiveDraft.autoApplyRule : false,
           }
           : buildImportClassificationPayload(item, effectiveDraft);
+
+        if (action === "approve" && effectiveDraft.categoryId && effectiveDraft.categoryId !== currentDraft.categoryId) {
+          updateReviewDraft(item, { categoryId: effectiveDraft.categoryId });
+        }
 
         await submitImportedReview(item, payload);
       }
@@ -1025,28 +1212,6 @@ export function Transactions() {
 
   function applyQuickFilter(nextFilter: "all" | "spend" | "income" | "transfer" | "debt") {
     setQuickFilter(nextFilter);
-
-    if (nextFilter === "all") {
-      setSearchTerm("");
-      return;
-    }
-
-    if (nextFilter === "spend") {
-      setSearchTerm("shop");
-      return;
-    }
-
-    if (nextFilter === "income") {
-      setSearchTerm("income");
-      return;
-    }
-
-    if (nextFilter === "transfer") {
-      setSearchTerm("transfer");
-      return;
-    }
-
-    setSearchTerm("debt");
   }
 
   return (
@@ -1260,8 +1425,7 @@ export function Transactions() {
                   className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
                   value={categoryFilter}
                   onChange={(event) => {
-                    setCategoryFilter(event.target.value);
-                    setCursorHistory([null]);
+                    updateCategoryFilter(event.target.value);
                   }}
                 >
                   <option value="">All buckets</option>
@@ -1375,7 +1539,10 @@ export function Transactions() {
                     ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
                     : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
                 }`}
-                onClick={() => setImportsView("needs_review")}
+                onClick={() => {
+                  setImportsView("needs_review");
+                  setIsImportsExpanded(true);
+                }}
               >
                 Needs review ({needsReviewImports.length})
               </button>
@@ -1386,7 +1553,10 @@ export function Transactions() {
                     ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
                     : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
                 }`}
-                onClick={() => setImportsView("ignored")}
+                onClick={() => {
+                  setImportsView("ignored");
+                  setIsImportsExpanded(true);
+                }}
               >
                 Ignored ({ignoredImports.length})
               </button>
@@ -1397,7 +1567,10 @@ export function Transactions() {
                     ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
                     : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
                 }`}
-                onClick={() => setImportsView("processed")}
+                onClick={() => {
+                  setImportsView("processed");
+                  setIsImportsExpanded(true);
+                }}
               >
                 Processed ({processedImports.length})
               </button>
@@ -2048,83 +2221,244 @@ export function Transactions() {
         </div>
       </Card>
 
+      <div id="transactions-table">
       <Card title="Transactions Table" subtitle={`Showing transactions from ${formatIsoDate(fromDate)} to ${formatIsoDate(toDate)}.`}>
         {isLoading ? <LoadingState label="Loading transactions..." /> : null}
         {!isLoading && error ? <ErrorState title="Failed to fetch transactions" message={error} onRetry={() => void reload()} /> : null}
         {!isLoading && !error && data ? (
-          visibleTransactions.length ? (
-            <>
-              <div className="mb-4 flex flex-wrap gap-2">
-                {[
-                  ["all", "All"],
-                  ["spend", "Spend"],
-                  ["income", "Income"],
-                  ["transfer", "Transfer"],
-                  ["debt", "Debt Payoff"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
-                      quickFilter === value
-                        ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
-                        : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
-                    }`}
-                    onClick={() => applyQuickFilter(value as "all" | "spend" | "income" | "transfer" | "debt")}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+          <>
+            <div className="mb-4 flex flex-wrap gap-2">
+              {[
+                ["all", "All"],
+                ["spend", "Spend"],
+                ["income", "Income"],
+                ["transfer", "Transfer"],
+                ["debt", "Debt Payoff"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
+                    quickFilter === value
+                      ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
+                      : "border-[var(--border-color)] bg-[var(--surface-color)] text-stone-600"
+                  }`}
+                  onClick={() => applyQuickFilter(value as "all" | "spend" | "income" | "transfer" | "debt")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {visibleTransactions.length ? (
               <Table
-                tableClassName="table-fixed"
-              headers={[
-                <span className="inline-block w-20">Date</span>,
-                sortableHeader("Description", "description"),
-                <span className="inline-block w-[120px]">Category</span>,
-                <span className="inline-block w-[100px]">Type</span>,
-                <span className="inline-block w-[88px]">Amount</span>,
-              ]}
-              footer={(
-                <div className="flex items-center justify-between gap-4 text-sm text-stone-500">
-                  <span>{visibleTransactions.length} item(s) on this page after search and sort</span>
-                  <span>{data.transactions.nextCursor ? "More pages available" : "End of results"}</span>
-                </div>
-              )}
-            >
-              {visibleTransactions.map((transaction: Transaction) => {
-                const categoryLabel = transaction.categoryId
-                  ? categoryLookup.get(transaction.categoryId) ?? transaction.categoryId
-                  : "";
+                headers={[
+                  <span className="inline-block w-20">Date</span>,
+                  sortableHeader("Description", "description"),
+                  <span className="inline-block w-[120px]">Category</span>,
+                  <span className="inline-block w-[100px]">Type</span>,
+                  <span className="inline-block w-[88px]">Amount</span>,
+                  <span className="inline-block w-[140px]">Actions</span>,
+                ]}
+                footer={(
+                  <div className="flex items-center justify-between gap-4 text-sm text-stone-500">
+                    <span>{visibleTransactions.length} item(s) on this page after search and sort</span>
+                    <span>{data.transactions.nextCursor ? "More pages available" : "End of results"}</span>
+                  </div>
+                )}
+              >
+                {visibleTransactions.map((transaction: TransactionTableRow) => {
+                  const categoryLabel = transaction.categoryId
+                    ? categoryLookup.get(transaction.categoryId) ?? transaction.categoryId
+                    : "";
+                  const typeLabel = transaction.isImportOnly
+                    ? (transaction.importedClassificationType === "income"
+                      ? "income import"
+                      : transaction.importedClassificationType === "duplicate"
+                        ? "duplicate"
+                        : transaction.importedClassificationType === "transfer"
+                          ? "transfer"
+                          : transaction.importedClassificationType === "ignore"
+                            ? "ignored"
+                            : transaction.direction)
+                    : transaction.direction;
 
-                return (
-                  <tr key={transaction.id} className="hover:bg-stone-50/80">
-                    <td className="w-20 px-4 py-3 text-sm text-stone-600">{formatIsoDate(transaction.transactionDate)}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-raf-ink">
-                      <div className="truncate">{transaction.description}</div>
-                    </td>
-                    <td className="w-[120px] px-4 py-3 text-sm">
-                      {categoryLabel ? <Badge tone={categoryTone(categoryLabel)}>{categoryLabel}</Badge> : null}
-                    </td>
-                    <td className="w-[100px] px-4 py-3 text-sm">
-                      <Badge tone={directionTone(transaction.direction)}>{transaction.direction}</Badge>
-                    </td>
-                    <td className={`w-[88px] px-4 py-3 text-right text-sm font-semibold ${amountClassName(transaction.direction)}`}>
-                      {formatCurrency(transaction.amount)}
-                    </td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr key={transaction.id} className="hover:bg-stone-50/80">
+                      <td className="w-20 px-4 py-3 text-sm text-stone-600">{formatIsoDate(transaction.transactionDate)}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-raf-ink">
+                        <div className="max-w-[420px] whitespace-normal break-words">{transaction.description}</div>
+                      </td>
+                      <td className="w-[120px] px-4 py-3 text-sm">
+                        {categoryLabel ? <Badge tone={categoryTone(categoryLabel)}>{categoryLabel}</Badge> : null}
+                      </td>
+                      <td className="w-[100px] px-4 py-3 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={directionTone(transaction.direction)}>{typeLabel}</Badge>
+                          {transaction.source === "import" ? <Badge tone="neutral">Imported</Badge> : null}
+                        </div>
+                      </td>
+                      <td className={`w-[88px] px-4 py-3 text-right text-sm font-semibold ${amountClassName(transaction.direction)}`}>
+                        {formatCurrency(transaction.amount)}
+                      </td>
+                      <td className="w-[140px] px-4 py-3 text-sm">
+                        {transaction.isImportOnly ? (
+                          <div className="text-right text-xs text-[var(--text-muted)]">Review row</div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="rounded-full px-3 py-1.5 text-xs"
+                              onClick={() => setEditingTransaction(mapTransactionToEditState(transaction))}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="rounded-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50"
+                              disabled={isDeletingTransaction === transaction.id}
+                              onClick={() => void handleDeleteTransaction(transaction as Transaction)}
+                            >
+                              {isDeletingTransaction === transaction.id ? "Deleting..." : "Delete"}
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </Table>
-            </>
-          ) : (
-            <EmptyState
-              title="No transactions match these filters"
-              message="Adjust the date range, bucket filter, or description search to widen the current view."
-            />
-          )
+            ) : (
+              <EmptyState
+                title="No transactions match these filters"
+                message="Adjust the quick filter, date range, bucket filter, or description search to widen the current view."
+              />
+            )}
+          </>
         ) : null}
       </Card>
+      </div>
+
+      {editingTransaction ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 px-4 py-6">
+          <div
+            className="w-full max-w-2xl rounded-[1.75rem] border border-[var(--border-color)] p-5 shadow-xl"
+            style={{ background: "var(--surface-color)" }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-lg font-semibold text-[var(--text-strong)]">Edit Transaction</div>
+                <div className="mt-1 text-sm text-[var(--text-muted)]">Update the ledger row without losing its month or bucket context.</div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                className="min-h-9 min-w-9 rounded-full px-0 text-[var(--text-muted)] hover:bg-[var(--surface-plain)] hover:text-[var(--text-strong)]"
+                aria-label="Close edit transaction"
+                onClick={() => setEditingTransaction(null)}
+              >
+                X
+              </Button>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <Input
+                label="Transaction date"
+                type="date"
+                value={editingTransaction.transactionDate}
+                onChange={(event) => setEditingTransaction((current) => current ? { ...current, transactionDate: event.target.value } : current)}
+              />
+              <MoneyInput
+                label="Amount"
+                value={editingTransaction.amount}
+                onChange={(event) => setEditingTransaction((current) => current ? { ...current, amount: event.target.value } : current)}
+              />
+              <Input
+                label="Description"
+                value={editingTransaction.description}
+                onChange={(event) => setEditingTransaction((current) => current ? { ...current, description: event.target.value } : current)}
+              />
+              <Input
+                label="Merchant"
+                value={editingTransaction.merchant}
+                onChange={(event) => setEditingTransaction((current) => current ? { ...current, merchant: event.target.value } : current)}
+              />
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Type</span>
+                <select
+                  className="ui-field"
+                  value={editingTransaction.direction}
+                  onChange={(event) => setEditingTransaction((current) => current ? { ...current, direction: event.target.value as "debit" | "credit" } : current)}
+                >
+                  <option value="debit">debit</option>
+                  <option value="credit">credit</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Allocation bucket</span>
+                <select
+                  className="ui-field"
+                  value={editingTransaction.categoryId}
+                  onChange={(event) => {
+                    const categoryId = event.target.value;
+                    setEditingTransaction((current) => current ? {
+                      ...current,
+                      categoryId,
+                      linkedGoalId: current.linkedGoalId && data?.goals.some((goal) => goal.id === current.linkedGoalId && goal.bucket_id === categoryId)
+                        ? current.linkedGoalId
+                        : "",
+                    } : current);
+                  }}
+                >
+                  <option value=""></option>
+                  {(data?.categories ?? []).map((category) => (
+                    <option key={category.id} value={category.id}>{category.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Linked debt</span>
+                <select
+                  className="ui-field"
+                  value={editingTransaction.linkedDebtId}
+                  onChange={(event) => setEditingTransaction((current) => current ? { ...current, linkedDebtId: event.target.value } : current)}
+                >
+                  <option value="">None</option>
+                  {(data?.debts ?? []).map((debt) => (
+                    <option key={debt.id} value={debt.id}>{debt.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Linked goal</span>
+                <select
+                  className="ui-field"
+                  value={editingTransaction.linkedGoalId}
+                  onChange={(event) => setEditingTransaction((current) => current ? { ...current, linkedGoalId: event.target.value } : current)}
+                >
+                  <option value="">None</option>
+                  {goalsForEditedBucket.map((goal) => (
+                    <option key={goal.id} value={goal.id}>{goal.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
+              <Button type="button" variant="secondary" onClick={() => setEditingTransaction(null)}>
+                Cancel
+              </Button>
+              <Button type="button" disabled={isSavingEdit} onClick={() => void handleSaveEditedTransaction()}>
+                {isSavingEdit ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </PageShell>
   );
 }

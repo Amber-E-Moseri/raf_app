@@ -1,5 +1,5 @@
 import type { Transaction, TransactionCreateRequest, TransactionListResponse } from "../lib/types";
-import { getJson, postJson } from "./client";
+import { deleteJson, getJson, patchJson, postJson } from "./client";
 
 export interface TransactionsQuery {
   from: string;
@@ -15,4 +15,12 @@ export function getTransactions(query: TransactionsQuery) {
 
 export function createTransaction(payload: TransactionCreateRequest) {
   return postJson<Transaction>("/transactions", payload);
+}
+
+export function updateTransaction(transactionId: string, payload: Partial<TransactionCreateRequest>) {
+  return patchJson<Transaction>(`/transactions/${transactionId}`, payload);
+}
+
+export function deleteTransaction(transactionId: string) {
+  return deleteJson<void>(`/transactions/${transactionId}`);
 }

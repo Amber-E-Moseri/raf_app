@@ -87,6 +87,8 @@ export interface Transaction {
   direction: "debit" | "credit";
   categoryId: string | null;
   linkedDebtId: string | null;
+  linkedGoalId: string | null;
+  source?: string | null;
 }
 
 export interface TransactionCreateRequest {
@@ -97,6 +99,7 @@ export interface TransactionCreateRequest {
   direction: "debit" | "credit";
   categoryId?: string | null;
   linkedDebtId?: string | null;
+  linkedGoalId?: string | null;
 }
 
 export interface TransactionListResponse {
