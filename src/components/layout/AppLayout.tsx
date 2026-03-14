@@ -20,7 +20,7 @@ const navigationGroups = [
     items: [
       { to: "/monthly-review", label: "Monthly Review", icon: "calendar" },
       { to: "/allocation-preferences", label: "Allocation", icon: "pie" },
-      { to: "/profile", label: "Profile", icon: "user" },
+      { to: "/settings", label: "Settings", icon: "user" },
     ],
   },
 ];
@@ -31,10 +31,10 @@ function navClassName(isActive: boolean) {
     : "nav-link";
 }
 
-function profileIconClassName(isActive: boolean) {
+function profileLinkClassName(isActive: boolean) {
   return isActive
-    ? "inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--primary-color)] text-[var(--primary-contrast)] shadow-panel"
-    : "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-color)] bg-[var(--surface-color)] text-[var(--text-muted)] transition duration-150 hover:-translate-y-0.5 hover:text-[var(--text-strong)] hover:shadow-lift";
+    ? "rounded-lg bg-[var(--primary-soft)] px-2 py-1 text-[11px] font-medium text-[var(--primary-color)]"
+    : "rounded-lg px-2 py-1 text-[11px] font-medium text-stone-500 transition duration-150 hover:bg-[var(--surface-elevated)] hover:text-[var(--text-strong)]";
 }
 
 function NavIcon({ type }: { type: string }) {
@@ -136,7 +136,7 @@ export function AppLayout() {
           <div className="ui-card space-y-4 border-b border-r border-[var(--border-color)] p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--primary-color)] text-xs font-bold text-[var(--primary-contrast)]">R</div>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-color)] text-xs font-bold text-[var(--primary-contrast)]">R</div>
                 <div className="leading-none">
                   <div className="text-[15px] font-bold text-raf-ink">{APP_NAME}</div>
                   <div className="mt-1 text-[9px] font-medium uppercase tracking-[0.18em] text-stone-500">Finance</div>
@@ -146,9 +146,9 @@ export function AppLayout() {
                 to="/profile"
                 aria-label="Profile"
                 title="Profile"
-                className={({ isActive }) => profileIconClassName(isActive)}
+                className={({ isActive }) => profileLinkClassName(isActive)}
               >
-                <NavIcon type="user" />
+                Profile
               </NavLink>
             </div>
             <div className="relative">
@@ -238,7 +238,7 @@ export function AppLayout() {
           <div className="ui-card flex min-h-full flex-col border-r border-[var(--border-color)] px-4 py-4">
             <div className="flex items-start justify-between gap-3 border-b border-[var(--border-color)] pb-4">
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--primary-color)] text-xs font-bold text-[var(--primary-contrast)]">R</div>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-color)] text-xs font-bold text-[var(--primary-contrast)]">R</div>
                 <div className="leading-none">
                   <div className="text-[15px] font-bold text-raf-ink">{APP_NAME}</div>
                   <div className="mt-1 text-[9px] font-medium uppercase tracking-[0.18em] text-stone-500">Finance</div>
@@ -248,9 +248,9 @@ export function AppLayout() {
                 to="/profile"
                 aria-label="Profile"
                 title="Profile"
-                className={({ isActive }) => profileIconClassName(isActive)}
+                className={({ isActive }) => profileLinkClassName(isActive)}
               >
-                <NavIcon type="user" />
+                Profile
               </NavLink>
             </div>
 

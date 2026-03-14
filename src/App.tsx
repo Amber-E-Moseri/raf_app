@@ -10,6 +10,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Debts } from "./pages/Debts";
 import { MonthlyReview } from "./pages/MonthlyReview";
 import { NotFound } from "./pages/NotFound";
+import { Profile } from "./pages/Profile";
 import { Transactions } from "./pages/Transactions";
 
 export default function App() {
@@ -22,8 +23,10 @@ export default function App() {
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="allocation-preferences" element={<AllocationPreferences />} />
-              <Route path="profile" element={<AppearanceSettings />} />
-              <Route path="appearance" element={<Navigate to="/profile" replace />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="settings" element={<AppearanceSettings />} />
+              <Route path="appearance-settings" element={<Navigate to="/settings" replace />} />
+              <Route path="appearance" element={<Navigate to="/settings" replace />} />
               <Route path="income/new" element={<AddIncome />} />
               <Route path="transactions" element={<Transactions />} />
               <Route path="debts" element={<Debts />} />

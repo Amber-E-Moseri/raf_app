@@ -53,7 +53,7 @@ const settingsTabs: Array<{ id: SettingsTab; label: string; description: string 
   {
     id: "preferences",
     label: "Preferences",
-    description: "Appearance and device-level profile settings.",
+    description: "Appearance preferences for this device.",
   },
   {
     id: "import_rules",
@@ -100,7 +100,7 @@ export function AppearanceSettings() {
   const [pendingRuleId, setPendingRuleId] = useState<string | null>(null);
 
   const rulesData = useAsyncData<ProfileSettingsViewModel>(async () => {
-    const [categoriesResponse, debtsResponse, fixedBillsResponse, goalsResponse, rulesResponse] = await Promise.all([
+    const [categories, debtsResponse, fixedBillsResponse, goalsResponse, rulesResponse] = await Promise.all([
       getAllocationCategories(),
       getDebts(),
       getFixedBills(),
@@ -109,7 +109,7 @@ export function AppearanceSettings() {
     ]);
 
     return {
-      categories: categoriesResponse.items,
+      categories,
       debts: debtsResponse.items,
       fixedBills: fixedBillsResponse.items,
       goals: goalsResponse.items,
@@ -134,7 +134,7 @@ export function AppearanceSettings() {
 
   function handleSave() {
     saveAppearance(draft);
-    setSaveMessage("Profile appearance updated.");
+    setSaveMessage("Appearance settings updated.");
   }
 
   function handleResetDraft() {
@@ -212,9 +212,9 @@ export function AppearanceSettings() {
 
   return (
     <PageShell
-      eyebrow="Profile"
-      title="Profile"
-      description="Settings for appearance and import review behavior."
+      eyebrow="Settings"
+      title="Settings"
+      description="Appearance preferences and import rule settings."
       actions={activeTab === "preferences" ? (
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={handleResetDraft}>Reset form</Button>
@@ -224,7 +224,7 @@ export function AppearanceSettings() {
       ) : null}
     >
       <section className="grid gap-4 xl:grid-cols-[220px,1fr]">
-        <Card title="Settings" subtitle="Profile">
+        <Card title="Settings" subtitle="Appearance">
           <div className="space-y-2">
             {settingsTabs.map((tab) => (
               <button
@@ -247,7 +247,7 @@ export function AppearanceSettings() {
         <div className="space-y-4">
           {activeTab === "preferences" ? (
             <>
-              {saveMessage ? <SuccessNotice title="Profile updated" message={saveMessage} /> : null}
+              {saveMessage ? <SuccessNotice title="Appearance updated" message={saveMessage} /> : null}
               <section className="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
                 <Card title="Appearance Settings" subtitle="Choose a curated accent, font, and viewing mode, then confirm with Save Appearance.">
                   <div className="grid gap-3 sm:grid-cols-2">
