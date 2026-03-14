@@ -365,6 +365,7 @@ test('goal funding classification converts a savings transfer into a goal contri
   assert.equal(result.linked_goal_id, 'goal_1');
   assert.equal(result.linked_transaction_id, 'txn_1');
   assert.equal(db.state.transactions[0].categoryId, 'bucket_savings');
+  assert.equal(db.state.transactions[0].linkedGoalId, 'goal_1');
   assert.equal(db.state.transactions[0].direction, 'credit');
   assert.equal(db.state.transactions[0].amount, '250.00');
   assert.equal(db.state.transactions[0].description, 'Contribution to Emergency Fund');

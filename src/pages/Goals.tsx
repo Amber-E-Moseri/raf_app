@@ -18,6 +18,12 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { formatCurrency } from "../lib/format";
+import {
+  markGoalCelebrationSeen,
+  readGoalAchievements,
+  syncGoalAchievements,
+  writeGoalAchievements,
+} from "../lib/goalAchievements";
 import type { AllocationCategory, Goal, GoalProgress, ImportedTransaction, Transaction } from "../lib/types";
 
 interface GoalsViewModel {
@@ -54,8 +60,6 @@ const EMPTY_GOAL_FORM: GoalFormState = {
   notes: "",
   active: true,
 };
-
-const GOAL_REACHED_STORAGE_KEY = "raf_goal_reached_state";
 
 function mapGoalToForm(goal: Goal): GoalFormState {
   return {
@@ -102,7 +106,7 @@ function goalStatusLabel(progress: GoalProgress | null) {
 
   const remaining = Number(progress.remaining_amount);
   if (remaining <= 0) {
-    return "Target reached";
+    return "Target Reached";
   }
   if (progress.progress_percent >= 50) {
     return "On the way";
@@ -117,7 +121,9 @@ export function Goals() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [expandedRecentActivity, setExpandedRecentActivity] = useState<Record<string, boolean>>({});
   const [celebratingGoalIds, setCelebratingGoalIds] = useState<Record<string, boolean>>({});
+  const [goalCelebrationMessages, setGoalCelebrationMessages] = useState<Record<string, boolean>>({});
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const hasSyncedGoalState = useRef(false);
 
@@ -250,68 +256,67 @@ export function Goals() {
       return;
     }
 
-    const currentReachedState = Object.fromEntries(
-      activeGoals.map((goal) => {
-        const progress = progressLookup.get(goal.id);
-        return [goal.id, (progress?.progress_percent ?? 0) >= 100];
-      }),
-    );
-
     if (typeof window === "undefined") {
       return;
     }
 
-    let storedReachedState: Record<string, boolean> = {};
-    try {
-      const raw = window.localStorage.getItem(GOAL_REACHED_STORAGE_KEY);
-      if (raw) {
-        storedReachedState = JSON.parse(raw) as Record<string, boolean>;
-      }
-    } catch {
-      storedReachedState = {};
-    }
+    const storedAchievements = readGoalAchievements();
+    const { state: syncedAchievements } = syncGoalAchievements(goalsData.data.progress, storedAchievements);
 
     if (!hasSyncedGoalState.current) {
       hasSyncedGoalState.current = true;
-      window.localStorage.setItem(
-        GOAL_REACHED_STORAGE_KEY,
-        JSON.stringify({ ...storedReachedState, ...currentReachedState }),
-      );
-      return;
+      writeGoalAchievements(syncedAchievements);
+      return undefined;
     }
 
-    const newlyReachedGoalIds = activeGoals
+    const unseenGoalIds = activeGoals
       .map((goal) => goal.id)
-      .filter((goalId) => currentReachedState[goalId] === true && storedReachedState[goalId] !== true);
+      .filter((goalId) => syncedAchievements[goalId]?.celebration_unseen === true);
 
-    if (newlyReachedGoalIds.length && !prefersReducedMotion) {
+    if (unseenGoalIds.length) {
+      setGoalCelebrationMessages((current) => ({
+        ...current,
+        ...Object.fromEntries(unseenGoalIds.map((goalId) => [goalId, true])),
+      }));
+    }
+
+    const nextAchievementState = unseenGoalIds.reduce(
+      (state, goalId) => markGoalCelebrationSeen(goalId, state),
+      syncedAchievements,
+    );
+    writeGoalAchievements(nextAchievementState);
+
+    if (unseenGoalIds.length && !prefersReducedMotion) {
       setCelebratingGoalIds((current) => ({
         ...current,
-        ...Object.fromEntries(newlyReachedGoalIds.map((goalId) => [goalId, true])),
+        ...Object.fromEntries(unseenGoalIds.map((goalId) => [goalId, true])),
       }));
 
       const timeoutId = window.setTimeout(() => {
         setCelebratingGoalIds((current) => {
           const next = { ...current };
-          newlyReachedGoalIds.forEach((goalId) => {
+          unseenGoalIds.forEach((goalId) => {
             delete next[goalId];
           });
           return next;
         });
       }, 1400);
 
-      window.localStorage.setItem(
-        GOAL_REACHED_STORAGE_KEY,
-        JSON.stringify({ ...storedReachedState, ...currentReachedState }),
-      );
+      const messageTimeoutId = window.setTimeout(() => {
+        setGoalCelebrationMessages((current) => {
+          const next = { ...current };
+          unseenGoalIds.forEach((goalId) => {
+            delete next[goalId];
+          });
+          return next;
+        });
+      }, 2200);
 
-      return () => window.clearTimeout(timeoutId);
+      return () => {
+        window.clearTimeout(timeoutId);
+        window.clearTimeout(messageTimeoutId);
+      };
     }
-
-    window.localStorage.setItem(
-      GOAL_REACHED_STORAGE_KEY,
-      JSON.stringify({ ...storedReachedState, ...currentReachedState }),
-    );
 
     return undefined;
   }, [activeGoals, goalsData.data, prefersReducedMotion, progressLookup]);
@@ -330,6 +335,13 @@ export function Goals() {
     setForm(mapGoalToForm(goal));
     setSaveError(null);
     setSaveMessage(null);
+  }
+
+  function toggleRecentActivity(goalId: string) {
+    setExpandedRecentActivity((current) => ({
+      ...current,
+      [goalId]: !current[goalId],
+    }));
   }
 
   async function handleSubmit() {
@@ -439,9 +451,11 @@ export function Goals() {
                     const progress = progressLookup.get(goal.id) ?? null;
                     const category = categoryLookup.get(goal.bucket_id);
                     const recentTransactions = (recentActivityByGoalId.get(goal.id) ?? []).slice(0, 5);
+                    const isRecentActivityExpanded = expandedRecentActivity[goal.id] === true;
                     const progressPercent = Math.max(0, Math.min(progress?.progress_percent ?? 0, 100));
                     const isReached = (progress?.progress_percent ?? 0) >= 100;
                     const isCelebrating = celebratingGoalIds[goal.id] === true;
+                    const showCelebrationMessage = goalCelebrationMessages[goal.id] === true;
 
                     return (
                       <div
@@ -462,6 +476,12 @@ export function Goals() {
                                 } as CSSProperties}
                               />
                             ))}
+                          </div>
+                        ) : null}
+                        {showCelebrationMessage ? (
+                          <div className="mb-4 rounded-2xl border border-[var(--badge-success-ring)] bg-[var(--badge-success-bg)] px-4 py-3 text-sm text-[var(--badge-success-text)]">
+                            <div className="font-semibold">Goal Reached!</div>
+                            <div className="mt-1">{goal.name} target achieved.</div>
                           </div>
                         ) : null}
                         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -526,34 +546,45 @@ export function Goals() {
                         </div>
 
                         <div className="mt-5 rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Recent transactions</div>
-                            <div className="text-xs text-[var(--text-muted)]">Latest 5 in this bucket</div>
-                          </div>
-                          {recentTransactions.length ? (
-                            <div className="mt-3 space-y-2">
-                              {recentTransactions.map((transaction) => (
-                                <div
-                                  key={transaction.id}
-                                  className="flex items-start justify-between gap-3 border-b border-[var(--border-color)] pb-2 last:border-b-0 last:pb-0"
-                                >
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-medium text-[var(--text-strong)]">{transaction.description}</div>
-                                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
-                                      <span>{transaction.date}</span>
-                                      {transaction.source === "pdf_import" ? <span>PDF import</span> : null}
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 text-left"
+                            onClick={() => toggleRecentActivity(goal.id)}
+                          >
+                            <div>
+                              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Recent transactions</div>
+                              <div className="mt-1 text-xs text-[var(--text-muted)]">Latest 5 goal-linked items</div>
+                            </div>
+                            <div className="text-sm text-[var(--text-muted)]">
+                              {isRecentActivityExpanded ? "Hide" : "Show"} {recentTransactions.length ? `(${recentTransactions.length})` : ""}
+                            </div>
+                          </button>
+                          {isRecentActivityExpanded ? (
+                            recentTransactions.length ? (
+                              <div className="mt-3 space-y-2">
+                                {recentTransactions.map((transaction) => (
+                                  <div
+                                    key={transaction.id}
+                                    className="flex items-start justify-between gap-3 border-b border-[var(--border-color)] pb-2 last:border-b-0 last:pb-0"
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-medium text-[var(--text-strong)]">{transaction.description}</div>
+                                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                                        <span>{transaction.date}</span>
+                                        {transaction.source === "pdf_import" ? <span>PDF import</span> : null}
+                                      </div>
+                                    </div>
+                                    <div className={`shrink-0 text-sm font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
+                                      {transaction.direction === "credit" ? "+" : "-"}
+                                      {formatCurrency(transaction.amount)}
                                     </div>
                                   </div>
-                                  <div className={`shrink-0 text-sm font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
-                                    {transaction.direction === "credit" ? "+" : "-"}
-                                    {formatCurrency(transaction.amount)}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="mt-3 text-sm text-[var(--text-muted)]">No transactions in this bucket for {activeMonthLabel}.</p>
-                          )}
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-3 text-sm text-[var(--text-muted)]">No goal-linked transactions for {activeMonthLabel}.</p>
+                            )
+                          ) : null}
                         </div>
 
                         {goal.notes ? (

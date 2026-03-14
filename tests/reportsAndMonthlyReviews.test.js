@@ -343,10 +343,11 @@ test('dashboard reporting includes monthly bucket progress and goal progress', a
       bucket: 'Savings',
       bucket_name: 'Savings',
       target_amount: '5000.00',
-      reserved_amount: '1800.00',
-      current_amount: '1800.00',
-      remaining_amount: '3200.00',
-      progress_percent: 36,
+      bucket_balance: '1800.00',
+      reserved_amount: '0.00',
+      current_amount: '0.00',
+      remaining_amount: '5000.00',
+      progress_percent: 0,
     },
   ]);
   assert.deepEqual(result.bucket_balances, [
@@ -393,7 +394,9 @@ test('dashboard goal progress clamps overfunded goals at zero remaining and 100 
     incomeAllocations: [
       { allocationCategoryId: 'bucket_savings', receivedDate: '2026-03-01', allocatedAmount: '750.00' },
     ],
-    transactions: [],
+    transactions: [
+      { id: 'txn_1', categoryId: 'bucket_savings', transactionDate: '2026-03-20', amount: '750.00', direction: 'credit', linkedGoalId: 'goal_1' },
+    ],
     goals: [
       {
         id: 'goal_1',
@@ -423,6 +426,7 @@ test('dashboard goal progress clamps overfunded goals at zero remaining and 100 
       bucket: 'Savings',
       bucket_name: 'Savings',
       target_amount: '500.00',
+      bucket_balance: '750.00',
       reserved_amount: '750.00',
       current_amount: '750.00',
       remaining_amount: '0.00',

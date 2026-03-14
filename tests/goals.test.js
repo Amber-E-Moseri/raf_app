@@ -244,8 +244,9 @@ test('goal progress is derived from the current reserved bucket balance', async 
       { allocationCategoryId: 'bucket_giving', allocatedAmount: '500.00' },
     ],
     transactions: [
-      { id: 'txn_1', categoryId: 'bucket_savings', transactionDate: '2026-03-10', amount: '200.00', direction: 'debit' },
-      { id: 'txn_2', categoryId: 'bucket_giving', transactionDate: '2026-04-01', amount: '50.00', direction: 'debit' },
+      { id: 'txn_1', categoryId: 'bucket_savings', transactionDate: '2026-03-10', amount: '800.00', direction: 'credit', linkedGoalId: 'goal_1' },
+      { id: 'txn_2', categoryId: 'bucket_savings', transactionDate: '2026-03-11', amount: '200.00', direction: 'credit' },
+      { id: 'txn_3', categoryId: 'bucket_giving', transactionDate: '2026-04-01', amount: '50.00', direction: 'debit' },
     ],
     goals: [
       {
@@ -275,16 +276,17 @@ test('goal progress is derived from the current reserved bucket balance', async 
       bucket_id: 'bucket_savings',
       bucket: 'Savings',
       bucket_name: 'Savings',
+      bucket_balance: '2800.00',
       target_amount: '5000.00',
-      reserved_amount: '1800.00',
-      current_amount: '1800.00',
-      remaining_amount: '3200.00',
-      progress_percent: 36,
+      reserved_amount: '800.00',
+      current_amount: '800.00',
+      remaining_amount: '4200.00',
+      progress_percent: 16,
     },
   ]);
 });
 
-test('goal progress ignores target date windows and uses current reserved balance', async () => {
+test('goal progress stays at zero when the linked bucket has money but no goal-linked transactions', async () => {
   const db = createDbDouble({
     incomeAllocations: [
       { allocationCategoryId: 'bucket_savings', allocatedAmount: '600.00' },
@@ -314,13 +316,14 @@ test('goal progress ignores target date windows and uses current reserved balanc
     householdId: 'household_1',
   });
 
-  assert.equal(result[0].reserved_amount, '600.00');
-  assert.equal(result[0].current_amount, '600.00');
-  assert.equal(result[0].remaining_amount, '400.00');
-  assert.equal(result[0].progress_percent, 60);
+  assert.equal(result[0].bucket_balance, '600.00');
+  assert.equal(result[0].reserved_amount, '0.00');
+  assert.equal(result[0].current_amount, '0.00');
+  assert.equal(result[0].remaining_amount, '1000.00');
+  assert.equal(result[0].progress_percent, 0);
 });
 
-test('goal progress clamps remaining at zero and progress at 100 when bucket balance exceeds target', async () => {
+test('goal progress clamps remaining at zero and progress at 100 when linked goal transactions exceed target', async () => {
   const db = createGoalsDb({
     goals: [
       {
@@ -340,7 +343,9 @@ test('goal progress clamps remaining at zero and progress at 100 when bucket bal
     incomeAllocations: [
       { incomeEntryId: 'income_1', allocationCategoryId: 'bucket_savings', allocatedAmount: '800.00' },
     ],
-    transactions: [],
+    transactions: [
+      { id: 'txn_1', householdId: 'household_1', categoryId: 'bucket_savings', transactionDate: '2026-03-12', amount: '750.00', direction: 'credit', linkedGoalId: 'goal_1' },
+    ],
   });
 
   const result = await listGoalProgress({
@@ -348,7 +353,9 @@ test('goal progress clamps remaining at zero and progress at 100 when bucket bal
     householdId: 'household_1',
   });
 
-  assert.equal(result[0].reserved_amount, '800.00');
+  assert.equal(result[0].bucket_balance, '800.00');
+  assert.equal(result[0].reserved_amount, '750.00');
+  assert.equal(result[0].current_amount, '750.00');
   assert.equal(result[0].remaining_amount, '0.00');
   assert.equal(result[0].progress_percent, 100);
 });

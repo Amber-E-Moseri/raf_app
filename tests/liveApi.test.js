@@ -380,11 +380,12 @@ test('goals endpoints create, update, soft-delete, and expose dashboard goal pro
     bucket_id: bucket.id,
     bucket: 'Savings',
     bucket_name: 'Savings',
+    bucket_balance: '1800.00',
     target_amount: '5000.00',
-    reserved_amount: '1800.00',
-    current_amount: '1800.00',
-    remaining_amount: '3200.00',
-    progress_percent: 36,
+    reserved_amount: '0.00',
+    current_amount: '0.00',
+    remaining_amount: '5000.00',
+    progress_percent: 0,
   });
   assert.deepEqual(dashboard.data.monthly_bucket_progress.find((item) => item.bucket_id === bucket.id), {
     bucket_id: bucket.id,

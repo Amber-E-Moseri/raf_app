@@ -512,6 +512,12 @@ export function Transactions() {
     }));
   }
 
+  function resetImportReviewDerivedState() {
+    setReviewDrafts({});
+    setDismissedRuleEffects({});
+    setEditingRuleId(null);
+  }
+
   function getRuleDraft(rule: ImportReviewRule | ImportReviewSuggestion) {
     return ruleDrafts[rule.id] ?? buildImportRuleDraft(rule);
   }
@@ -954,6 +960,7 @@ export function Transactions() {
 
     try {
       await updateImportReviewRule(rule.id, mapRuleDraftToPayload(draft));
+      resetImportReviewDerivedState();
       setEditingRuleId(null);
       setReviewSuccess("Import rule updated.");
       await reload();
@@ -971,6 +978,7 @@ export function Transactions() {
 
     try {
       await deleteImportReviewRule(rule.id);
+      resetImportReviewDerivedState();
       setEditingRuleId((current) => current === rule.id ? null : current);
       setOpenAdvancedMenuId(null);
       setReviewSuccess("Import rule deleted.");
@@ -992,6 +1000,7 @@ export function Transactions() {
         rule_type: nextMode,
         auto_apply: nextMode === "reusable_rule" ? autoApply : false,
       });
+      resetImportReviewDerivedState();
       setReviewSuccess(nextMode === "suggestion" ? "Rule converted to suggestion only." : autoApply ? "Auto-apply enabled." : "Auto-apply disabled.");
       setOpenAdvancedMenuId(null);
       await reload();
@@ -1636,7 +1645,7 @@ export function Transactions() {
                                         >
                                           Disable auto-apply
                                         </button>
-                                      ) : activeRule.rule_type === "reusable_rule" ? (
+                                      ) : (
                                         <button
                                           type="button"
                                           className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
@@ -1644,7 +1653,7 @@ export function Transactions() {
                                         >
                                           Enable auto-apply
                                         </button>
-                                      ) : null}
+                                      )}
                                       {activeRule.rule_type !== "suggestion" ? (
                                         <button
                                           type="button"
