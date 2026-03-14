@@ -3,9 +3,10 @@ import type { ReactNode } from "react";
 interface BadgeProps {
   tone?: "neutral" | "success" | "warning" | "danger";
   children: ReactNode;
+  className?: string;
 }
 
-export function Badge({ tone = "neutral", children }: BadgeProps) {
+export function Badge({ tone = "neutral", children, className = "" }: BadgeProps) {
   const classes = {
     neutral: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-text)] ring-1 ring-[var(--badge-neutral-ring)]",
     success: "bg-[var(--badge-success-bg)] text-[var(--badge-success-text)] ring-1 ring-[var(--badge-success-ring)]",
@@ -13,5 +14,5 @@ export function Badge({ tone = "neutral", children }: BadgeProps) {
     danger: "bg-rose-100 text-rose-700 ring-1 ring-rose-200",
   }[tone];
 
-  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold tracking-[0.01em] ${classes}`}>{children}</span>;
+  return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold tracking-[0.01em] ${classes} ${className}`.trim()}>{children}</span>;
 }

@@ -45,6 +45,7 @@ interface ImportRuleEditorProps {
   draft: ImportRuleDraft;
   isSaving?: boolean;
   saveLabel?: string;
+  allowAutoApplyToggle?: boolean;
   onChange: (patch: Partial<ImportRuleDraft>) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -88,6 +89,7 @@ export function ImportRuleEditor({
   draft,
   isSaving = false,
   saveLabel = "Save",
+  allowAutoApplyToggle = true,
   onChange,
   onCancel,
   onSave,
@@ -148,7 +150,7 @@ export function ImportRuleEditor({
             value={draft.ruleType}
             onChange={(event) => onChange({
               ruleType: event.target.value as "suggestion" | "reusable_rule",
-              autoApply: event.target.value === "reusable_rule" ? draft.autoApply : false,
+              autoApply: event.target.value === "reusable_rule" ? true : false,
             })}
           >
             <option value="suggestion">Suggestion only</option>
@@ -220,19 +222,26 @@ export function ImportRuleEditor({
           </label>
         ) : null}
 
-        <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 md:col-span-2">
-          <input
-            type="checkbox"
-            className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
-            checked={draft.autoApply}
-            disabled={draft.ruleType !== "reusable_rule"}
-            onChange={(event) => onChange({ autoApply: event.target.checked })}
-          />
-          <span>
-            <span className="block font-medium text-raf-ink">Auto-apply</span>
-            <span className="mt-1 block text-stone-500">Visible and reversible. Turn this off to convert the rule back to suggestion behavior.</span>
-          </span>
-        </label>
+        {allowAutoApplyToggle ? (
+          <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 md:col-span-2">
+            <input
+              type="checkbox"
+              className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
+              checked={draft.autoApply}
+              disabled={draft.ruleType !== "reusable_rule"}
+              onChange={(event) => onChange({ autoApply: event.target.checked })}
+            />
+            <span>
+              <span className="block font-medium text-raf-ink">Auto-apply</span>
+              <span className="mt-1 block text-stone-500">Visible and reversible. Turn this off to convert the rule back to suggestion behavior.</span>
+            </span>
+          </label>
+        ) : draft.ruleType === "reusable_rule" ? (
+          <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 md:col-span-2">
+            <span className="block font-medium text-raf-ink">Auto-apply enabled</span>
+            <span className="mt-1 block text-stone-500">Reusable rules auto-apply right away. To disable that later, use Settings.</span>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-3">

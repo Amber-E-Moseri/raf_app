@@ -313,7 +313,6 @@ export function Transactions() {
   const [importPanelModes, setImportPanelModes] = useState<Record<string, "review" | "details">>({});
   const [bulkBucketId, setBulkBucketId] = useState("");
   const [bulkRuleMode, setBulkRuleMode] = useState<"none" | "suggestion" | "reusable_rule">("none");
-  const [bulkAutoApply, setBulkAutoApply] = useState(false);
   const [isBulkReviewing, setIsBulkReviewing] = useState(false);
   const [openImportMenuId, setOpenImportMenuId] = useState<string | null>(null);
   const [openAdvancedMenuId, setOpenAdvancedMenuId] = useState<string | null>(null);
@@ -337,6 +336,7 @@ export function Transactions() {
     setSelectedImportIds([]);
     setImportPanelModes({});
     setBulkBucketId("");
+    setBulkRuleMode("none");
     setImportsView("needs_review");
     setOpenImportMenuId(null);
   }, [activeMonth]);
@@ -949,7 +949,7 @@ export function Transactions() {
       review_note: draft.reviewNote.trim() || null,
       remember_choice: draft.saveRuleMode !== "none",
       save_rule_mode: draft.saveRuleMode === "none" ? undefined : draft.saveRuleMode,
-      auto_apply_rule: draft.saveRuleMode === "reusable_rule" ? draft.autoApplyRule : false,
+      auto_apply_rule: draft.saveRuleMode === "reusable_rule",
     };
 
     if (requiresCategorySelection(draft.classificationType)) {
@@ -1030,7 +1030,7 @@ export function Transactions() {
         review_note: currentDraft.reviewNote.trim() || null,
         remember_choice: currentDraft.saveRuleMode !== "none",
         save_rule_mode: currentDraft.saveRuleMode === "none" ? undefined : currentDraft.saveRuleMode,
-        auto_apply_rule: currentDraft.saveRuleMode === "reusable_rule" ? currentDraft.autoApplyRule : false,
+        auto_apply_rule: currentDraft.saveRuleMode === "reusable_rule",
       });
       setReviewSuccess("Imported row ignored.");
       setOpenImportMenuId(null);
@@ -1082,7 +1082,7 @@ export function Transactions() {
           ...currentDraft,
           categoryId: currentDraft.categoryId || bulkBucketId || "",
           saveRuleMode: bulkRuleMode,
-          autoApplyRule: bulkRuleMode === "reusable_rule" ? bulkAutoApply : false,
+          autoApplyRule: bulkRuleMode === "reusable_rule",
         };
         const payload = action === "ignore"
           ? {
@@ -1090,7 +1090,7 @@ export function Transactions() {
             review_note: effectiveDraft.reviewNote.trim() || null,
             remember_choice: effectiveDraft.saveRuleMode !== "none",
             save_rule_mode: effectiveDraft.saveRuleMode === "none" ? undefined : effectiveDraft.saveRuleMode,
-            auto_apply_rule: effectiveDraft.saveRuleMode === "reusable_rule" ? effectiveDraft.autoApplyRule : false,
+            auto_apply_rule: effectiveDraft.saveRuleMode === "reusable_rule",
           }
           : buildImportClassificationPayload(item, effectiveDraft);
 
@@ -1643,15 +1643,6 @@ export function Transactions() {
                             <option value="suggestion">Suggest this choice next time</option>
                             <option value="reusable_rule">Save as reusable rule</option>
                           </select>
-                          <label className="inline-flex items-center gap-2 text-sm text-stone-600">
-                            <input
-                              type="checkbox"
-                              checked={bulkAutoApply}
-                              disabled={bulkRuleMode !== "reusable_rule"}
-                              onChange={(event) => setBulkAutoApply(event.target.checked)}
-                            />
-                            <span>{bulkAutoApply ? "Disable auto-apply" : "Enable auto-apply"}</span>
-                          </label>
                           <Button type="button" disabled={isBulkReviewing} onClick={() => void handleBulkReview("approve")}>
                             {isBulkReviewing ? <LoadingSpinner inline size="sm" label="Approving..." /> : "Approve Selected"}
                           </Button>
@@ -1855,23 +1846,6 @@ export function Transactions() {
                                   </button>
                                   {isAdvancedOpen && activeRule ? (
                                     <div className="mt-2 space-y-1 border-t border-stone-100 pt-2">
-                                      {activeRule.auto_apply ? (
-                                        <button
-                                          type="button"
-                                          className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
-                                          onClick={() => void handleRuleModeUpdate(activeRule, "reusable_rule", false)}
-                                        >
-                                          Disable auto-apply
-                                        </button>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
-                                          onClick={() => void handleRuleModeUpdate(activeRule, "reusable_rule", true)}
-                                        >
-                                          Enable auto-apply
-                                        </button>
-                                      )}
                                       {activeRule.rule_type !== "suggestion" ? (
                                         <button
                                           type="button"
@@ -1939,6 +1913,7 @@ export function Transactions() {
                                   draft={getRuleDraft(activeRule)}
                                   isSaving={pendingRuleId === activeRule.id}
                                   saveLabel="Save rule"
+                                  allowAutoApplyToggle={false}
                                   onChange={(patch) => updateRuleDraft(activeRule, patch)}
                                   onCancel={() => setEditingRuleId(null)}
                                   onSave={() => void handleSaveRuleEdits(activeRule)}
@@ -2077,26 +2052,19 @@ export function Transactions() {
                                           className="mt-1"
                                           checked={draft.saveRuleMode === "reusable_rule"}
                                           disabled={isPending || isBulkReviewing}
-                                          onChange={() => updateReviewDraft(item, { saveRuleMode: "reusable_rule" })}
+                                          onChange={() => updateReviewDraft(item, { saveRuleMode: "reusable_rule", autoApplyRule: true })}
                                         />
                                         <span>
                                           <span className="block font-medium text-raf-ink">Save as reusable rule</span>
-                                          <span className="mt-1 block text-stone-500">Save a rule that can be reused for similar transactions. Auto-apply can be enabled later.</span>
+                                          <span className="mt-1 block text-stone-500">Save a rule that will auto-apply for similar transactions. Use Settings to disable auto-apply later.</span>
                                         </span>
                                       </label>
-                                      <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 md:col-span-2">
-                                        <input
-                                          type="checkbox"
-                                          className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
-                                          checked={draft.autoApplyRule}
-                                          disabled={draft.saveRuleMode !== "reusable_rule" || isPending || isBulkReviewing}
-                                          onChange={(event) => updateReviewDraft(item, { autoApplyRule: event.target.checked })}
-                                        />
-                                        <span>
-                                          <span className="block font-medium text-raf-ink">{draft.autoApplyRule ? "Disable auto-apply" : "Enable auto-apply"}</span>
-                                          <span className="mt-1 block text-stone-500">Auto-apply is always visible and reversible. Turn it off to keep this as suggestion behavior.</span>
-                                        </span>
-                                      </label>
+                                      {draft.saveRuleMode === "reusable_rule" ? (
+                                        <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 md:col-span-2">
+                                          <span className="block font-medium text-raf-ink">Auto-apply enabled</span>
+                                          <span className="mt-1 block text-stone-500">Reusable rules auto-apply immediately. To disable that later, go to Settings.</span>
+                                        </div>
+                                      ) : null}
                                     </div>
                                   </div>
 

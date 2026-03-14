@@ -123,6 +123,7 @@ export function AppearanceSettings() {
   const [ruleMessage, setRuleMessage] = useState<string | null>(null);
   const [ruleError, setRuleError] = useState<string | null>(null);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [openRuleMenuId, setOpenRuleMenuId] = useState<string | null>(null);
   const [ruleDrafts, setRuleDrafts] = useState<Record<string, ReturnType<typeof buildImportRuleDraft>>>({});
   const [pendingRuleId, setPendingRuleId] = useState<string | null>(null);
 
@@ -211,6 +212,7 @@ export function AppearanceSettings() {
     setPendingRuleId(rule.id);
     setRuleError(null);
     setRuleMessage(null);
+    setOpenRuleMenuId(null);
 
     try {
       await updateImportReviewRule(rule.id, mapRuleDraftToPayload(currentDraft));
@@ -228,6 +230,7 @@ export function AppearanceSettings() {
     setPendingRuleId(ruleId);
     setRuleError(null);
     setRuleMessage(null);
+    setOpenRuleMenuId(null);
 
     try {
       await deleteImportReviewRule(ruleId);
@@ -245,6 +248,7 @@ export function AppearanceSettings() {
     setPendingRuleId(rule.id);
     setRuleError(null);
     setRuleMessage(null);
+    setOpenRuleMenuId(null);
 
     try {
       await updateImportReviewRule(rule.id, {
@@ -511,72 +515,102 @@ export function AppearanceSettings() {
               {!rulesData.isLoading && !rulesData.error && rulesData.data ? (
                 <Card title="Import Rules" subtitle="Suggestions stay review-only. Reusable rules can have auto-apply enabled or disabled at any time.">
                   {rulesData.data.rules.length ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {rulesData.data.rules.map((rule) => {
-                        const isEditing = editingRuleId === rule.id;
                         const isPending = pendingRuleId === rule.id;
-
+                        const categoryLabel = rule.category_id ? rulesData.data.categories.find((item) => item.id === rule.category_id)?.label ?? rule.category_id : null;
                         return (
-                          <div key={rule.id} className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)]">
-                            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                              <div className="space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-sm font-semibold text-[var(--text-strong)]">
-                                    {rule.match_type === "contains" ? `Description contains "${rule.match_value}"` : `Description equals "${rule.match_value}"`}
-                                  </span>
-                                  <Badge tone={rule.rule_type === "reusable_rule" ? "neutral" : "warning"}>
-                                    {rule.rule_type === "reusable_rule" ? "Reusable rule" : "Suggestion"}
-                                  </Badge>
-                                  <Badge tone={rule.auto_apply ? "success" : "neutral"}>
-                                    {rule.auto_apply ? "Auto-apply on" : "Auto-apply off"}
-                                  </Badge>
+                          <div
+                            key={rule.id}
+                            className="group relative rounded-xl border border-[var(--border-color)] bg-[var(--surface-color)] px-4 py-3 transition duration-150 hover:bg-[color:color-mix(in_srgb,var(--surface-plain)_82%,var(--surface-color))]"
+                          >
+                            <div className="space-y-3">
+                              <div className="min-w-0 space-y-1">
+                                <div className="truncate text-sm font-semibold leading-5 text-[var(--text-strong)]">
+                                  {rule.match_type === "contains" ? `Description contains "${rule.match_value}"` : `Description equals "${rule.match_value}"`}
                                 </div>
-                                <div className="text-sm text-stone-500">
+                                <div className="truncate text-[13px] leading-5 text-[var(--text-muted)]">
                                   {ruleActionLabel(rule)}
-                                  {rule.category_id ? ` • ${rulesData.data.categories.find((item) => item.id === rule.category_id)?.label ?? rule.category_id}` : ""}
-                                  {rule.last_used_at ? ` • last used ${new Date(rule.last_used_at).toLocaleDateString()}` : " • not used yet"}
+                                  {categoryLabel ? ` - ${categoryLabel}` : ""}
                                 </div>
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Button type="button" variant="ghost" onClick={() => setEditingRuleId((current) => current === rule.id ? null : rule.id)}>
-                                  {isEditing ? "Close editor" : "Edit rule"}
-                                </Button>
-                                {rule.rule_type === "reusable_rule" && rule.auto_apply ? (
-                                  <Button type="button" variant="secondary" disabled={isPending} onClick={() => void handleRuleModeChange(rule, "reusable_rule", false)}>
-                                    Disable auto-apply
-                                  </Button>
-                                ) : null}
-                                {rule.rule_type === "reusable_rule" && !rule.auto_apply ? (
-                                  <Button type="button" variant="secondary" disabled={isPending} onClick={() => void handleRuleModeChange(rule, "reusable_rule", true)}>
-                                    Enable auto-apply
-                                  </Button>
-                                ) : null}
-                                {rule.rule_type !== "suggestion" ? (
-                                  <Button type="button" variant="secondary" disabled={isPending} onClick={() => void handleRuleModeChange(rule, "suggestion", false)}>
-                                    Convert to suggestion only
-                                  </Button>
-                                ) : null}
-                                <Button type="button" variant="ghost" disabled={isPending} onClick={() => void handleDeleteRule(rule.id)}>
-                                  Delete rule
-                                </Button>
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <Badge tone={rule.rule_type === "reusable_rule" ? "neutral" : "warning"} className="h-6 whitespace-nowrap px-2.5 text-[11px]">
+                                    {rule.rule_type === "reusable_rule" ? "Reusable" : "Suggestion Only"}
+                                  </Badge>
+                                  {rule.rule_type === "reusable_rule" ? (
+                                    <Badge tone={rule.auto_apply ? "success" : "neutral"} className="h-6 whitespace-nowrap px-2.5 text-[11px]">
+                                      {rule.auto_apply ? "Auto-Apply ON" : "Auto-Apply OFF"}
+                                    </Badge>
+                                  ) : null}
+                                </div>
+
+                                <div className="flex items-center gap-2.5">
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center whitespace-nowrap text-[12px] font-medium text-[var(--text-muted)] transition hover:text-[var(--text-strong)]"
+                                    onClick={() => {
+                                      setOpenRuleMenuId(null);
+                                      setEditingRuleId(rule.id);
+                                    }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-8 items-center justify-center rounded-full border border-[var(--border-color)] px-3 text-[12px] font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-plain)] hover:text-[var(--text-strong)]"
+                                    onClick={() => setOpenRuleMenuId((current) => current === rule.id ? null : rule.id)}
+                                  >
+                                    More
+                                  </button>
+                                </div>
                               </div>
                             </div>
 
-                            {isEditing ? (
-                              <div className="border-t border-[var(--border-color)] px-4 py-4">
-                                <ImportRuleEditor
-                                  categories={rulesData.data.categories}
-                                  debts={rulesData.data.debts}
-                                  fixedBills={rulesData.data.fixedBills}
-                                  goals={rulesData.data.goals}
-                                  draft={getRuleDraft(rule)}
-                                  isSaving={isPending}
-                                  saveLabel="Save rule"
-                                  onChange={(patch) => updateRuleDraft(rule, patch)}
-                                  onCancel={() => setEditingRuleId(null)}
-                                  onSave={() => void handleSaveRule(rule)}
-                                />
+                            {openRuleMenuId === rule.id ? (
+                              <div
+                                className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--border-color)] pt-3"
+                              >
+                                {rule.rule_type === "reusable_rule" && rule.auto_apply ? (
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center whitespace-nowrap text-[12px] font-medium text-[var(--text-strong)] transition hover:text-[color:color-mix(in_srgb,var(--primary-color)_82%,var(--text-strong))]"
+                                    disabled={isPending}
+                                    onClick={() => void handleRuleModeChange(rule, "reusable_rule", false)}
+                                  >
+                                    Disable Auto-Apply
+                                  </button>
+                                ) : null}
+                                {rule.rule_type === "reusable_rule" && !rule.auto_apply ? (
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center whitespace-nowrap text-[12px] font-medium text-[var(--text-muted)] transition hover:text-[var(--text-strong)]"
+                                    disabled={isPending}
+                                    onClick={() => void handleRuleModeChange(rule, "reusable_rule", true)}
+                                  >
+                                    Enable Auto-Apply
+                                  </button>
+                                ) : null}
+                                {rule.rule_type !== "suggestion" ? (
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center whitespace-nowrap text-[12px] font-medium text-[var(--text-muted)] transition hover:text-[var(--text-strong)]"
+                                    disabled={isPending}
+                                    onClick={() => void handleRuleModeChange(rule, "suggestion", false)}
+                                  >
+                                    Convert to Suggestion
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center whitespace-nowrap text-[12px] font-medium text-[color:color-mix(in_srgb,#c2410c_78%,var(--text-muted))] transition hover:text-[#ef4444]"
+                                  disabled={isPending}
+                                  onClick={() => void handleDeleteRule(rule.id)}
+                                >
+                                  Delete
+                                </button>
                               </div>
                             ) : null}
                           </div>
@@ -590,6 +624,50 @@ export function AppearanceSettings() {
                     />
                   )}
                 </Card>
+              ) : null}
+              {!rulesData.isLoading && !rulesData.error && rulesData.data && editingRuleId ? (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 px-4 py-6">
+                  <div
+                    className="w-full max-w-3xl rounded-[1.75rem] border border-[var(--border-color)] p-5 shadow-[0_28px_70px_rgba(15,23,42,0.28)]"
+                    style={{ background: "var(--surface-color)" }}
+                  >
+                    <div className="mb-4 flex items-start justify-between gap-4 border-b border-[var(--border-color)] pb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-[var(--text-strong)]">Edit Rule</h3>
+                        <p className="mt-1 text-sm text-[var(--text-muted)]">
+                          Update the match condition, rule outcome, and auto-apply behavior without leaving Settings.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-color)] text-base text-[var(--text-muted)] transition hover:bg-[var(--surface-plain)] hover:text-[var(--text-strong)]"
+                        onClick={() => setEditingRuleId(null)}
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    {(() => {
+                      const rule = rulesData.data.rules.find((item) => item.id === editingRuleId);
+                      if (!rule) return null;
+
+                      return (
+                        <ImportRuleEditor
+                          categories={rulesData.data.categories}
+                          debts={rulesData.data.debts}
+                          fixedBills={rulesData.data.fixedBills}
+                          goals={rulesData.data.goals}
+                          draft={getRuleDraft(rule)}
+                          isSaving={pendingRuleId === rule.id}
+                          saveLabel="Save rule"
+                          onChange={(patch) => updateRuleDraft(rule, patch)}
+                          onCancel={() => setEditingRuleId(null)}
+                          onSave={() => void handleSaveRule(rule)}
+                        />
+                      );
+                    })()}
+                  </div>
+                </div>
               ) : null}
             </>
           )}
@@ -696,3 +774,4 @@ export function AppearanceSettings() {
     </PageShell>
   );
 }
+
