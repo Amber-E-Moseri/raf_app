@@ -294,6 +294,54 @@ select {
     linear-gradient(90deg, rgba(54, 84, 72, 0.15) 0%, rgba(54, 84, 72, 0.08) 100%);
 }
 
+.goal-reached-card {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary-color) 18%, transparent),
+    0 18px 40px -28px color-mix(in srgb, var(--primary-color) 32%, transparent);
+}
+
+.goal-celebration {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.goal-burst {
+  --goal-angle: 0deg;
+  --goal-delay: 0s;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-left: -0.275rem;
+  margin-top: -0.275rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-color) 78%, white);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--primary-color) 26%, transparent);
+  opacity: 0;
+  transform: rotate(var(--goal-angle)) translateY(-0.5rem) scale(0.7);
+  animation: goal-burst 1.2s ease-out forwards;
+  animation-delay: var(--goal-delay);
+}
+
+@keyframes goal-burst {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--goal-angle)) translateY(-0.5rem) scale(0.6);
+  }
+
+  18% {
+    opacity: 0.95;
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotate(var(--goal-angle)) translateY(-4.5rem) scale(1);
+  }
+}
+
 [data-mode="dark"] .ui-card {
   border-color: var(--border-color);
   background:
@@ -303,6 +351,12 @@ select {
 [data-mode="dark"] .progress-track {
   background:
     linear-gradient(90deg, rgba(51, 65, 85, 0.55) 0%, rgba(30, 41, 59, 0.7) 100%);
+}
+
+[data-mode="dark"] .goal-reached-card {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary-color) 24%, transparent),
+    0 22px 52px -34px rgba(0, 0, 0, 0.72);
 }
 
 [data-mode="dark"] .bg-white,
@@ -349,4 +403,17 @@ select {
 
 [data-mode="dark"] .placeholder\:text-stone-400::placeholder {
   color: var(--text-muted) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goal-burst {
+    animation: none;
+    opacity: 0;
+  }
+
+  .goal-reached-card {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary-color) 16%, transparent),
+      0 10px 24px -18px color-mix(in srgb, var(--primary-color) 14%, transparent);
+  }
 }

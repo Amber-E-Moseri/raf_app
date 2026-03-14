@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { createGoal, deleteGoal, getGoals, updateGoal } from "../api/goalsApi";
+import { getImportedTransactions } from "../api/importsApi";
 import { getDashboardReport } from "../api/reportsApi";
+import { getTransactions } from "../api/transactionsApi";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { SuccessNotice } from "../components/feedback/SuccessNotice";
@@ -15,12 +18,14 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { formatCurrency } from "../lib/format";
-import type { AllocationCategory, Goal, GoalProgress } from "../lib/types";
+import type { AllocationCategory, Goal, GoalProgress, ImportedTransaction, Transaction } from "../lib/types";
 
 interface GoalsViewModel {
   categories: AllocationCategory[];
   goals: Goal[];
   progress: GoalProgress[];
+  transactions: Transaction[];
+  imports: ImportedTransaction[];
 }
 
 interface GoalFormState {
@@ -32,6 +37,15 @@ interface GoalFormState {
   active: boolean;
 }
 
+interface GoalActivityItem {
+  id: string;
+  date: string;
+  description: string;
+  amount: string;
+  direction: "credit" | "debit";
+  source: "transaction" | "pdf_import";
+}
+
 const EMPTY_GOAL_FORM: GoalFormState = {
   name: "",
   bucketId: "",
@@ -40,6 +54,8 @@ const EMPTY_GOAL_FORM: GoalFormState = {
   notes: "",
   active: true,
 };
+
+const GOAL_REACHED_STORAGE_KEY = "raf_goal_reached_state";
 
 function mapGoalToForm(goal: Goal): GoalFormState {
   return {
@@ -101,18 +117,25 @@ export function Goals() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [celebratingGoalIds, setCelebratingGoalIds] = useState<Record<string, boolean>>({});
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const hasSyncedGoalState = useRef(false);
 
   const goalsData = useAsyncData<GoalsViewModel>(async () => {
-    const [categories, goalsResponse, dashboard] = await Promise.all([
+    const [categories, goalsResponse, dashboard, transactions, imports] = await Promise.all([
       getAllocationCategories(),
       getGoals(),
       getDashboardReport({ from: activeRange.from, to: activeRange.to }),
+      getTransactions({ from: activeRange.from, to: activeRange.to, limit: 100 }),
+      getImportedTransactions(),
     ]);
 
     return {
       categories: categories.filter((category) => category.isActive !== false),
       goals: goalsResponse.items,
       progress: dashboard.goal_progress,
+      transactions: transactions.items,
+      imports: imports.items,
     };
   }, [activeRange.from, activeRange.to]);
 
@@ -136,6 +159,66 @@ export function Goals() {
     [goalsData.data?.goals],
   );
 
+  const recentActivityByGoalId = useMemo(() => {
+    const grouped = new Map<string, GoalActivityItem[]>();
+    const importedTransactionIds = new Set(
+      (goalsData.data?.imports ?? [])
+        .map((item) => item.linked_transaction_id)
+        .filter((value): value is string => Boolean(value)),
+    );
+
+    for (const transaction of goalsData.data?.transactions ?? []) {
+      if (!transaction.categoryId) {
+        continue;
+      }
+
+      const matchingGoals = activeGoals.filter((goal) => goal.bucket_id === transaction.categoryId);
+      if (!matchingGoals.length) {
+        continue;
+      }
+
+      for (const goal of matchingGoals) {
+        const current = grouped.get(goal.id) ?? [];
+        current.push({
+          id: transaction.id,
+          date: transaction.transactionDate,
+          description: transaction.description,
+          amount: transaction.amount,
+          direction: transaction.direction,
+          source: importedTransactionIds.has(transaction.id) ? "pdf_import" : "transaction",
+        });
+        grouped.set(goal.id, current);
+      }
+    }
+
+    for (const importedRow of goalsData.data?.imports ?? []) {
+      if (importedRow.linked_goal_id == null || importedRow.status === "ignored") {
+        continue;
+      }
+
+      const current = grouped.get(importedRow.linked_goal_id) ?? [];
+      if (!importedRow.linked_transaction_id || !current.some((item) => item.id === importedRow.linked_transaction_id)) {
+        current.push({
+          id: importedRow.id,
+          date: importedRow.date,
+          description: importedRow.description,
+          amount: importedRow.amount,
+          direction: Number(importedRow.amount) >= 0 ? "credit" : "debit",
+          source: "pdf_import",
+        });
+        grouped.set(importedRow.linked_goal_id, current);
+      }
+    }
+
+    for (const [goalId, items] of grouped.entries()) {
+      grouped.set(goalId, [...items].sort((left, right) => (
+        right.date.localeCompare(left.date) || right.id.localeCompare(left.id)
+      )));
+    }
+
+    return grouped;
+  }, [activeGoals, goalsData.data?.imports, goalsData.data?.transactions]);
+
   const canSubmit = form.name.trim() && form.bucketId && form.targetAmount.trim();
 
   useEffect(() => {
@@ -146,6 +229,92 @@ export function Goals() {
       }));
     }
   }, [editingGoalId, form.bucketId, goalsData.data?.categories]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const applyPreference = () => setPrefersReducedMotion(mediaQuery.matches);
+    applyPreference();
+    mediaQuery.addEventListener?.("change", applyPreference);
+
+    return () => {
+      mediaQuery.removeEventListener?.("change", applyPreference);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!goalsData.data) {
+      return;
+    }
+
+    const currentReachedState = Object.fromEntries(
+      activeGoals.map((goal) => {
+        const progress = progressLookup.get(goal.id);
+        return [goal.id, (progress?.progress_percent ?? 0) >= 100];
+      }),
+    );
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let storedReachedState: Record<string, boolean> = {};
+    try {
+      const raw = window.localStorage.getItem(GOAL_REACHED_STORAGE_KEY);
+      if (raw) {
+        storedReachedState = JSON.parse(raw) as Record<string, boolean>;
+      }
+    } catch {
+      storedReachedState = {};
+    }
+
+    if (!hasSyncedGoalState.current) {
+      hasSyncedGoalState.current = true;
+      window.localStorage.setItem(
+        GOAL_REACHED_STORAGE_KEY,
+        JSON.stringify({ ...storedReachedState, ...currentReachedState }),
+      );
+      return;
+    }
+
+    const newlyReachedGoalIds = activeGoals
+      .map((goal) => goal.id)
+      .filter((goalId) => currentReachedState[goalId] === true && storedReachedState[goalId] !== true);
+
+    if (newlyReachedGoalIds.length && !prefersReducedMotion) {
+      setCelebratingGoalIds((current) => ({
+        ...current,
+        ...Object.fromEntries(newlyReachedGoalIds.map((goalId) => [goalId, true])),
+      }));
+
+      const timeoutId = window.setTimeout(() => {
+        setCelebratingGoalIds((current) => {
+          const next = { ...current };
+          newlyReachedGoalIds.forEach((goalId) => {
+            delete next[goalId];
+          });
+          return next;
+        });
+      }, 1400);
+
+      window.localStorage.setItem(
+        GOAL_REACHED_STORAGE_KEY,
+        JSON.stringify({ ...storedReachedState, ...currentReachedState }),
+      );
+
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    window.localStorage.setItem(
+      GOAL_REACHED_STORAGE_KEY,
+      JSON.stringify({ ...storedReachedState, ...currentReachedState }),
+    );
+
+    return undefined;
+  }, [activeGoals, goalsData.data, prefersReducedMotion, progressLookup]);
 
   function resetForm() {
     setEditingGoalId(null);
@@ -224,6 +393,25 @@ export function Goals() {
     }
   }
 
+  async function handleDelete(goalId: string) {
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    try {
+      await deleteGoal(goalId);
+      setSaveMessage("Goal deleted.");
+      if (editingGoalId === goalId) {
+        resetForm();
+      }
+      await goalsData.reload();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Goal could not be deleted.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <PageShell
       eyebrow="Planning"
@@ -250,10 +438,32 @@ export function Goals() {
                   {activeGoals.map((goal) => {
                     const progress = progressLookup.get(goal.id) ?? null;
                     const category = categoryLookup.get(goal.bucket_id);
+                    const recentTransactions = (recentActivityByGoalId.get(goal.id) ?? []).slice(0, 5);
                     const progressPercent = Math.max(0, Math.min(progress?.progress_percent ?? 0, 100));
+                    const isReached = (progress?.progress_percent ?? 0) >= 100;
+                    const isCelebrating = celebratingGoalIds[goal.id] === true;
 
                     return (
-                      <div key={goal.id} className="rounded-[1.5rem] border border-[var(--border-color)] p-5" style={{ background: "var(--surface-plain)" }}>
+                      <div
+                        key={goal.id}
+                        className={`relative overflow-hidden rounded-[1.5rem] border p-5 ${isReached ? "goal-reached-card" : ""}`}
+                        style={{ background: "var(--surface-plain)", borderColor: "var(--border-color)" }}
+                      >
+                        {isCelebrating ? (
+                          <div className="goal-celebration" aria-hidden="true">
+                            {Array.from({ length: 10 }).map((_, index) => (
+                              <span
+                                // eslint-disable-next-line react/no-array-index-key
+                                key={index}
+                                className="goal-burst"
+                                style={{
+                                  "--goal-angle": `${index * 36}deg`,
+                                  "--goal-delay": `${index * 0.03}s`,
+                                } as CSSProperties}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
@@ -263,6 +473,9 @@ export function Goals() {
                             <p className="mt-2 text-sm text-[var(--text-muted)]">
                               Linked bucket: {category?.label ?? progress?.bucket_name ?? goal.bucket_id}
                             </p>
+                            {progress?.bucket_balance ? (
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">Bucket balance: {formatCurrency(progress.bucket_balance)}</p>
+                            ) : null}
                             {goal.target_date ? (
                               <p className="mt-1 text-sm text-[var(--text-muted)]">Target date: {goal.target_date}</p>
                             ) : null}
@@ -283,18 +496,16 @@ export function Goals() {
                           </div>
                         </div>
 
-                        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                        <div className="mt-5 grid gap-3 sm:grid-cols-2">
                           <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                             <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Target amount</div>
                             <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(goal.target_amount)}</div>
                           </div>
                           <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
-                            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Saved so far</div>
-                            <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(progress?.reserved_amount ?? "0.00")}</div>
-                          </div>
-                          <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
-                            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Remaining</div>
-                            <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(progress?.remaining_amount ?? goal.target_amount)}</div>
+                            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Paid so far</div>
+                            <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">
+                              {formatCurrency(progress?.current_amount ?? "0.00")}
+                            </div>
                           </div>
                         </div>
 
@@ -312,6 +523,37 @@ export function Goals() {
                               style={{ width: `${progressPercent}%` }}
                             />
                           </div>
+                        </div>
+
+                        <div className="mt-5 rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Recent transactions</div>
+                            <div className="text-xs text-[var(--text-muted)]">Latest 5 in this bucket</div>
+                          </div>
+                          {recentTransactions.length ? (
+                            <div className="mt-3 space-y-2">
+                              {recentTransactions.map((transaction) => (
+                                <div
+                                  key={transaction.id}
+                                  className="flex items-start justify-between gap-3 border-b border-[var(--border-color)] pb-2 last:border-b-0 last:pb-0"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium text-[var(--text-strong)]">{transaction.description}</div>
+                                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+                                      <span>{transaction.date}</span>
+                                      {transaction.source === "pdf_import" ? <span>PDF import</span> : null}
+                                    </div>
+                                  </div>
+                                  <div className={`shrink-0 text-sm font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
+                                    {transaction.direction === "credit" ? "+" : "-"}
+                                    {formatCurrency(transaction.amount)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-sm text-[var(--text-muted)]">No transactions in this bucket for {activeMonthLabel}.</p>
+                          )}
                         </div>
 
                         {goal.notes ? (
@@ -357,6 +599,15 @@ export function Goals() {
                             onClick={() => void handleUnarchive(goal.id)}
                           >
                             Unarchive
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="min-h-8 rounded-full px-3 py-1 text-xs text-rose-600 hover:bg-rose-50"
+                            disabled={isSaving}
+                            onClick={() => void handleDelete(goal.id)}
+                          >
+                            Delete
                           </Button>
                         </div>
                       </div>

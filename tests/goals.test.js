@@ -62,6 +62,10 @@ function createDbDouble({
       };
       return { ...state.goals[index] };
     },
+    async deleteGoal({ goalId }) {
+      state.goals = state.goals.filter((row) => row.id !== goalId);
+      return true;
+    },
   };
 
   return {
@@ -183,6 +187,33 @@ test('deleting a goal deactivates it without altering transactions', async () =>
 
   assert.equal(db.state.goals[0].active, false);
   assert.equal(db.state.transactions.length, 1);
+});
+
+test('deleting an already archived goal removes it permanently', async () => {
+  const db = createDbDouble({
+    goals: [
+      {
+        id: 'goal_1',
+        householdId: 'household_1',
+        bucketId: 'bucket_savings',
+        name: 'Emergency Fund',
+        targetAmount: '5000.00',
+        targetDate: null,
+        notes: null,
+        active: false,
+        createdAt: '2026-03-13T00:00:00.000Z',
+        updatedAt: '2026-03-14T00:00:00.000Z',
+      },
+    ],
+  });
+
+  await deleteGoal({
+    db,
+    householdId: 'household_1',
+    goalId: 'goal_1',
+  });
+
+  assert.equal(db.state.goals.length, 0);
 });
 
 test('bucket linkage validation requires an active allocation bucket', async () => {

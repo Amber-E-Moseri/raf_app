@@ -261,7 +261,7 @@ export function Transactions() {
   const [reviewPendingIds, setReviewPendingIds] = useState<string[]>([]);
   const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
   const [importsView, setImportsView] = useState<"needs_review" | "ignored" | "processed">("needs_review");
-  const [expandedImportIds, setExpandedImportIds] = useState<Record<string, boolean>>({});
+  const [importPanelModes, setImportPanelModes] = useState<Record<string, "review" | "details">>({});
   const [bulkBucketId, setBulkBucketId] = useState("");
   const [bulkRuleMode, setBulkRuleMode] = useState<"none" | "suggestion" | "reusable_rule">("none");
   const [bulkAutoApply, setBulkAutoApply] = useState(false);
@@ -286,7 +286,7 @@ export function Transactions() {
 
   useEffect(() => {
     setSelectedImportIds([]);
-    setExpandedImportIds({});
+    setImportPanelModes({});
     setBulkBucketId("");
     setImportsView("needs_review");
     setOpenImportMenuId(null);
@@ -322,7 +322,7 @@ export function Transactions() {
       debts: debts.items,
       categories,
       fixedBills: fixedBills.items,
-      goals: goals.items,
+      goals: goals.items.filter((goal) => goal.active !== false),
       imports: imports.items,
     };
   }, [categoryFilter, cursor, fromDate, toDate]);
@@ -437,11 +437,27 @@ export function Transactions() {
     ));
   }
 
-  function toggleImportDetails(importId: string) {
-    setExpandedImportIds((current) => ({
-      ...current,
-      [importId]: !current[importId],
-    }));
+  function openImportPanel(importId: string, mode: "review" | "details") {
+    setImportPanelModes((current) => {
+      if (current[importId] === mode) {
+        const next = { ...current };
+        delete next[importId];
+        return next;
+      }
+
+      return {
+        ...current,
+        [importId]: mode,
+      };
+    });
+  }
+
+  function closeImportPanel(importId: string) {
+    setImportPanelModes((current) => {
+      const next = { ...current };
+      delete next[importId];
+      return next;
+    });
   }
 
   function toggleImportMenu(importId: string) {
@@ -550,7 +566,7 @@ export function Transactions() {
       return "Approved";
     }
 
-    return "Select bucket";
+    return "Select a bucket";
   }
 
   function getLinkedLabel(item: ImportedTransaction) {
@@ -898,7 +914,7 @@ export function Transactions() {
     try {
       await unignoreImportedTransaction(item.id);
       setImportsView("needs_review");
-      setExpandedImportIds((current) => ({ ...current, [item.id]: false }));
+      closeImportPanel(item.id);
       setOpenImportMenuId(null);
       setOpenAdvancedMenuId(null);
       setReviewSuccess("Ignored transaction moved back to the review queue.");
@@ -918,7 +934,7 @@ export function Transactions() {
     try {
       await unprocessImportedTransaction(item.id);
       setImportsView("needs_review");
-      setExpandedImportIds((current) => ({ ...current, [item.id]: false }));
+      closeImportPanel(item.id);
       setOpenImportMenuId(null);
       setOpenAdvancedMenuId(null);
       setReviewSuccess("Processed transaction moved back to pending review.");
@@ -1449,7 +1465,8 @@ export function Transactions() {
                       const isPending = reviewPendingIds.includes(item.id);
                       const draft = getReviewDraft(item);
                       const status = importRowStatus(item, draft);
-                      const isExpanded = expandedImportIds[item.id] ?? false;
+                      const panelMode = importPanelModes[item.id] ?? null;
+                      const isExpanded = panelMode !== null;
                       const needsReview = item.status === "unreviewed";
                       const isIgnored = item.status === "ignored";
                       const isMenuOpen = openImportMenuId === item.id;
@@ -1505,7 +1522,7 @@ export function Transactions() {
                                   disabled={isPending || isBulkReviewing}
                                   onChange={(event) => updateReviewDraft(item, { categoryId: event.target.value })}
                                 >
-                                  <option value="">Select bucket</option>
+                                  <option value="">Select a bucket</option>
                                   {data.categories.map((category) => (
                                     <option key={category.id} value={category.id}>{category.label}</option>
                                   ))}
@@ -1558,7 +1575,7 @@ export function Transactions() {
                                       type="button"
                                       className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
                                       onClick={() => {
-                                        setExpandedImportIds((current) => ({ ...current, [item.id]: true }));
+                                        openImportPanel(item.id, "review");
                                         setOpenImportMenuId(null);
                                       }}
                                     >
@@ -1587,7 +1604,7 @@ export function Transactions() {
                                     type="button"
                                     className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
                                     onClick={() => {
-                                      toggleImportDetails(item.id);
+                                      openImportPanel(item.id, "details");
                                       setOpenImportMenuId(null);
                                     }}
                                   >
@@ -1642,7 +1659,7 @@ export function Transactions() {
                                         className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
                                         onClick={() => {
                                           setEditingRuleId(activeRule.id);
-                                          setExpandedImportIds((current) => ({ ...current, [item.id]: true }));
+                                          openImportPanel(item.id, "review");
                                           setOpenImportMenuId(null);
                                         }}
                                       >
@@ -1686,7 +1703,7 @@ export function Transactions() {
                                 </div>
                               ) : null}
 
-                              {needsReview && activeRule && isRuleEditing ? (
+                              {panelMode === "review" && needsReview && activeRule && isRuleEditing ? (
                                 <ImportRuleEditor
                                   categories={data.categories}
                                   debts={data.debts}
@@ -1699,7 +1716,7 @@ export function Transactions() {
                                   onCancel={() => setEditingRuleId(null)}
                                   onSave={() => void handleSaveRuleEdits(activeRule)}
                                 />
-                              ) : needsReview ? (
+                              ) : panelMode === "review" && needsReview ? (
                                 <div className="rounded-2xl border border-stone-200 bg-white p-4">
                                   <div className="grid gap-4 md:grid-cols-2">
                                     <label className="block">
@@ -1736,7 +1753,7 @@ export function Transactions() {
                                           disabled={isPending || isBulkReviewing}
                                           onChange={(event) => updateReviewDraft(item, { categoryId: event.target.value })}
                                         >
-                                          <option value="">Select bucket</option>
+                                          <option value="">Select a bucket</option>
                                           {data.categories.map((category) => (
                                             <option key={category.id} value={category.id}>{category.label}</option>
                                           ))}
@@ -1862,7 +1879,7 @@ export function Transactions() {
                                       variant="secondary"
                                       disabled={isPending || isBulkReviewing}
                                       onClick={() => {
-                                        setExpandedImportIds((current) => ({ ...current, [item.id]: false }));
+                                        closeImportPanel(item.id);
                                         setOpenImportMenuId(null);
                                       }}
                                     >
@@ -1874,6 +1891,62 @@ export function Transactions() {
                                       onClick={() => void handleReviewImportedRow(item)}
                                     >
                                       {isPending ? <LoadingSpinner inline size="sm" label="Saving review..." /> : "Save Review"}
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : panelMode === "details" ? (
+                                <div className="rounded-2xl border border-stone-200 bg-white p-4">
+                                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                                    <div>
+                                      <div className="text-xs font-medium text-stone-500">Date</div>
+                                      <div className="mt-1 text-sm text-raf-ink">{formatIsoDate(item.date)}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-medium text-stone-500">Status</div>
+                                      <div className="mt-1"><Badge tone={status.tone}>{status.label}</Badge></div>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-medium text-stone-500">Amount</div>
+                                      <div className={`mt-1 text-sm font-semibold ${Number(item.amount) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                                        {formatCurrency(item.amount)}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-medium text-stone-500">Linked</div>
+                                      <div className="mt-1 text-sm text-stone-600">{getLinkedLabel(item)}</div>
+                                    </div>
+                                  </div>
+                                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                                    <div>
+                                      <div className="text-xs font-medium text-stone-500">Description</div>
+                                      <div className="mt-1 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-raf-ink">
+                                        {item.description}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-medium text-stone-500">Bucket</div>
+                                      <div className="mt-1 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+                                        {getBucketLabel(item) || "None"}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {activeRule ? (
+                                    <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+                                      <div className="text-xs font-medium text-stone-500">Rule</div>
+                                      <div className="mt-1 text-sm text-raf-ink">
+                                        {activeRule.auto_apply ? "Applied by rule" : "Suggestion available"}: "{activeRule.match_value ?? activeRule.normalized_description}"
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  {item.review_note ? (
+                                    <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
+                                      <div className="text-xs font-medium text-stone-500">Review note</div>
+                                      <div className="mt-1 text-sm text-raf-ink">{item.review_note}</div>
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+                                    <Button type="button" variant="secondary" onClick={() => closeImportPanel(item.id)}>
+                                      Close
                                     </Button>
                                   </div>
                                 </div>

@@ -311,6 +311,7 @@ export interface GoalProgress {
   bucket_id: string;
   bucket?: string;
   bucket_name: string;
+  bucket_balance?: string;
   reserved_amount: string;
   current_amount: string;
   target_amount: string;
