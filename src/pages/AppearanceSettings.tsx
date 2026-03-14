@@ -249,8 +249,8 @@ export function AppearanceSettings() {
   return (
     <PageShell
       eyebrow="Settings"
-      title="Settings"
-      description="Tune how RAF looks on this device and manage saved import rules."
+      title="Appearance Settings"
+      description="Customize how RAF looks on this device and preview changes instantly."
     >
       <section className="grid gap-7 xl:grid-cols-[minmax(180px,20%),minmax(0,45%),minmax(320px,35%)]">
         <aside className="xl:sticky xl:top-6 xl:self-start">
@@ -281,7 +281,7 @@ export function AppearanceSettings() {
             <>
               {saveMessage ? <SuccessNotice title="Appearance updated" message={saveMessage} /> : null}
 
-              <Card title="Appearance Settings">
+              <Card title="Theme">
                 <div className="space-y-6">
                   <div className="border-b border-[var(--border-color)] pb-6">
                     <div className="text-[17px] font-semibold text-[var(--text-strong)]">Theme</div>
@@ -290,14 +290,17 @@ export function AppearanceSettings() {
                     </p>
                   </div>
 
-                  <div className="space-y-5">
-                    {themeGroups.map((group) => (
-                      <div key={group.mood} className="space-y-3">
+                  <div className="grid gap-5 lg:grid-cols-2">
+                    {themeGroups.map((group, index) => (
+                      <div
+                        key={group.mood}
+                        className={`space-y-3 ${index === 0 ? "lg:col-span-2" : ""}`}
+                      >
                         <div>
                           <div className="text-sm font-semibold text-[var(--text-strong)]">{group.mood}</div>
                           <p className="mt-1 text-[12px] italic text-[var(--text-muted)]">{group.helper}</p>
                         </div>
-                        <div className="grid gap-3 md:grid-cols-2">
+                        <div className={`grid gap-3 ${group.values.length > 1 ? "md:grid-cols-2" : ""}`}>
                           {group.values.map((themeValue) => {
                             const option = THEME_OPTIONS.find((item) => item.value === themeValue);
                             if (!option) {
@@ -335,7 +338,7 @@ export function AppearanceSettings() {
                 </div>
               </Card>
 
-              <Card title="Font Settings">
+              <Card title="Font Family">
                 <div className="space-y-5">
                   <div className="border-b border-[var(--border-color)] pb-6">
                     <div className="text-[17px] font-semibold text-[var(--text-strong)]">Font family</div>
@@ -356,23 +359,16 @@ export function AppearanceSettings() {
                           onClick={() => updateDraft({ font_family: option.value })}
                         >
                           <div className="flex items-start justify-between gap-4">
-                            <div className="space-y-2">
+                            <div>
                               <div
                                 className="text-lg font-semibold text-[var(--text-strong)]"
                                 style={{ fontFamily: `var(--font-${option.value})` }}
                               >
                                 {option.label}
                               </div>
-                              <p className="text-[13px] italic leading-6 text-[var(--text-muted)]">
+                              <p className="mt-1 text-[13px] italic leading-6 text-[var(--text-muted)]">
                                 {option.preview}
                               </p>
-                              <div
-                                className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]"
-                                style={{ fontFamily: `var(--font-${option.value})` }}
-                              >
-                                <div className="font-medium">Groceries — $42.18</div>
-                                <div className="mt-1 text-[12px] text-[var(--text-muted)]">Mar 7 • Personal Spending</div>
-                              </div>
                             </div>
                             {selected ? <Badge tone="success">Selected</Badge> : null}
                           </div>
@@ -395,6 +391,11 @@ export function AppearanceSettings() {
                   <div className="grid gap-3 sm:grid-cols-3">
                     {INTERFACE_SCALE_OPTIONS.map((option) => {
                       const selected = draft.interface_scale === option.value;
+                      const sizeClass = option.value === "small"
+                        ? "text-base"
+                        : option.value === "medium"
+                          ? "text-lg"
+                          : "text-xl";
 
                       return (
                         <button
@@ -403,10 +404,9 @@ export function AppearanceSettings() {
                           className={`rounded-[1.5rem] border p-5 text-left transition duration-200 ${selectedCardClasses(selected)}`}
                           onClick={() => updateDraft({ interface_scale: option.value })}
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="text-base font-semibold text-[var(--text-strong)]">{option.label}</div>
-                              <div className="mt-1 text-[13px] italic leading-6 text-[var(--text-muted)]">{option.description}</div>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className={`${sizeClass} font-semibold text-[var(--text-strong)]`}>
+                              {option.label}
                             </div>
                             {selected ? <Badge tone="success">Selected</Badge> : null}
                           </div>
@@ -417,9 +417,6 @@ export function AppearanceSettings() {
 
                   <div className="border-t border-[var(--border-color)] pt-6">
                     <div className="text-[17px] font-semibold text-[var(--text-strong)]">Mode</div>
-                    <p className="mt-2 text-[13px] italic leading-6 text-[var(--text-muted)]">
-                      Light and dark mode update the preview instantly so you can compare contrast before saving.
-                    </p>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       {APPEARANCE_MODE_OPTIONS.map((option) => {
                         const selected = draft.appearance_mode === option.value;
@@ -432,10 +429,7 @@ export function AppearanceSettings() {
                             onClick={() => updateDraft({ appearance_mode: option.value })}
                           >
                             <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="text-base font-semibold text-[var(--text-strong)]">{option.label}</div>
-                                <div className="mt-1 text-[13px] italic leading-6 text-[var(--text-muted)]">{option.description}</div>
-                              </div>
+                              <div className="text-base font-semibold text-[var(--text-strong)]">{option.label}</div>
                               {selected ? <Badge tone="success">Active</Badge> : null}
                             </div>
                           </button>
@@ -446,20 +440,31 @@ export function AppearanceSettings() {
                 </div>
               </Card>
 
-              <div className="sticky bottom-4 z-10 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-color)]/95 p-4 shadow-panel backdrop-blur">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-[var(--text-strong)]">Ready to save your appearance?</div>
-                    <p className="mt-1 text-[12px] italic text-[var(--text-muted)]">
-                      Save applies these changes globally. Cancel restores the current saved appearance.
+              <div className="pt-1">
+                <Card title="Apply Appearance Changes">
+                  <div className="space-y-4">
+                    <p className="text-[13px] leading-6 text-[var(--text-muted)]">
+                      Saving will update your appearance across RAF. Cancel keeps your current look. Restoring defaults resets everything to the RAF preset.
                     </p>
+                    <div className="flex flex-col gap-3">
+                      <Button type="button" className="w-full" disabled={!hasChanges} onClick={handleSave}>
+                        Save Appearance
+                      </Button>
+                      <Button type="button" variant="secondary" className="w-full" disabled={!hasChanges} onClick={handleCancel}>
+                        Cancel
+                      </Button>
+                    </div>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        className="text-sm font-medium text-rose-700 transition hover:text-rose-800"
+                        onClick={handleRestoreDefaults}
+                      >
+                        Restore defaults
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button type="button" variant="ghost" onClick={handleRestoreDefaults}>Restore saved defaults</Button>
-                    <Button type="button" variant="secondary" disabled={!hasChanges} onClick={handleCancel}>Cancel</Button>
-                    <Button type="button" disabled={!hasChanges} onClick={handleSave}>Save Appearance</Button>
-                  </div>
-                </div>
+                </Card>
               </div>
             </>
           ) : (
@@ -559,13 +564,13 @@ export function AppearanceSettings() {
           {activeTab === "preferences" ? (
             <Card title="Live Preview">
               <div
-                className="space-y-5 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] p-6"
+                className="space-y-4 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] p-5"
                 data-theme={draft.theme_color}
                 data-font={draft.font_family}
                 data-mode={draft.appearance_mode}
                 data-scale={draft.interface_scale}
               >
-                <div className="space-y-4 border-b border-[var(--border-color)] pb-5">
+                <div className="space-y-3 border-b border-[var(--border-color)] pb-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone="neutral">{`Theme: ${activeTheme.label}`}</Badge>
                     <Badge tone="neutral">{`Font: ${activeFont.label}`}</Badge>
@@ -573,62 +578,54 @@ export function AppearanceSettings() {
                     <Badge tone="neutral">{`Mode: ${activeMode.label}`}</Badge>
                   </div>
                   <div>
-                    <div className="text-[18px] font-semibold text-[var(--text-strong)]">RAF Finance preview</div>
-                    <p className="mt-2 text-[13px] italic leading-6 text-[var(--text-muted)]">
+                    <div className="text-[18px] font-semibold text-[var(--text-strong)]">Live Preview</div>
+                    <p className="mt-1 text-[13px] italic leading-5 text-[var(--text-muted)]">
                       This preview mirrors the kinds of cards, balances, and transaction rows you see across RAF.
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-5 shadow-panel">
+                <div className="space-y-3">
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-panel">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="text-[12px] font-medium text-[var(--text-muted)]">Accent action</div>
-                        <div className="mt-1 text-base font-semibold text-[var(--text-strong)]">Record deposit</div>
+                        <div className="mt-1 text-sm font-semibold text-[var(--text-strong)]">Record deposit</div>
                       </div>
                       <button
                         type="button"
-                        className="inline-flex rounded-full bg-[var(--primary-color)] px-4 py-2.5 text-sm font-semibold text-[var(--primary-contrast)] shadow-sm"
+                        className="inline-flex rounded-full bg-[var(--primary-color)] px-3.5 py-2 text-sm font-semibold text-[var(--primary-contrast)] shadow-sm"
                       >
                         Record deposit
                       </button>
                     </div>
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-5 shadow-panel">
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-panel">
                     <div className="text-[12px] font-medium text-[var(--text-muted)]">Financial data surface</div>
-                    <div className="mt-4 flex items-end justify-between gap-4">
+                    <div className="mt-3 flex items-end justify-between gap-4">
                       <div>
                         <div className="text-sm text-[var(--text-muted)]">Buffer balance</div>
-                        <div className="mt-2 text-[2rem] font-semibold tracking-tight text-[var(--text-strong)]">$2,930.28</div>
+                        <div className="mt-1.5 text-[1.75rem] font-semibold tracking-tight text-[var(--text-strong)]">$2,930.28</div>
                       </div>
                       <Badge tone="success">Healthy</Badge>
                     </div>
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-5 shadow-panel">
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-panel">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="text-[12px] font-medium text-[var(--text-muted)]">Transaction example</div>
-                        <div className="mt-3 space-y-1">
-                          <div className="text-sm text-[var(--text-muted)]">Mar 7</div>
-                          <div className="text-base font-semibold text-[var(--text-strong)]">Gas Station</div>
-                          <div className="text-sm text-[var(--text-muted)]">Personal Spending</div>
+                        <div className="mt-2.5 space-y-0.5">
+                          <div className="text-xs text-[var(--text-muted)]">Mar 7</div>
+                          <div className="text-sm font-semibold text-[var(--text-strong)]">Gas Station</div>
+                          <div className="text-xs text-[var(--text-muted)]">Personal Spending</div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-lg font-semibold text-[var(--text-strong)]">-$45.00</div>
-                        <div className="mt-2 text-[12px] italic text-[var(--text-muted)]">Synced from import review</div>
+                        <div className="text-base font-semibold text-[var(--text-strong)]">-$45.00</div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="rounded-[1.5rem] border border-dashed border-[var(--border-color)] bg-[var(--surface-color)] px-4 py-4">
-                    <div className="text-[12px] font-medium text-[var(--text-muted)]">Preview guidance</div>
-                    <p className="mt-2 text-[13px] italic leading-6 text-[var(--text-muted)]">
-                      Try a darker mode with a larger interface scale if you review imports late at night, or pair a tighter scale with Inter for denser monthly work.
-                    </p>
                   </div>
                 </div>
               </div>
