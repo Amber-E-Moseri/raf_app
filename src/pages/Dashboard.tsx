@@ -154,7 +154,14 @@ export function Dashboard() {
   return (
     <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
       {!isCurrentMonth ? (
-        <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+        <div
+          className="rounded-2xl border px-4 py-3 text-sm"
+          style={{
+            borderColor: "var(--border-color)",
+            background: "var(--surface-plain)",
+            color: "var(--text-muted)",
+          }}
+        >
           Viewing {activeMonthLabel} - this is a historical snapshot.{" "}
           <button type="button" className="font-medium text-[var(--primary-color)]" onClick={jumpToCurrentMonth}>
             Back to current month
@@ -212,8 +219,8 @@ export function Dashboard() {
           >
             <div className="space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <div className="text-[24px] font-bold leading-none text-raf-ink">{formatCurrency(data.financialHealth.savingsBalance)}</div>
-                <div className="text-[11px] font-medium text-stone-500">{data.financialHealth.alertStatus === "ok" ? "Protected" : "At risk"}</div>
+                <div className="text-[24px] font-bold leading-none text-[var(--text-strong)]">{formatCurrency(data.financialHealth.savingsBalance)}</div>
+                <div className="text-[11px] font-medium text-[var(--text-muted)]">{data.financialHealth.alertStatus === "ok" ? "Protected" : "At risk"}</div>
               </div>
               <div className="relative">
                 <div className="progress-track h-2 overflow-hidden rounded-full">
@@ -224,12 +231,12 @@ export function Dashboard() {
                   style={{ left: `calc(${floorPercent}% - 1px)` }}
                 />
               </div>
-              <div className="flex items-center justify-between text-[10px] font-medium text-stone-500">
+              <div className="flex items-center justify-between text-[10px] font-medium text-[var(--text-muted)]">
                 <span>$0</span>
                 <span>{formatCurrency(data.financialHealth.savingsFloor)} floor</span>
                 <span>{formatCurrency(String(savingsMax.toFixed(2)))} max</span>
               </div>
-              <p className="text-[13px] text-stone-500">
+              <p className="text-[13px] text-[var(--text-muted)]">
                 Available savings: {formatCurrency(data.financialHealth.availableSavings)}
               </p>
             </div>
@@ -244,7 +251,7 @@ export function Dashboard() {
             )}
           >
             {data.recentTransactions.length ? (
-              <div className="divide-y divide-stone-200">
+              <div style={{ borderColor: "var(--border-color)" }} className="divide-y">
                 {data.recentTransactions.map((transaction) => {
                   const categoryLabel = transaction.categoryId
                     ? activeCategories.find((category) => category.id === transaction.categoryId)?.label ?? transaction.categoryId
@@ -253,8 +260,8 @@ export function Dashboard() {
                   return (
                     <div key={transaction.id} className="flex min-h-9 items-center gap-3 py-2.5">
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-raf-ink">{transaction.description}</div>
-                        <div className="mt-1 text-[10px] text-stone-500">{formatIsoDate(transaction.transactionDate)}</div>
+                        <div className="truncate text-[13px] font-medium text-[var(--text-strong)]">{transaction.description}</div>
+                        <div className="mt-1 text-[10px] text-[var(--text-muted)]">{formatIsoDate(transaction.transactionDate)}</div>
                       </div>
                       <Badge tone={transactionTone(transaction)}>{categoryLabel}</Badge>
                       <div className={`w-20 text-right text-[13px] font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>

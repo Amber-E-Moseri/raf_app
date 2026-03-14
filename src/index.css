@@ -23,8 +23,9 @@
     radial-gradient(circle at top left, rgba(216, 230, 221, 0.8), transparent 36%),
     linear-gradient(180deg, #f3f1eb 0%, #f7f5ef 52%, #ece7dd 100%);
   --background-solid: #f7f5ef;
-  --surface-color: rgba(255, 255, 255, 0.9);
-  --surface-elevated: rgba(248, 247, 243, 0.92);
+  --surface-color: rgba(255, 255, 255, 0.96);
+  --surface-elevated: rgba(248, 250, 252, 0.96);
+  --surface-plain: #ffffff;
   --text-color: #1f2d2b;
   --text-strong: #11211c;
   --text-muted: #57534e;
@@ -150,23 +151,24 @@ select {
 
 [data-mode="dark"] {
   --background-base:
-    radial-gradient(circle at top left, rgba(51, 65, 85, 0.35), transparent 35%),
-    linear-gradient(180deg, #111827 0%, #111827 45%, #0f172a 100%);
-  --background-solid: #111827;
-  --surface-color: rgba(17, 24, 39, 0.84);
-  --surface-elevated: rgba(30, 41, 59, 0.82);
-  --text-color: #e7e5e4;
-  --text-strong: #fafaf9;
-  --text-muted: #cbd5e1;
-  --border-color: rgba(71, 85, 105, 0.8);
-  --shadow-panel: 0 18px 45px -24px rgba(0, 0, 0, 0.55);
-  --shadow-lift: 0 20px 55px -28px rgba(0, 0, 0, 0.6);
-  --badge-neutral-bg: rgba(51, 65, 85, 0.8);
-  --badge-neutral-text: #e2e8f0;
-  --badge-neutral-ring: rgba(71, 85, 105, 0.85);
-  --badge-success-bg: rgba(31, 122, 79, 0.22);
+    radial-gradient(circle at top left, rgba(30, 41, 59, 0.2), transparent 28%),
+    linear-gradient(180deg, #08111f 0%, #0b1423 52%, #0f172a 100%);
+  --background-solid: #0b1423;
+  --surface-color: rgba(11, 23, 38, 0.9);
+  --surface-elevated: rgba(19, 33, 53, 0.96);
+  --surface-plain: rgba(15, 23, 38, 0.98);
+  --text-color: #d8e1ee;
+  --text-strong: #f8fafc;
+  --text-muted: #94a3b8;
+  --border-color: rgba(71, 85, 105, 0.42);
+  --shadow-panel: 0 24px 64px -34px rgba(0, 0, 0, 0.82);
+  --shadow-lift: 0 26px 72px -34px rgba(0, 0, 0, 0.92);
+  --badge-neutral-bg: rgba(30, 41, 59, 0.92);
+  --badge-neutral-text: #dbe7f5;
+  --badge-neutral-ring: rgba(100, 116, 139, 0.38);
+  --badge-success-bg: rgba(31, 122, 79, 0.26);
   --badge-success-text: #ecfdf5;
-  --badge-success-ring: rgba(31, 122, 79, 0.45);
+  --badge-success-ring: rgba(31, 122, 79, 0.3);
 }
 
 [data-scale="small"] {
@@ -290,4 +292,61 @@ select {
 .progress-track {
   background:
     linear-gradient(90deg, rgba(54, 84, 72, 0.15) 0%, rgba(54, 84, 72, 0.08) 100%);
+}
+
+[data-mode="dark"] .ui-card {
+  border-color: var(--border-color);
+  background:
+    linear-gradient(180deg, rgba(17, 28, 45, 0.98) 0%, rgba(11, 23, 38, 0.95) 100%);
+}
+
+[data-mode="dark"] .progress-track {
+  background:
+    linear-gradient(90deg, rgba(51, 65, 85, 0.55) 0%, rgba(30, 41, 59, 0.7) 100%);
+}
+
+[data-mode="dark"] .bg-white,
+[data-mode="dark"] .bg-white\/90,
+[data-mode="dark"] .bg-white\/80,
+[data-mode="dark"] .bg-stone-50,
+[data-mode="dark"] .bg-stone-50\/70,
+[data-mode="dark"] .bg-stone-50\/80,
+[data-mode="dark"] .bg-stone-100 {
+  background-color: var(--surface-color) !important;
+}
+
+[data-mode="dark"] .bg-stone-200,
+[data-mode="dark"] .bg-stone-300 {
+  background-color: var(--surface-elevated) !important;
+}
+
+[data-mode="dark"] .border-stone-100,
+[data-mode="dark"] .border-stone-200,
+[data-mode="dark"] .border-stone-200\/80,
+[data-mode="dark"] .border-stone-300 {
+  border-color: var(--border-color) !important;
+}
+
+[data-mode="dark"] .text-stone-400,
+[data-mode="dark"] .text-stone-500,
+[data-mode="dark"] .text-stone-600,
+[data-mode="dark"] .text-stone-700 {
+  color: var(--text-muted) !important;
+}
+
+[data-mode="dark"] .text-raf-ink {
+  color: var(--text-strong) !important;
+}
+
+[data-mode="dark"] .hover\:bg-stone-50:hover,
+[data-mode="dark"] .hover\:bg-stone-50\/80:hover {
+  background-color: var(--surface-elevated) !important;
+}
+
+[data-mode="dark"] .divide-stone-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border-color) !important;
+}
+
+[data-mode="dark"] .placeholder\:text-stone-400::placeholder {
+  color: var(--text-muted) !important;
 }

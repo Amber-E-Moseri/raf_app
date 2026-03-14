@@ -349,14 +349,14 @@ export function AllocationPreferences() {
             <div>
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                 <div>
-                  <p className="text-[11px] font-medium text-stone-500">Total allocated</p>
-                  <p className="mt-1 text-3xl font-bold tracking-tight text-raf-ink">{activeTotalPercent.toFixed(2)}%</p>
+                  <p className="text-[11px] font-medium text-[var(--text-muted)]">Total allocated</p>
+                  <p className="mt-1 text-3xl font-bold tracking-tight text-[var(--text-strong)]">{activeTotalPercent.toFixed(2)}%</p>
                 </div>
-                <div className="max-w-sm text-right text-sm text-stone-600">
+                <div className="max-w-sm text-right text-sm text-[var(--text-muted)]">
                   {inlineValidationMessage}
                 </div>
               </div>
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-stone-200">
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
                 <div
                   className="h-full rounded-full bg-[var(--primary-color)] transition-[width] duration-200"
                   style={{ width: allocationBarWidth(activeTotalPercent) }}
@@ -394,16 +394,17 @@ export function AllocationPreferences() {
                 return (
                   <div
                     key={category.id}
-                    className={`rounded-3xl border border-stone-200 bg-stone-50 p-4 transition ${category.isActive ? "" : "opacity-70"}`.trim()}
+                    className={`rounded-3xl border p-4 transition ${category.isActive ? "" : "opacity-70"}`.trim()}
+                    style={{ borderColor: "var(--border-color)", background: "var(--surface-elevated)" }}
                   >
                     <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr),132px,180px,180px] xl:items-center">
                       <div className="min-w-0">
                         <label className="block">
-                          <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                          <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
                             Category name
                           </span>
                           <input
-                            className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                            className="ui-field"
                             value={category.label}
                             onChange={(event) => updateCategory(category.id, (current) => {
                               const nextLabel = event.target.value;
@@ -419,12 +420,12 @@ export function AllocationPreferences() {
                       </div>
 
                       <label className="block">
-                        <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                        <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
                           Percentage
                         </span>
                         <div className="relative">
                           <input
-                            className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 pr-10 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                            className="ui-field pr-10"
                             type="number"
                             step="0.01"
                             min="0"
@@ -435,18 +436,18 @@ export function AllocationPreferences() {
                               allocationPercent: toFractionString(event.target.value),
                             }))}
                           />
-                          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-stone-500">%</span>
+                          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-[var(--text-muted)]">%</span>
                         </div>
                         {errors.allocationPercent ? <p className="mt-2 text-xs text-rose-600">{errors.allocationPercent}</p> : null}
                       </label>
 
                       <div className="flex flex-col gap-2">
-                        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
                           Active
                         </span>
-                        <div className="flex items-center justify-between rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink">
+                        <div className="flex items-center justify-between rounded-2xl border px-4 py-3 text-sm text-[var(--text-strong)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
                           <label className="flex items-center gap-3">
-                            <span className="min-w-[26px] text-xs font-medium uppercase tracking-[0.12em] text-stone-500">
+                            <span className="min-w-[26px] text-xs font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
                               {category.isActive ? "On" : "Off"}
                             </span>
                             <input
@@ -458,8 +459,8 @@ export function AllocationPreferences() {
                                 isActive: event.target.checked,
                               }))}
                             />
-                            <span className="relative inline-flex h-7 w-12 items-center rounded-full bg-stone-300 transition peer-checked:bg-[var(--primary-color)]">
-                              <span className="absolute left-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
+                            <span className="relative inline-flex h-7 w-12 items-center rounded-full bg-[var(--surface-elevated)] transition peer-checked:bg-[var(--primary-color)]">
+                              <span className="absolute left-1 h-5 w-5 rounded-full bg-[var(--surface-plain)] shadow-sm transition-transform peer-checked:translate-x-5" />
                             </span>
                           </label>
                           <Badge tone={category.isActive ? "success" : "neutral"}>
@@ -469,14 +470,14 @@ export function AllocationPreferences() {
                       </div>
 
                       <div className="flex flex-col gap-2">
-                        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
                           Controls
                         </span>
-                        <div className="flex items-center justify-between rounded-2xl border border-stone-300 bg-white px-4 py-3">
+                        <div className="flex items-center justify-between rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
                           <div className="flex items-center gap-2">
                             {category.isSystem ? <Badge tone="warning">System</Badge> : <Badge tone="neutral">Custom</Badge>}
                           </div>
-                          <span className="text-sm text-stone-600">
+                          <span className="text-sm text-[var(--text-muted)]">
                             {isAdvancedMode ? "Advanced open" : "Simple view"}
                           </span>
                         </div>
@@ -484,14 +485,14 @@ export function AllocationPreferences() {
                     </div>
 
                     {isAdvancedMode ? (
-                      <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
+                      <div className="mt-4 rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
                         <div className="grid gap-4 md:grid-cols-[1fr,160px,auto]">
                           <label className="block">
-                            <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                            <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
                               Slug
                             </span>
                             <input
-                              className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage disabled:bg-stone-100 disabled:text-stone-500"
+                              className="ui-field disabled:opacity-60"
                               value={category.slug}
                               disabled={!category.isNew}
                               onChange={(event) => updateCategory(category.id, (current) => ({
@@ -503,11 +504,11 @@ export function AllocationPreferences() {
                             {errors.slug ? <p className="mt-2 text-xs text-rose-600">{errors.slug}</p> : null}
                           </label>
                           <label className="block">
-                            <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                            <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
                               Sort order
                             </span>
                             <input
-                              className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                              className="ui-field"
                               type="number"
                               step="1"
                               value={category.sortOrder}
@@ -519,7 +520,7 @@ export function AllocationPreferences() {
                             {errors.sortOrder ? <p className="mt-2 text-xs text-rose-600">{errors.sortOrder}</p> : null}
                           </label>
                           <div className="flex items-end justify-start gap-3">
-                            <p className="text-sm text-stone-500">
+                            <p className="text-sm text-[var(--text-muted)]">
                               Backend fields stay tucked away here unless you need them.
                             </p>
                             {!category.isSystem ? (
@@ -532,7 +533,7 @@ export function AllocationPreferences() {
                                 Delete category
                               </Button>
                             ) : (
-                              <span className="text-xs text-stone-500">System buckets stay protected.</span>
+                              <span className="text-xs text-[var(--text-muted)]">System buckets stay protected.</span>
                             )}
                           </div>
                         </div>
@@ -542,7 +543,7 @@ export function AllocationPreferences() {
                 );
               })}
 
-              <div className="flex flex-col gap-4 border-t border-stone-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--border-color)" }}>
                 <div>
                   <Button type="button" variant="secondary" onClick={openAddCategoryModal}>
                     Add Category
@@ -565,13 +566,13 @@ export function AllocationPreferences() {
           {history.length ? (
             <div className="space-y-3">
               {history.map((snapshot) => (
-                <div key={snapshot.snapshotId} className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                <div key={snapshot.snapshotId} className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-elevated)" }}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium text-raf-ink">
+                      <p className="text-sm font-medium text-[var(--text-strong)]">
                         {snapshot.effectiveFrom ?? "Unknown start"}{snapshot.supersededAt ? ` to ${snapshot.supersededAt}` : " to present"}
                       </p>
-                      <p className="mt-1 text-xs text-stone-500">
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
                         Prior months continue using this snapshot for reporting accuracy.
                       </p>
                     </div>
@@ -584,7 +585,7 @@ export function AllocationPreferences() {
                       .filter((item) => item.isActive)
                       .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug))
                       .map((item) => (
-                        <span key={item.id} className="rounded-full border border-stone-200 bg-white px-3 py-1 text-xs text-stone-600">
+                        <span key={item.id} className="rounded-full border px-3 py-1 text-xs text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
                           {item.label} {formatPercentWithDigits(item.allocationPercent, 2)}
                         </span>
                       ))}
@@ -605,19 +606,20 @@ export function AllocationPreferences() {
       </section>
 
       {isAddModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4">
-          <div className="w-full max-w-lg rounded-[28px] border border-stone-200 bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/50 px-4">
+          <div className="w-full max-w-lg rounded-[28px] border p-6 shadow-2xl" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-stone-500">New Bucket</p>
-                <h3 className="mt-2 text-xl font-bold tracking-tight text-raf-ink">Add Category</h3>
-                <p className="mt-2 text-sm text-stone-500">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">New Bucket</p>
+                <h3 className="mt-2 text-xl font-bold tracking-tight text-[var(--text-strong)]">Add Category</h3>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">
                   Start with the name, percentage, and active state. Backend details stay hidden until needed.
                 </p>
               </div>
               <button
                 type="button"
-                className="rounded-full border border-stone-300 px-3 py-1 text-sm text-stone-600 transition hover:border-stone-400"
+                className="rounded-full border px-3 py-1 text-sm transition"
+                style={{ borderColor: "var(--border-color)", color: "var(--text-muted)" }}
                 onClick={closeAddCategoryModal}
               >
                 Close
@@ -626,11 +628,11 @@ export function AllocationPreferences() {
 
             <div className="mt-6 grid gap-4">
               <label className="block">
-                <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
                   Category name
                 </span>
                 <input
-                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                  className="ui-field"
                   value={newCategoryForm.label}
                   onChange={(event) => setNewCategoryForm((current) => ({
                     ...current,
@@ -641,12 +643,12 @@ export function AllocationPreferences() {
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
                   Starting percentage
                 </span>
                 <div className="relative">
                   <input
-                    className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 pr-10 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                    className="ui-field pr-10"
                     type="number"
                     step="0.01"
                     min="0"
@@ -657,11 +659,11 @@ export function AllocationPreferences() {
                       allocationPercent: event.target.value,
                     }))}
                   />
-                  <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-stone-500">%</span>
+                  <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-[var(--text-muted)]">%</span>
                 </div>
               </label>
 
-              <label className="flex items-center justify-between rounded-2xl border border-stone-300 bg-stone-50 px-4 py-3 text-sm text-raf-ink">
+              <label className="flex items-center justify-between rounded-2xl border px-4 py-3 text-sm text-[var(--text-strong)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-elevated)" }}>
                 <span>Active right away</span>
                 <input
                   type="checkbox"
@@ -686,11 +688,11 @@ export function AllocationPreferences() {
         </div>
       ) : null}
       {isConfirmModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4">
-          <div className="w-full max-w-lg rounded-[28px] border border-stone-200 bg-white p-6 shadow-2xl">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-stone-500">Allocation Update</p>
-            <h3 className="mt-2 text-xl font-bold tracking-tight text-raf-ink">Update allocation?</h3>
-            <p className="mt-3 text-sm text-stone-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/50 px-4">
+          <div className="w-full max-w-lg rounded-[28px] border p-6 shadow-2xl" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Allocation Update</p>
+            <h3 className="mt-2 text-xl font-bold tracking-tight text-[var(--text-strong)]">Update allocation?</h3>
+            <p className="mt-3 text-sm text-[var(--text-muted)]">
               Updating your allocation will apply from today. Your previous allocation will still be used for all prior months.
               This will not change any historical reports.
             </p>

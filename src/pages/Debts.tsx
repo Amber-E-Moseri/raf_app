@@ -179,7 +179,7 @@ export function Debts() {
           {submitError ? <ErrorState title="Failed to add debt" message={submitError} /> : null}
           {submitSuccess ? <SuccessNotice title="Debt saved" message={submitSuccess} /> : null}
           <Card title="Form Guidance" subtitle="Debt balances stay derived server-side.">
-            <ul className="space-y-2 text-sm text-stone-600">
+            <ul className="space-y-2 text-sm text-[var(--text-muted)]">
               <li>Starting balance must be greater than zero.</li>
               <li>APR must be between 0 and 100 with up to two decimals.</li>
               <li>Payment fields accept non-negative decimals with two decimal places max.</li>
@@ -194,13 +194,13 @@ export function Debts() {
         <>
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Card title="Total starting" subtitle="Original starting balances">
-              <p className="text-3xl font-semibold text-raf-ink">{formatCurrency(data.summary.totalStarting)}</p>
+              <p className="text-3xl font-semibold text-[var(--text-strong)]">{formatCurrency(data.summary.totalStarting)}</p>
             </Card>
             <Card title="Remaining balance" subtitle="Current backend-derived balance">
-              <p className="text-3xl font-semibold text-raf-ink">{formatCurrency(data.summary.totalRemaining)}</p>
+              <p className="text-3xl font-semibold text-[var(--text-strong)]">{formatCurrency(data.summary.totalRemaining)}</p>
             </Card>
             <Card title="Paid all time" subtitle="Historical payoff recorded by the backend">
-              <p className="text-3xl font-semibold text-raf-ink">{formatCurrency(data.summary.totalPaidAllTime)}</p>
+              <p className="text-3xl font-semibold text-[var(--text-strong)]">{formatCurrency(data.summary.totalPaidAllTime)}</p>
             </Card>
           </section>
 
@@ -214,33 +214,33 @@ export function Debts() {
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                          <p className="text-stone-500">Starting balance</p>
-                          <p className="mt-1 font-semibold text-raf-ink">{formatCurrency(debt.startingBalance)}</p>
+                          <p className="text-[var(--text-muted)]">Starting balance</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.startingBalance)}</p>
                         </div>
                         <div>
-                          <p className="text-stone-500">Current balance</p>
-                          <p className="mt-1 font-semibold text-raf-ink">{formatCurrency(debt.currentBalance)}</p>
+                          <p className="text-[var(--text-muted)]">Current balance</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.currentBalance)}</p>
                         </div>
                         <div>
-                          <p className="text-stone-500">Monthly payment</p>
-                          <p className="mt-1 font-semibold text-raf-ink">{formatCurrency(debt.monthlyPayment)}</p>
+                          <p className="text-[var(--text-muted)]">Monthly payment</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.monthlyPayment)}</p>
                         </div>
                         <div>
-                          <p className="text-stone-500">Minimum payment</p>
-                          <p className="mt-1 font-semibold text-raf-ink">{formatCurrency(debt.minimumPayment)}</p>
+                          <p className="text-[var(--text-muted)]">Minimum payment</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.minimumPayment)}</p>
                         </div>
                       </div>
                       <div>
                         <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                          <span className="text-stone-500">Paid off</span>
-                          <span className="font-semibold text-raf-ink">{completion.toFixed(0)}%</span>
+                          <span className="text-[var(--text-muted)]">Paid off</span>
+                          <span className="font-semibold text-[var(--text-strong)]">{completion.toFixed(0)}%</span>
                         </div>
                         <div className="progress-track h-3 overflow-hidden rounded-full">
                           <div className="h-full rounded-full bg-raf-moss transition-all" style={{ width: `${completion}%` }} />
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-stone-500">Status</span>
+                        <span className="text-sm text-[var(--text-muted)]">Status</span>
                         <Badge tone={debt.status === "active" ? "success" : "neutral"}>{debt.status}</Badge>
                       </div>
                     </div>

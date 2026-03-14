@@ -50,27 +50,34 @@ export function AllocationBarChart({ items }: AllocationBarChartProps) {
             const amountLabel = item.remainingThisMonth ?? item.allocatedThisMonth ?? item.goalReservedAmount ?? "0.00";
 
             return (
-              <div key={item.bucketId} className="rounded-2xl border border-stone-200/80 bg-white/80 px-3 py-2.5">
+              <div
+                key={item.bucketId}
+                className="rounded-2xl border px-3 py-2.5"
+                style={{
+                  borderColor: "var(--border-color)",
+                  background: "var(--surface-plain)",
+                }}
+              >
                 <div className="flex items-center gap-2">
                   <div className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md ${barColor(index)}`} />
-                  <div className="w-[90px] min-w-0 text-[13px] font-medium text-raf-ink">{item.label}</div>
+                  <div className="w-[90px] min-w-0 text-[13px] font-medium text-[var(--text-strong)]">{item.label}</div>
                   <div className="flex-1">
-                    <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
                       <div
                         className={`h-full rounded-full ${barColor(index)} transition-all duration-500`}
                         style={{ width: `${usageWidth}%` }}
                       />
                     </div>
                   </div>
-                  <div className="w-7 text-right text-[11px] font-medium text-stone-500">
+                  <div className="w-7 text-right text-[11px] font-medium text-[var(--text-muted)]">
                     {allocationPercent ? allocationPercent.replace(".00", "") : "--"}
                   </div>
-                  <div className="w-12 text-right text-[11px] font-semibold text-raf-ink">
+                  <div className="w-12 text-right text-[11px] font-semibold text-[var(--text-strong)]">
                     {formatCurrency(amountLabel)}
                   </div>
                 </div>
                 {item.goalName ? (
-                  <div className="mt-2 flex items-center justify-between gap-3 pl-8 text-[10px] text-stone-500">
+                  <div className="mt-2 flex items-center justify-between gap-3 pl-8 text-[10px] text-[var(--text-muted)]">
                     <span className="truncate">{item.goalName}</span>
                     <span>
                       {item.goalReservedAmount && item.goalTargetAmount

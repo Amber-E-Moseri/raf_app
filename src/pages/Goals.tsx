@@ -237,7 +237,7 @@ export function Goals() {
                     const progressPercent = Math.max(0, Math.min(progress?.progress_percent ?? 0, 100));
 
                     return (
-                      <div key={goal.id} className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-5">
+                      <div key={goal.id} className="rounded-[1.5rem] border border-[var(--border-color)] p-5" style={{ background: "var(--surface-plain)" }}>
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
@@ -262,15 +262,15 @@ export function Goals() {
                         </div>
 
                         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                          <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
+                          <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                             <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Target amount</div>
                             <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(goal.target_amount)}</div>
                           </div>
-                          <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
+                          <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                             <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Reserved toward goal</div>
                             <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(progress?.reserved_amount ?? "0.00")}</div>
                           </div>
-                          <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
+                          <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                             <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Remaining</div>
                             <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(progress?.remaining_amount ?? goal.target_amount)}</div>
                           </div>
@@ -315,11 +315,11 @@ export function Goals() {
                   {archivedGoals.map((goal) => {
                     const category = categoryLookup.get(goal.bucket_id);
                     return (
-                      <div key={goal.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] px-4 py-3">
+                      <div key={goal.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
                         <div>
                           <div className="font-medium text-[var(--text-strong)]">{goal.name}</div>
                           <div className="mt-1 text-sm text-[var(--text-muted)]">
-                            {category?.label ?? goal.bucket_id} • Target {formatCurrency(goal.target_amount)}
+                            {category?.label ?? goal.bucket_id} - Target {formatCurrency(goal.target_amount)}
                           </div>
                         </div>
                         <Badge tone="neutral">Archived</Badge>
@@ -386,7 +386,7 @@ export function Goals() {
                     />
                   </label>
 
-                  <label className="flex items-center justify-between rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
+                  <label className="flex items-center justify-between rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm text-[var(--text-strong)]" style={{ background: "var(--surface-plain)" }}>
                     <span>Keep this goal active</span>
                     <input
                       type="checkbox"

@@ -201,7 +201,7 @@ export function MonthlyReview() {
       description={`Close ${activeMonthLabel} with a deliberate review step.`}
     >
       {!isCurrentMonth ? (
-        <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+        <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
           Viewing {activeMonthLabel} - this is a historical snapshot.{" "}
           <button type="button" className="font-medium text-[var(--primary-color)]" onClick={jumpToCurrentMonth}>
             Back to current month
@@ -215,29 +215,29 @@ export function MonthlyReview() {
           subtitle={`${monthWorkflow.data.activeMonthStatus.label} is currently ${monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}.`}
         >
           <div className="grid gap-4 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-              <p className="text-sm text-stone-500">Income total</p>
-              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.incomeTotal)}</p>
+            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+              <p className="text-sm text-[var(--text-muted)]">Income total</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.incomeTotal)}</p>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-              <p className="text-sm text-stone-500">Expense total</p>
-              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.expenseTotal)}</p>
+            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+              <p className="text-sm text-[var(--text-muted)]">Expense total</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.expenseTotal)}</p>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-              <p className="text-sm text-stone-500">Debt payments</p>
-              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.debtPaymentsTotal)}</p>
+            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+              <p className="text-sm text-[var(--text-muted)]">Debt payments</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.debtPaymentsTotal)}</p>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-              <p className="text-sm text-stone-500">Protected and goal contributions</p>
-              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.protectedContributionsTotal)}</p>
+            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+              <p className="text-sm text-[var(--text-muted)]">Protected and goal contributions</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.protectedContributionsTotal)}</p>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-              <p className="text-sm text-stone-500">Remaining surplus or deficit</p>
-              <p className="mt-1 text-xl font-semibold text-raf-ink">{formatCurrency(monthWorkflow.data.closeSummary.remainingSurplusOrDeficit)}</p>
+            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+              <p className="text-sm text-[var(--text-muted)]">Remaining surplus or deficit</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.remainingSurplusOrDeficit)}</p>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-              <p className="text-sm text-stone-500">Unresolved imported transactions</p>
-              <p className="mt-1 text-xl font-semibold text-raf-ink">{monthWorkflow.data.closeSummary.unresolvedImportedTransactions}</p>
+            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+              <p className="text-sm text-[var(--text-muted)]">Unresolved imported transactions</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{monthWorkflow.data.closeSummary.unresolvedImportedTransactions}</p>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -245,9 +245,9 @@ export function MonthlyReview() {
               {monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}
             </Badge>
             {monthWorkflow.data.activeMonthStatus.status === "closed" ? (
-              <span className="text-sm text-stone-500">Reviewed in Transactions for this month. Apply is locked.</span>
+              <span className="text-sm text-[var(--text-muted)]">Reviewed in Transactions for this month. Apply is locked.</span>
             ) : null}
-            <span className="text-sm text-stone-500">
+            <span className="text-sm text-[var(--text-muted)]">
               Closing a month uses the current surplus suggestion and keeps carry-forward visible through the next month's reserved balances.
             </span>
           </div>
@@ -273,15 +273,15 @@ export function MonthlyReview() {
               }}
             />
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-raf-ink">Notes</span>
+              <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Notes</span>
               <textarea
-                className="min-h-28 w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                className="ui-field min-h-28 resize-y"
                 placeholder="Optional note for the review record"
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
               />
             </label>
-            <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
+            <div className="rounded-2xl border p-4 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               Confirming this action asks the backend to calculate and persist the monthly review for {activeMonthLabel}.
               The frontend does not distribute surplus itself.
             </div>
@@ -309,24 +309,24 @@ export function MonthlyReview() {
           {!isPreviewLoading && previewError ? <ErrorState title="Failed to load monthly review preview" message={previewError} /> : null}
           {!isPreviewLoading && !previewError && preview ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between gap-4 rounded-2xl bg-stone-50 p-4">
+              <div className="flex items-center justify-between gap-4 rounded-2xl p-4" style={{ background: "var(--surface-plain)" }}>
                 <div>
-                  <p className="text-sm text-stone-500">Net surplus distributed</p>
-                  <p className="mt-1 text-2xl font-semibold text-raf-ink">{formatCurrency(preview.netSurplus)}</p>
+                  <p className="text-sm text-[var(--text-muted)]">Net surplus distributed</p>
+                  <p className="mt-1 text-2xl font-semibold text-[var(--text-strong)]">{formatCurrency(preview.netSurplus)}</p>
                 </div>
                 <Badge tone={alertTone(preview.alertStatus)}>{preview.alertStatus}</Badge>
               </div>
               <Table headers={["Target", "Amount"]}>
                 {preview.distributions.map((distribution) => (
                   <tr key={distribution.slug}>
-                    <td className="px-4 py-3 text-sm font-medium text-raf-ink">{distribution.label}</td>
-                    <td className="px-4 py-3 text-sm text-stone-600">{formatCurrency(distribution.amount)}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-[var(--text-strong)]">{distribution.label}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{formatCurrency(distribution.amount)}</td>
                   </tr>
                 ))}
               </Table>
               {preview.targetDebtName ? (
-                <p className="text-sm text-stone-500">
-                  Debt target: <span className="font-medium text-raf-ink">{preview.targetDebtName}</span>
+                <p className="text-sm text-[var(--text-muted)]">
+                  Debt target: <span className="font-medium text-[var(--text-strong)]">{preview.targetDebtName}</span>
                 </p>
               ) : null}
             </div>
@@ -376,7 +376,7 @@ export function MonthlyReview() {
             </Button>
           </div>
         </div>
-        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
+        <div className="mt-4 rounded-2xl border p-4 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
           This applies each month sequentially. If a month already has a saved review, the batch stops on that month and
           returns the backend error.
         </div>
@@ -386,7 +386,7 @@ export function MonthlyReview() {
               title="Mass review applied"
               message={`Applied ${batchResult.appliedCount} month${batchResult.appliedCount === 1 ? "" : "s"} and created ${batchResult.totalTransactions} allocation transaction${batchResult.totalTransactions === 1 ? "" : "s"}.`}
             />
-            <p className="mt-3 text-sm text-stone-500">
+            <p className="mt-3 text-sm text-[var(--text-muted)]">
               Months applied: {batchResult.reviewMonths.join(", ")}
             </p>
           </div>
@@ -401,9 +401,9 @@ export function MonthlyReview() {
             message={`The backend persisted the review and created ${result.appliedTransactions.length} allocation transaction${result.appliedTransactions.length === 1 ? "" : "s"}.`}
           />
           <div className="mt-4 grid gap-4 lg:grid-cols-[0.7fr,1fr]">
-            <div className="rounded-2xl bg-stone-50 p-4">
-              <p className="text-sm text-stone-500">Net surplus</p>
-              <p className="mt-1 text-2xl font-semibold text-raf-ink">{formatCurrency(result.review.netSurplus)}</p>
+            <div className="rounded-2xl p-4" style={{ background: "var(--surface-plain)" }}>
+              <p className="text-sm text-[var(--text-muted)]">Net surplus</p>
+              <p className="mt-1 text-2xl font-semibold text-[var(--text-strong)]">{formatCurrency(result.review.netSurplus)}</p>
               <div className="mt-3">
                 <Badge tone={alertTone(result.review.alertStatus)}>{result.review.alertStatus}</Badge>
               </div>
@@ -411,8 +411,8 @@ export function MonthlyReview() {
             <Table headers={["Distribution key", "Amount"]}>
               {Object.entries(result.review.distributions).map(([key, amount]) => (
                 <tr key={key}>
-                  <td className="px-4 py-3 text-sm font-medium text-raf-ink">{key}</td>
-                  <td className="px-4 py-3 text-sm text-stone-600">{formatCurrency(amount)}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-[var(--text-strong)]">{key}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{formatCurrency(amount)}</td>
                 </tr>
               ))}
             </Table>

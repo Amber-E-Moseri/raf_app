@@ -21,18 +21,18 @@ export function SummaryMetricCard({
   icon,
 }: SummaryMetricCardProps) {
   return (
-    <Card className="min-h-[96px] overflow-hidden border-stone-200/80 bg-white/90">
+    <Card className="min-h-[96px] overflow-hidden">
       <div className="flex h-full flex-col gap-2.5">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] font-medium text-stone-500">{title}</p>
+          <p className="text-[11px] font-medium text-[var(--text-muted)]">{title}</p>
           {badge ? <Badge tone={tone}>{badge}</Badge> : null}
         </div>
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[24px] font-bold leading-none text-raf-ink">{value}</p>
-            <p className="mt-2 text-[10px] font-medium text-stone-500">{subtitle}</p>
+            <p className="text-[24px] font-bold leading-none text-[var(--text-strong)]">{value}</p>
+            <p className="mt-2 text-[10px] font-medium text-[var(--text-muted)]">{subtitle}</p>
           </div>
-          {icon ? <div className="text-stone-300">{icon}</div> : null}
+          {icon ? <div className="text-[var(--text-muted)]/40">{icon}</div> : null}
         </div>
       </div>
     </Card>

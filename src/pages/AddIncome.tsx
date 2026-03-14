@@ -140,9 +140,9 @@ export function AddIncome() {
               }}
             />
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-raf-ink">Notes</span>
+              <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Notes</span>
               <textarea
-                className="min-h-28 w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition placeholder:text-stone-400 focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+                className="ui-field min-h-28 resize-y"
                 name="notes"
                 placeholder="Optional context for this deposit"
                 value={form.notes}
@@ -190,14 +190,14 @@ export function AddIncome() {
                   const allocation = success?.allocations.find((item) => item.slug === category.slug);
                   return (
                   <tr key={category.id}>
-                    <td className="px-4 py-3 text-sm font-medium text-raf-ink">{category.label}</td>
-                    <td className="px-4 py-3 text-sm text-stone-600">{(Number(category.allocationPercent) * 100).toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-sm font-medium text-[var(--text-strong)]">{category.label}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{(Number(category.allocationPercent) * 100).toFixed(2)}%</td>
                     {success ? (
-                      <td className="px-4 py-3 text-sm text-stone-600">
+                      <td className="px-4 py-3 text-sm text-[var(--text-muted)]">
                         {allocation ? formatCurrency(allocation.amount) : "Not allocated in this deposit"}
                       </td>
                     ) : null}
-                    <td className="px-4 py-3 text-sm text-stone-600">{category.isActive ? "Active" : "Inactive"}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{category.isActive ? "Active" : "Inactive"}</td>
                   </tr>
                   );
                 })}
@@ -213,7 +213,7 @@ export function AddIncome() {
           {error ? <ErrorState title="Failed to record income" message={error} /> : null}
           {!success ? (
             <Card title="What happens next" subtitle="The frontend does not compute any splits itself.">
-              <ul className="space-y-3 text-sm text-stone-600">
+              <ul className="space-y-3 text-sm text-[var(--text-muted)]">
                 <li>The backend validates the payload and records the deposit.</li>
                 <li>Allocation rows are created server-side using deterministic rounding.</li>
                 <li>The response comes back with the real allocation snapshot for this deposit.</li>

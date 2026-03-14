@@ -98,7 +98,7 @@ function ruleActionLabel(rule: ImportReviewRule) {
 function selectedCardClasses(selected: boolean) {
   return selected
     ? "border-[var(--primary-color)] bg-[var(--primary-soft)] shadow-focus"
-    : "border-[var(--border-color)] bg-[var(--surface-color)] hover:-translate-y-0.5 hover:shadow-lift";
+    : "border-[var(--border-color)] hover:-translate-y-0.5 hover:shadow-lift";
 }
 
 export function AppearanceSettings() {
@@ -313,6 +313,7 @@ export function AppearanceSettings() {
                                 key={option.value}
                                 type="button"
                                 className={`rounded-[1.5rem] border p-5 text-left transition duration-200 ${selectedCardClasses(selected)}`}
+                                style={{ background: selected ? undefined : "var(--surface-plain)" }}
                                 onClick={() => updateDraft({ theme_color: option.value })}
                               >
                                 <div className="flex items-start justify-between gap-3">
@@ -326,7 +327,13 @@ export function AppearanceSettings() {
                                       <div className="mt-1 text-[13px] italic text-[var(--text-muted)]">{group.mood} theme</div>
                                     </div>
                                   </div>
-                                  {selected ? <Badge tone="success">Selected</Badge> : null}
+                                  {selected ? (
+                                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--primary-color)] text-[var(--primary-contrast)] shadow-sm">
+                                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="m5 10 3 3 7-7" />
+                                      </svg>
+                                    </span>
+                                  ) : null}
                                 </div>
                               </button>
                             );
@@ -356,6 +363,7 @@ export function AppearanceSettings() {
                           key={option.value}
                           type="button"
                           className={`rounded-[1.5rem] border p-5 text-left transition duration-200 ${selectedCardClasses(selected)}`}
+                          style={{ background: selected ? undefined : "var(--surface-plain)" }}
                           onClick={() => updateDraft({ font_family: option.value })}
                         >
                           <div className="flex items-start justify-between gap-4">
@@ -370,7 +378,13 @@ export function AppearanceSettings() {
                                 {option.preview}
                               </p>
                             </div>
-                            {selected ? <Badge tone="success">Selected</Badge> : null}
+                            {selected ? (
+                              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--primary-color)] text-[var(--primary-contrast)] shadow-sm">
+                                <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="m5 10 3 3 7-7" />
+                                </svg>
+                              </span>
+                            ) : null}
                           </div>
                         </button>
                       );
@@ -402,13 +416,20 @@ export function AppearanceSettings() {
                           key={option.value}
                           type="button"
                           className={`rounded-[1.5rem] border p-5 text-left transition duration-200 ${selectedCardClasses(selected)}`}
+                          style={{ background: selected ? undefined : "var(--surface-plain)" }}
                           onClick={() => updateDraft({ interface_scale: option.value })}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className={`${sizeClass} font-semibold text-[var(--text-strong)]`}>
                               {option.label}
                             </div>
-                            {selected ? <Badge tone="success">Selected</Badge> : null}
+                            {selected ? (
+                              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--primary-color)] text-[var(--primary-contrast)] shadow-sm">
+                                <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="m5 10 3 3 7-7" />
+                                </svg>
+                              </span>
+                            ) : null}
                           </div>
                         </button>
                       );
@@ -426,11 +447,18 @@ export function AppearanceSettings() {
                             key={option.value}
                             type="button"
                             className={`rounded-[1.5rem] border p-5 text-left transition duration-200 ${selectedCardClasses(selected)}`}
+                            style={{ background: selected ? undefined : "var(--surface-plain)" }}
                             onClick={() => updateDraft({ appearance_mode: option.value })}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="text-base font-semibold text-[var(--text-strong)]">{option.label}</div>
-                              {selected ? <Badge tone="success">Active</Badge> : null}
+                              {selected ? (
+                                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--primary-color)] text-[var(--primary-contrast)] shadow-sm">
+                                  <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="m5 10 3 3 7-7" />
+                                  </svg>
+                                </span>
+                              ) : null}
                             </div>
                           </button>
                         );

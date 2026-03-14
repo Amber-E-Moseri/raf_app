@@ -102,6 +102,26 @@ test('creating a goal stores a household-scoped progress target linked to a buck
   });
 });
 
+test('creating a goal accepts blank optional fields from the frontend as nulls', async () => {
+  const db = createDbDouble();
+
+  const result = await createGoal({
+    db,
+    householdId: 'household_1',
+    input: {
+      bucket_id: 'bucket_savings',
+      name: 'Travel Fund',
+      target_amount: '1500.00',
+      target_date: null,
+      notes: null,
+      active: true,
+    },
+  });
+
+  assert.equal(result.target_date, null);
+  assert.equal(result.notes, null);
+});
+
 test('editing a goal updates editable fields only', async () => {
   const db = createDbDouble({
     goals: [
