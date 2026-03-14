@@ -766,6 +766,50 @@ test('import review flow lists imported rows, classifies them, and prevents dupl
   assert.equal(ignored.data.classification_type, 'ignore');
 });
 
+test('import review can classify a row as a fixed bill payment end to end', async () => {
+  const fixedBill = await request('/api/v1/household/fixed-bills', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'Internet',
+      category_slug: 'fixed_bills',
+      expected_amount: '59.99',
+      due_day_of_month: 15,
+    }),
+  });
+  assert.equal(fixedBill.response.status, 201);
+
+  const imported = await request('/api/v1/imports/bank-statement', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/pdf',
+      'x-filename': 'statement.pdf',
+    },
+    body: createPdfFixture(['2026-03-24 INTERNET BILL (59.99) 910.02']),
+  });
+  assert.equal(imported.response.status, 201);
+
+  const importedRow = imported.data.items[0];
+
+  const classified = await request(`/api/v1/imports/${importedRow.id}/classify`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      classification_type: 'fixed_bill_payment',
+      fixed_bill_id: fixedBill.data.id,
+    }),
+  });
+  assert.equal(classified.response.status, 200);
+  assert.equal(classified.data.status, 'classified');
+  assert.equal(classified.data.classification_type, 'fixed_bill_payment');
+  assert.equal(classified.data.linked_fixed_bill_id, fixedBill.data.id);
+  assert.equal(typeof classified.data.linked_transaction_id, 'string');
+});
+
 test('monthly review create endpoint computes surplus distributions deterministically', async () => {
   await request('/api/v1/income', {
     method: 'POST',

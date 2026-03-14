@@ -92,6 +92,8 @@ export function ImportRuleEditor({
   onCancel,
   onSave,
 }: ImportRuleEditorProps) {
+  const canLinkFixedBill = fixedBills.length > 0;
+
   return (
     <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-4">
       <div className="grid gap-4 md:grid-cols-2">
@@ -130,7 +132,7 @@ export function ImportRuleEditor({
           >
             <option value="transaction">Approve as transaction</option>
             <option value="debt_payment">Link to debt payment</option>
-            <option value="fixed_bill_payment">Link to fixed bill</option>
+            {canLinkFixedBill ? <option value="fixed_bill_payment">Link to fixed bill</option> : null}
             <option value="goal_funding">Link to goal funding</option>
             <option value="duplicate">Mark duplicate</option>
             <option value="transfer">Mark transfer</option>

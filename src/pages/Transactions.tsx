@@ -683,6 +683,15 @@ export function Transactions() {
     if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
       throw new Error("Select an allocation bucket before approving this imported row.");
     }
+    if (requiresDebtSelection(draft.classificationType) && !draft.debtId) {
+      throw new Error("Select a debt before saving this imported row.");
+    }
+    if (requiresFixedBillSelection(draft.classificationType) && !draft.fixedBillId) {
+      throw new Error("Select a fixed bill before saving this imported row.");
+    }
+    if (requiresGoalSelection(draft.classificationType) && !draft.goalId) {
+      throw new Error("Select a goal before saving this imported row.");
+    }
 
     const payload: ImportClassificationPayload = {
       classification_type: draft.classificationType,
@@ -1347,6 +1356,7 @@ export function Transactions() {
                       const isAdvancedOpen = openAdvancedMenuId === item.id;
                       const activeRule = item.suggestion && !dismissedRuleEffects[item.id] ? item.suggestion : null;
                       const isRuleEditing = editingRuleId === activeRule?.id;
+                      const canLinkFixedBill = data.fixedBills.length > 0;
 
                       return (
                         <div key={item.id}>
@@ -1591,7 +1601,7 @@ export function Transactions() {
                                       >
                                         <option value="transaction">Approve as transaction</option>
                                         <option value="debt_payment">Link to debt payment</option>
-                                        <option value="fixed_bill_payment">Link to fixed bill</option>
+                                        {canLinkFixedBill ? <option value="fixed_bill_payment">Link to fixed bill</option> : null}
                                         <option value="goal_funding">Link to goal funding</option>
                                         <option value="duplicate">Mark duplicate</option>
                                         <option value="transfer">Mark transfer</option>
