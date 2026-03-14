@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { getDebts } from "../api/debtsApi";
 import { getFixedBills } from "../api/fixedBillsApi";
+import { getHouseholdSettings, updateHouseholdSettings } from "../api/householdApi";
 import {
   deleteImportReviewRule,
   getImportReviewRules,
@@ -23,6 +24,7 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
+import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import {
   APPEARANCE_MODE_OPTIONS,
@@ -37,14 +39,17 @@ import type {
   Debt,
   FixedBill,
   Goal,
+  HouseholdSettings,
   ImportReviewRule,
 } from "../lib/types";
+import { normalizeMoneyInput } from "../lib/validation";
 
 interface ProfileSettingsViewModel {
   categories: AllocationCategory[];
   debts: Debt[];
   fixedBills: FixedBill[];
   goals: Goal[];
+  household: HouseholdSettings;
   rules: ImportReviewRule[];
 }
 
@@ -126,13 +131,18 @@ export function AppearanceSettings() {
   const [openRuleMenuId, setOpenRuleMenuId] = useState<string | null>(null);
   const [ruleDrafts, setRuleDrafts] = useState<Record<string, ReturnType<typeof buildImportRuleDraft>>>({});
   const [pendingRuleId, setPendingRuleId] = useState<string | null>(null);
+  const [savingsFloorDraft, setSavingsFloorDraft] = useState({ enabled: false, amount: "0.00" });
+  const [savingsFloorMessage, setSavingsFloorMessage] = useState<string | null>(null);
+  const [savingsFloorError, setSavingsFloorError] = useState<string | null>(null);
+  const [isSavingFloor, setIsSavingFloor] = useState(false);
 
   const rulesData = useAsyncData<ProfileSettingsViewModel>(async () => {
-    const [categories, debtsResponse, fixedBillsResponse, goalsResponse, rulesResponse] = await Promise.all([
+    const [categories, debtsResponse, fixedBillsResponse, goalsResponse, household, rulesResponse] = await Promise.all([
       getAllocationCategories(),
       getDebts(),
       getFixedBills(),
       getGoals(),
+      getHouseholdSettings(),
       getImportReviewRules(),
     ]);
 
@@ -141,6 +151,7 @@ export function AppearanceSettings() {
       debts: debtsResponse.items,
       fixedBills: fixedBillsResponse.items,
       goals: goalsResponse.items,
+      household,
       rules: rulesResponse.items,
     };
   }, []);
@@ -148,6 +159,17 @@ export function AppearanceSettings() {
   useEffect(() => {
     setDraft(preferences);
   }, [preferences]);
+
+  useEffect(() => {
+    if (!rulesData.data?.household) {
+      return;
+    }
+
+    setSavingsFloorDraft({
+      enabled: rulesData.data.household.savingsFloorEnabled === true,
+      amount: rulesData.data.household.savingsFloor ?? "0.00",
+    });
+  }, [rulesData.data?.household]);
 
   const hasChanges = useMemo(() => (
     draft.theme_color !== preferences.theme_color
@@ -191,6 +213,52 @@ export function AppearanceSettings() {
   function handleRestoreDefaults() {
     setDraft(DEFAULT_APPEARANCE);
     setSaveMessage(null);
+  }
+
+  const hasSavingsFloorChanges = useMemo(() => {
+    const household = rulesData.data?.household;
+    if (!household) {
+      return false;
+    }
+
+    const normalizedDraftAmount = (normalizeMoneyInput(savingsFloorDraft.amount) ?? savingsFloorDraft.amount) || "0.00";
+    return household.savingsFloorEnabled !== savingsFloorDraft.enabled
+      || household.savingsFloor !== normalizedDraftAmount;
+  }, [rulesData.data?.household, savingsFloorDraft]);
+
+  async function handleSaveSavingsFloor() {
+    const normalizedFloor = normalizeMoneyInput(savingsFloorDraft.amount) ?? "0.00";
+
+    setIsSavingFloor(true);
+    setSavingsFloorError(null);
+    setSavingsFloorMessage(null);
+
+    try {
+      await updateHouseholdSettings({
+        savingsFloorEnabled: savingsFloorDraft.enabled,
+        savingsFloor: normalizedFloor,
+      });
+      setSavingsFloorMessage("Savings floor updated.");
+      await rulesData.reload();
+    } catch (error) {
+      setSavingsFloorError(error instanceof Error ? error.message : "Savings floor could not be updated.");
+    } finally {
+      setIsSavingFloor(false);
+    }
+  }
+
+  function handleResetSavingsFloor() {
+    const household = rulesData.data?.household;
+    if (!household) {
+      return;
+    }
+
+    setSavingsFloorDraft({
+      enabled: household.savingsFloorEnabled === true,
+      amount: household.savingsFloor,
+    });
+    setSavingsFloorError(null);
+    setSavingsFloorMessage(null);
   }
 
   function getRuleDraft(rule: ImportReviewRule) {
@@ -352,6 +420,65 @@ export function AppearanceSettings() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="Savings Floor">
+                <div className="space-y-5">
+                  <div className="border-b border-[var(--border-color)] pb-5">
+                    <div className="text-[17px] font-semibold text-[var(--text-strong)]">Savings Floor</div>
+                    <p className="mt-2 max-w-2xl text-[13px] italic leading-6 text-[var(--text-muted)]">
+                      Set a warning threshold for savings. RAF will alert you when savings drop below this floor, but nothing moves automatically.
+                    </p>
+                  </div>
+
+                  {savingsFloorMessage ? <SuccessNotice title="Savings floor updated" message={savingsFloorMessage} /> : null}
+                  {savingsFloorError ? (
+                    <ErrorState
+                      title="Savings floor update failed"
+                      message={savingsFloorError}
+                    />
+                  ) : null}
+
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] px-4 py-4" style={{ background: "var(--surface-plain)" }}>
+                    <label className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--text-strong)]">Enable savings floor alerts</div>
+                        <div className="mt-1 text-[12px] italic text-[var(--text-muted)]">Warnings appear on the dashboard when protected savings fall under your floor.</div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
+                        checked={savingsFloorDraft.enabled}
+                        onChange={(event) => {
+                          setSavingsFloorDraft((current) => ({ ...current, enabled: event.target.checked }));
+                          setSavingsFloorError(null);
+                          setSavingsFloorMessage(null);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <MoneyInput
+                    label="Floor amount"
+                    name="savingsFloor"
+                    value={savingsFloorDraft.amount}
+                    onChange={(value) => {
+                      setSavingsFloorDraft((current) => ({ ...current, amount: value }));
+                      setSavingsFloorError(null);
+                      setSavingsFloorMessage(null);
+                    }}
+                    placeholder="500.00"
+                  />
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button type="button" onClick={handleSaveSavingsFloor} disabled={isSavingFloor || !hasSavingsFloorChanges}>
+                      {isSavingFloor ? "Saving floor..." : "Save Savings Floor"}
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={handleResetSavingsFloor} disabled={isSavingFloor || !hasSavingsFloorChanges}>
+                      Cancel
+                    </Button>
                   </div>
                 </div>
               </Card>

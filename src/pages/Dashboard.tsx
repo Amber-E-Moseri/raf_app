@@ -1,9 +1,10 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
-import { getDashboardReport, getFinancialHealthReport } from "../api/reportsApi";
+import { getDashboardReport, getFinancialHealthReport, getSurplusRecommendations } from "../api/reportsApi";
 import { getTransactions } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
 import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
@@ -13,15 +14,19 @@ import { MonthReminderBanner } from "../components/feedback/MonthReminderBanner"
 import { PageShell } from "../components/layout/PageShell";
 import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
+import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useMonthWorkflow } from "../hooks/useMonthWorkflow";
 import { formatCurrency, formatIsoDate } from "../lib/format";
+import { normalizeMoneyInput } from "../lib/validation";
 import type {
   AllocationCategory,
   DashboardPeriod,
   IncomeAllocationReport,
+  SurplusRecommendationsReport,
   Transaction,
 } from "../lib/types";
 
@@ -31,6 +36,7 @@ interface DashboardViewModel {
   latestAllocationReport: IncomeAllocationReport | null;
   latestPeriod: DashboardPeriod | null;
   financialHealth: DashboardHealthReport;
+  surplusRecommendations: SurplusRecommendationsReport;
   recentTransactions: Transaction[];
   incomeCount: number;
 }
@@ -62,11 +68,15 @@ export function Dashboard() {
   const { activeMonthLabel, activeRange, isCurrentMonth, jumpToCurrentMonth } = usePeriod();
   const { from, to } = activeRange;
   const monthWorkflow = useMonthWorkflow(activeRange.from.slice(0, 7));
+  const [isEditingSurplus, setIsEditingSurplus] = useState(false);
+  const [surplusDraft, setSurplusDraft] = useState<Record<string, string>>({});
+  const [surplusMessage, setSurplusMessage] = useState<string | null>(null);
 
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
-    const [dashboard, financialHealth, incomeResponse, transactionsResponse] = await Promise.all([
+    const [dashboard, financialHealth, surplusRecommendations, incomeResponse, transactionsResponse] = await Promise.all([
       getDashboardReport({ from, to }),
       getFinancialHealthReport(),
+      getSurplusRecommendations(from),
       getIncome({ from, to }),
       getTransactions({ from, to, limit: 10 }),
     ]);
@@ -91,10 +101,25 @@ export function Dashboard() {
       latestAllocationReport,
       latestPeriod,
       financialHealth,
+      surplusRecommendations,
       recentTransactions: transactionsResponse.items.slice(0, 5),
       incomeCount: incomeResponse.items.length,
     };
   }, [from, to]);
+
+  useEffect(() => {
+    if (!data?.surplusRecommendations) {
+      return;
+    }
+
+    setSurplusDraft(
+      Object.fromEntries(
+        data.surplusRecommendations.distributions.map((distribution) => [distribution.slug, distribution.amount]),
+      ),
+    );
+    setSurplusMessage(null);
+    setIsEditingSurplus(false);
+  }, [data?.surplusRecommendations]);
 
   if (isLoading || monthWorkflow.isLoading) {
     return (
@@ -143,11 +168,32 @@ export function Dashboard() {
 
   const savingsBalance = Number(data.financialHealth.savingsBalance);
   const savingsFloor = Number(data.financialHealth.savingsFloor);
+  const savingsFloorEnabled = data.financialHealth.savingsFloorEnabled === true;
+  const isBelowSavingsFloor = savingsFloorEnabled && savingsBalance < savingsFloor;
+  const availableSavingsAmount = Number(data.financialHealth.availableSavings);
   const emergencyFundBalance = Number(data.financialHealth.emergencyFundBalance);
-  const availableSavings = Number(data.financialHealth.availableSavings);
   const savingsMax = Math.max(savingsBalance, emergencyFundBalance, savingsFloor, 1);
   const savingsPercent = Math.max(0, Math.min(100, (savingsBalance / savingsMax) * 100));
   const floorPercent = Math.max(0, Math.min(100, (savingsFloor / savingsMax) * 100));
+  const suggestionItems = data.surplusRecommendations.distributions.filter((distribution) => Number(distribution.amount) > 0);
+  const surplusExists = Number(data.surplusRecommendations.netSurplus) > 0 && suggestionItems.length > 0;
+  const draftTotal = Object.values(surplusDraft).reduce((sum, amount) => sum + Number(normalizeMoneyInput(amount) ?? "0.00"), 0);
+  const netSurplus = Number(data.surplusRecommendations.netSurplus);
+  const draftMatchesSurplus = Math.abs(draftTotal - netSurplus) < 0.005;
+
+  function handleResetSurplusDraft() {
+    setSurplusDraft(
+      Object.fromEntries(
+        data.surplusRecommendations.distributions.map((distribution) => [distribution.slug, distribution.amount]),
+      ),
+    );
+    setSurplusMessage(null);
+  }
+
+  function handleConfirmSurplusDraft() {
+    setSurplusMessage("Suggestion draft confirmed. Nothing has been moved automatically.");
+    setIsEditingSurplus(false);
+  }
 
   return (
     <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
@@ -214,24 +260,38 @@ export function Dashboard() {
           <Card
             title="Savings floor protection"
             subtitle="Household protection threshold. Separate from the monthly Savings bucket."
-            actions={<Badge tone={alertTone(data.financialHealth.alertStatus)}>{data.financialHealth.alertStatus === "ok" ? "Protected" : "At risk"}</Badge>}
+            actions={(
+              <Badge tone={isBelowSavingsFloor ? "danger" : savingsFloorEnabled ? alertTone(data.financialHealth.alertStatus) : "neutral"}>
+                {isBelowSavingsFloor ? "Below floor" : savingsFloorEnabled ? "Protected" : "Monitoring off"}
+              </Badge>
+            )}
           >
             <div className="space-y-3">
+              {isBelowSavingsFloor ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-700 shadow-sm">
+                  <div className="font-semibold">Savings is below your floor</div>
+                  <div className="mt-1 text-[12px] leading-5">This is a warning only. RAF will not move money automatically.</div>
+                </div>
+              ) : null}
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[24px] font-bold leading-none text-[var(--text-strong)]">{formatCurrency(data.financialHealth.savingsBalance)}</div>
                   <div className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">Current protected savings balance</div>
                 </div>
-                <div className="text-[11px] font-medium text-[var(--text-muted)]">{data.financialHealth.alertStatus === "ok" ? "Protected" : "At risk"}</div>
+                <div className="text-[11px] font-medium text-[var(--text-muted)]">
+                  {savingsFloorEnabled ? (isBelowSavingsFloor ? "Warning" : "Protected") : "Disabled"}
+                </div>
               </div>
               <div className="relative">
                 <div className="progress-track h-2 overflow-hidden rounded-full">
                   <div className="h-full rounded-full bg-raf-moss" style={{ width: `${savingsPercent}%` }} />
                 </div>
-                <div
-                  className="absolute top-[-3px] h-4 w-[2px] rounded-full bg-amber-500"
-                  style={{ left: `calc(${floorPercent}% - 1px)` }}
-                />
+                {savingsFloorEnabled ? (
+                  <div
+                    className="absolute top-[-3px] h-4 w-[2px] rounded-full bg-amber-500"
+                    style={{ left: `calc(${floorPercent}% - 1px)` }}
+                  />
+                ) : null}
               </div>
               <div className="flex items-center justify-between text-[10px] font-medium text-[var(--text-muted)]">
                 <span>$0</span>
@@ -239,16 +299,103 @@ export function Dashboard() {
                 <span>{formatCurrency(String(savingsMax.toFixed(2)))} max</span>
               </div>
               <div className="rounded-2xl border border-[var(--border-color)] px-3 py-3" style={{ background: "var(--surface-plain)" }}>
-                <div className="text-[11px] font-medium text-[var(--text-muted)]">Above floor</div>
+                <div className="text-[11px] font-medium text-[var(--text-muted)]">
+                  {savingsFloorEnabled ? (isBelowSavingsFloor ? "Below floor by" : "Above floor") : "Savings balance"}
+                </div>
                 <div className="mt-1 text-[16px] font-semibold text-[var(--text-strong)]">
-                  {formatCurrency(data.financialHealth.availableSavings)}
+                  {formatCurrency(isBelowSavingsFloor ? Math.abs(availableSavingsAmount) : data.financialHealth.availableSavings)}
                 </div>
               </div>
               <p className="text-[12px] italic text-[var(--text-muted)]">
-                This protection view is cumulative and does not change the monthly amount shown in the Savings bucket row.
+                {savingsFloorEnabled
+                  ? "This protection view is cumulative and does not change the monthly amount shown in the Savings bucket row."
+                  : "Savings floor monitoring is off. Enable it in Settings if you want low-savings warnings."}
               </p>
             </div>
           </Card>
+
+          {surplusExists ? (
+            <Card
+              title="Surplus Suggestions"
+              subtitle="Suggestions are editable and stay manual until you confirm them."
+              actions={<Badge tone={alertTone(data.surplusRecommendations.alertStatus)}>Surplus {formatCurrency(data.surplusRecommendations.netSurplus)}</Badge>}
+            >
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-[var(--border-color)] px-4 py-4" style={{ background: "var(--surface-plain)" }}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-base font-semibold text-[var(--text-strong)]">Allocate {formatCurrency(data.surplusRecommendations.netSurplus)} surplus</div>
+                      <div className="mt-1 text-[12px] italic text-[var(--text-muted)]">Review the split, edit it if needed, and confirm it manually before applying anything.</div>
+                    </div>
+                    <Button type="button" variant="secondary" className="min-h-9 rounded-full px-3 py-1.5 text-xs" onClick={() => setIsEditingSurplus((current) => !current)}>
+                      {isEditingSurplus ? "Close editor" : "Edit suggestion"}
+                    </Button>
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    {suggestionItems.map((distribution) => (
+                      <button
+                        key={distribution.slug}
+                        type="button"
+                        className="flex items-center justify-between rounded-2xl border border-[var(--border-color)] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-lift"
+                        style={{ background: "var(--surface-color)" }}
+                        onClick={() => setIsEditingSurplus(true)}
+                      >
+                        <span className="text-sm font-medium text-[var(--text-strong)]">+ {formatCurrency(surplusDraft[distribution.slug] ?? distribution.amount)} to {distribution.label}</span>
+                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Edit</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {isEditingSurplus ? (
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] px-4 py-4" style={{ background: "var(--surface-plain)" }}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--text-strong)]">Edit surplus suggestion</div>
+                        <div className="mt-1 text-[12px] italic text-[var(--text-muted)]">Nothing auto-applies. Keep the total aligned with the current surplus before you confirm the draft.</div>
+                      </div>
+                      <Link className="text-xs font-semibold text-[var(--primary-color)]" to="/monthly-review">
+                        Open Monthly Review -&gt;
+                      </Link>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {data.surplusRecommendations.distributions.map((distribution) => (
+                        <MoneyInput
+                          key={distribution.slug}
+                          label={distribution.label}
+                          name={`surplus-${distribution.slug}`}
+                          value={surplusDraft[distribution.slug] ?? distribution.amount}
+                          onChange={(value) => {
+                            setSurplusDraft((current) => ({ ...current, [distribution.slug]: value }));
+                            setSurplusMessage(null);
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] px-3 py-3 text-sm" style={{ background: "var(--surface-color)" }}>
+                      <div>
+                        <div className="font-semibold text-[var(--text-strong)]">Draft total {formatCurrency(draftTotal.toFixed(2))}</div>
+                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">
+                          {draftMatchesSurplus
+                            ? "The draft matches the current surplus."
+                            : `Keep this aligned with ${formatCurrency(data.surplusRecommendations.netSurplus)} before confirming.`}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="secondary" className="min-h-9 rounded-full px-3 py-1.5 text-xs" onClick={handleResetSurplusDraft}>
+                          Reset
+                        </Button>
+                        <Button type="button" className="min-h-9 rounded-full px-3 py-1.5 text-xs" disabled={!draftMatchesSurplus} onClick={handleConfirmSurplusDraft}>
+                          Confirm draft
+                        </Button>
+                      </div>
+                    </div>
+                    {surplusMessage ? <p className="mt-3 text-[12px] italic text-[var(--text-muted)]">{surplusMessage}</p> : null}
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
 
           <Card
             title="Recent activity"

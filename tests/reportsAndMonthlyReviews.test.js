@@ -6,6 +6,7 @@ import { GET as getFinancialHealthRoute } from '../app/api/v1/reports/financial-
 import { GET as getIncomeAllocationsRoute } from '../app/api/v1/reports/income-allocations/route.js';
 import { GET as getMonthlyReviewReportRoute } from '../app/api/v1/reports/monthly-review/route.js';
 import { GET as getSurplusRecommendationsRoute } from '../app/api/v1/reports/surplus-recommendations/route.js';
+import { GET as getHouseholdRoute, PATCH as patchHouseholdRoute } from '../app/api/v1/household/route.js';
 import { GET as listMonthlyReviewsRoute, POST as createMonthlyReviewRoute } from '../app/api/v1/monthly-reviews/route.js';
 import { PATCH as patchMonthlyReviewRoute } from '../app/api/v1/monthly-reviews/[id]/route.js';
 import { getFinancialHealthReport } from '../lib/reports/getFinancialHealthReport.js';
@@ -29,8 +30,12 @@ function createDbDouble({
   monthlyReviews = [],
   household = {
     id: 'household_1',
+    name: 'Household 1',
+    timezone: 'America/Toronto',
     activeMonth: '2026-03-01',
+    periodStartDay: 1,
     savingsFloor: '50.00',
+    savingsFloorEnabled: false,
     monthlyEssentialsBaseline: '200.00',
   },
 } = {}) {
@@ -96,6 +101,10 @@ function createDbDouble({
       return surplusSplitRules;
     },
     async getHousehold() {
+      return state.household;
+    },
+    async updateHousehold({ patch }) {
+      state.household = { ...state.household, ...patch };
       return state.household;
     },
     async getMonthlyReviewByMonth({ reviewMonth }) {
@@ -708,6 +717,7 @@ test('getFinancialHealthReport computes live health metrics from household, inco
     debtRatio: '0.1000',
     savingsBalance: '100.00',
     savingsFloor: '50.00',
+    savingsFloorEnabled: false,
     availableSavings: '50.00',
     emergencyFundBalance: '300.00',
     monthlyEssentials: '200.00',
@@ -838,6 +848,7 @@ test('report services handle empty-state data without persisting derived results
     debtRatio: '0.0000',
     savingsBalance: '0.00',
     savingsFloor: '0.00',
+    savingsFloorEnabled: false,
     availableSavings: '0.00',
     emergencyFundBalance: '0.00',
     monthlyEssentials: '0.00',
@@ -853,6 +864,69 @@ test('report services handle empty-state data without persisting derived results
     alertStatus: 'ok',
   });
   assert.equal(db.state.monthlyReviews.length, 0);
+});
+
+test('household route updates savings floor settings and financial health respects the enabled flag', async () => {
+  const db = createDbDouble({
+    household: {
+      id: 'household_1',
+      name: 'Household 1',
+      timezone: 'America/Toronto',
+      activeMonth: '2026-03-01',
+      periodStartDay: 1,
+      savingsFloor: '250.00',
+      savingsFloorEnabled: false,
+      monthlyEssentialsBaseline: '200.00',
+    },
+    incomeAllocations: [
+      { incomeEntryId: 'income_1', receivedDate: '2026-03-10', slug: 'savings', label: 'Savings', amount: '100.00', allocatedAmount: '100.00' },
+    ],
+  });
+
+  const listedResponse = await getHouseholdRoute(
+    new Request('http://localhost/api/v1/household', {
+      headers: { 'x-household-id': 'household_1' },
+    }),
+    { db },
+  );
+
+  assert.equal(listedResponse.status, 200);
+  assert.equal((await listedResponse.json()).savingsFloorEnabled, false);
+
+  const updatedResponse = await patchHouseholdRoute(
+    new Request('http://localhost/api/v1/household', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        'x-household-id': 'household_1',
+      },
+      body: JSON.stringify({
+        savingsFloor: '250.00',
+        savingsFloorEnabled: true,
+      }),
+    }),
+    { db },
+  );
+
+  assert.equal(updatedResponse.status, 200);
+  assert.deepEqual(await updatedResponse.json(), {
+    id: 'household_1',
+    name: 'Household 1',
+    timezone: 'America/Toronto',
+    activeMonth: '2026-03-01',
+    periodStartDay: 1,
+    savingsFloor: '250.00',
+    savingsFloorEnabled: true,
+    monthlyEssentialsBaseline: '200.00',
+  });
+
+  const financialHealth = await getFinancialHealthReport({
+    db,
+    householdId: 'household_1',
+  });
+
+  assert.equal(financialHealth.savingsFloorEnabled, true);
+  assert.equal(financialHealth.availableSavings, '-150.00');
 });
 
 test('surplus recommendations route exposes the spec-compatible alias', async () => {

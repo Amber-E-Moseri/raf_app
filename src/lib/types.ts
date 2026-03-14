@@ -379,11 +379,32 @@ export interface FinancialHealthReport {
   debtRatio: string;
   savingsBalance: string;
   savingsFloor: string;
+  savingsFloorEnabled: boolean;
   availableSavings: string;
   emergencyFundBalance: string;
   monthlyEssentials: string;
   emergencyCoverageMonths: number | null;
   alertStatus: "ok" | "elevated" | "risky";
+}
+
+export interface HouseholdSettings {
+  id: string;
+  name: string;
+  timezone: string;
+  activeMonth: string;
+  periodStartDay: number;
+  savingsFloor: string;
+  savingsFloorEnabled: boolean;
+  monthlyEssentialsBaseline: string;
+}
+
+export interface HouseholdSettingsUpdateRequest {
+  timezone?: string;
+  activeMonth?: string;
+  periodStartDay?: number;
+  savingsFloor?: string;
+  savingsFloorEnabled?: boolean;
+  monthlyEssentialsBaseline?: string;
 }
 
 export interface DistributionLine {

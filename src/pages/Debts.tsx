@@ -479,7 +479,11 @@ export function Debts() {
                       <div className="flex justify-end">
                         <Badge tone={debt.status === "paid_off" ? "success" : "neutral"}>{debt.status === "paid_off" ? "Paid off" : "Open"}</Badge>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
+                        <div>
+                          <p className="text-[var(--text-muted)]">Starting balance</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.startingBalance)}</p>
+                        </div>
                         <div>
                           <p className="text-[var(--text-muted)]">Current balance</p>
                           <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.currentBalance)}</p>
@@ -620,12 +624,15 @@ export function Debts() {
                       </div>
                       <div>
                         <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                          <span className="text-[var(--text-muted)]">Paid off</span>
+                          <span className="text-[var(--text-muted)]">Debt payoff progress</span>
                           <span className="font-semibold text-[var(--text-strong)]">{completion.toFixed(0)}%</span>
                         </div>
                         <div className="progress-track h-3 overflow-hidden rounded-full">
                           <div className="h-full rounded-full bg-raf-moss transition-all" style={{ width: `${completion}%` }} />
                         </div>
+                        <p className="mt-2 text-[12px] italic text-[var(--text-muted)]">
+                          Based on starting balance minus current balance, capped between 0% and 100%.
+                        </p>
                       </div>
                       <div className="flex justify-end">
                         <button
