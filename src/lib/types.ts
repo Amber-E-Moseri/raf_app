@@ -376,6 +376,7 @@ export interface DashboardReport {
 }
 
 export interface FinancialHealthReport {
+  reviewMonth?: string;
   activeMonthIncome: string;
   monthlyDebtPayments: string;
   debtRatio: string;
@@ -386,6 +387,13 @@ export interface FinancialHealthReport {
   emergencyFundBalance: string;
   monthlyEssentials: string;
   emergencyCoverageMonths: number | null;
+  healthScore: number;
+  healthPillars: Array<{
+    key: "budget_discipline" | "surplus_generation" | "debt_ratio" | "debt_reduction" | "savings_coverage" | "spending_stability";
+    label: string;
+    score: number;
+    value: string;
+  }>;
   alertStatus: "ok" | "elevated" | "risky";
 }
 
@@ -413,18 +421,88 @@ export interface DistributionLine {
   slug: string;
   label: string;
   amount: string;
+  splitPercent?: string;
+  destinationType?: "bucket" | "goal" | "debt";
+  destinationBucketSlug?: string | null;
+  destinationGoalId?: string | null;
+  destinationDebtId?: string | null;
+  isMissing?: boolean;
 }
 
 export interface SurplusRecommendationsReport {
+  reviewMonth?: string;
   netSurplus: string;
   distributions: DistributionLine[];
   targetDebtName?: string | null;
   alertStatus: "ok" | "elevated" | "risky";
+  monthlySummary?: {
+    totalIncome: string;
+    totalAllocated: string;
+    totalSpent: string;
+    monthResult: string;
+    surplusAllocatedToGoals: string;
+    surplusAllocatedToDebt: string;
+    remainingSurplus: string;
+    finalMonthResult: string;
+    statusLabel: "On Budget" | "Slight Overrun" | "Over Budget" | "Deficit Month";
+  };
+  categorySummaries?: Array<{
+    bucketId: string;
+    bucketName: string;
+    slug: string;
+    allocated: string;
+    added: string;
+    spent: string;
+    goalContributions: string;
+    available: string;
+    overused: boolean;
+    overageAmount: string;
+  }>;
+  overspendingImpact?: {
+    totalImpact: string;
+    categories: Array<{
+      bucketId: string;
+      bucketName: string;
+      slug: string;
+      overageAmount: string;
+    }>;
+  };
+}
+
+export interface SurplusAllocationPreference {
+  id: string;
+  slug: string;
+  label: string;
+  splitPercent: string;
+  sortOrder: number;
+  isActive: boolean;
+  destinationType: "bucket" | "goal" | "debt";
+  destinationBucketSlug: string | null;
+  destinationGoalId: string | null;
+  destinationDebtId: string | null;
+}
+
+export interface SurplusAllocationPreferenceWriteItem {
+  id?: string | null;
+  slug?: string | null;
+  label: string;
+  splitPercent: string;
+  sortOrder: number;
+  isActive: boolean;
+  destinationType: "bucket" | "goal" | "debt";
+  destinationBucketSlug?: string | null;
+  destinationGoalId?: string | null;
+  destinationDebtId?: string | null;
+}
+
+export interface SurplusAllocationPreferencesResponse {
+  items: SurplusAllocationPreference[];
 }
 
 export interface MonthlyReviewRequest {
   reviewMonth: string;
   notes?: string;
+  splitOverride?: SurplusAllocationPreferenceWriteItem[];
 }
 
 export interface MonthlyReviewResponse {
@@ -455,6 +533,11 @@ export interface AppliedMonthlyReviewTransaction {
 export interface ApplyMonthlyReviewResponse {
   review: MonthlyReviewResponse;
   appliedTransactions: AppliedMonthlyReviewTransaction[];
+}
+
+export interface DeleteMonthlyReviewResponse {
+  review: MonthlyReviewResponse;
+  revertedTransactions: AppliedMonthlyReviewTransaction[];
 }
 
 export interface IncomeAllocationReport {

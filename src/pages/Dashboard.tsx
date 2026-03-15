@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
+import { applyMonthlyReview } from "../api/monthlyReviewApi";
 import { getDashboardReport, getFinancialHealthReport, getSurplusRecommendations } from "../api/reportsApi";
 import { getTransactions } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
@@ -43,8 +44,12 @@ interface DashboardViewModel {
 
 interface SurplusSuggestionDraftRow {
   id: string;
+  sourceSlug: string;
   destinationSlug: string;
   destinationLabel: string;
+  destinationType: "bucket" | "goal" | "debt";
+  destinationGoalId: string | null;
+  destinationDebtId: string | null;
   amount: string;
 }
 
@@ -79,11 +84,13 @@ export function Dashboard() {
   const [editingSurplusRowId, setEditingSurplusRowId] = useState<string | null>(null);
   const [surplusRowDraft, setSurplusRowDraft] = useState<{ destinationSlug: string; amount: string }>({ destinationSlug: "", amount: "0.00" });
   const [surplusMessage, setSurplusMessage] = useState<string | null>(null);
+  const [surplusApplyError, setSurplusApplyError] = useState<string | null>(null);
+  const [isQuickApplyingSurplus, setIsQuickApplyingSurplus] = useState(false);
 
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
     const [dashboard, financialHealth, surplusRecommendations, incomeResponse, transactionsResponse] = await Promise.all([
       getDashboardReport({ from, to }),
-      getFinancialHealthReport(),
+      getFinancialHealthReport(from),
       getSurplusRecommendations(from),
       getIncome({ from, to }),
       getTransactions({ from, to, limit: 10 }),
@@ -125,12 +132,17 @@ export function Dashboard() {
         .filter((distribution) => Number(distribution.amount) > 0)
         .map((distribution, index) => ({
           id: `surplus_row_${index}_${distribution.slug}`,
-          destinationSlug: distribution.slug,
+          sourceSlug: distribution.slug,
+          destinationSlug: distribution.destinationBucketSlug ?? distribution.slug,
           destinationLabel: distribution.label,
+          destinationType: distribution.destinationType ?? "bucket",
+          destinationGoalId: distribution.destinationGoalId ?? null,
+          destinationDebtId: distribution.destinationDebtId ?? null,
           amount: distribution.amount,
         })),
     );
     setSurplusMessage(null);
+    setSurplusApplyError(null);
     setEditingSurplusRowId(null);
   }, [data?.surplusRecommendations]);
 
@@ -208,12 +220,17 @@ export function Dashboard() {
         .filter((distribution) => Number(distribution.amount) > 0)
         .map((distribution, index) => ({
           id: `surplus_row_${index}_${distribution.slug}`,
-          destinationSlug: distribution.slug,
+          sourceSlug: distribution.slug,
+          destinationSlug: distribution.destinationBucketSlug ?? distribution.slug,
           destinationLabel: distribution.label,
+          destinationType: distribution.destinationType ?? "bucket",
+          destinationGoalId: distribution.destinationGoalId ?? null,
+          destinationDebtId: distribution.destinationDebtId ?? null,
           amount: distribution.amount,
         })),
     );
     setSurplusMessage(null);
+    setSurplusApplyError(null);
     setEditingSurplusRowId(null);
   }
 
@@ -238,17 +255,63 @@ export function Dashboard() {
           ...row,
           destinationSlug: nextDestination.slug,
           destinationLabel: nextDestination.label,
+          destinationType: "bucket",
+          destinationGoalId: null,
+          destinationDebtId: null,
           amount: normalizeMoneyInput(surplusRowDraft.amount) ?? surplusRowDraft.amount,
         }
         : row
     )));
     setEditingSurplusRowId(null);
-    setSurplusMessage("Suggestion updated. Nothing has been moved automatically.");
+    setSurplusApplyError(null);
+    setSurplusMessage("Suggestion updated. Use Quick apply when you are ready to confirm it in Monthly Review.");
   }
 
   function handleCancelSurplusRowEdit() {
     setEditingSurplusRowId(null);
     setSurplusRowDraft({ destinationSlug: "", amount: "0.00" });
+  }
+
+  async function handleQuickApplySurplus() {
+    if (!surplusExists || !draftMatchesSurplus || monthWorkflow.data.closeSummary.canClose === false || monthWorkflow.data.activeMonthStatus.status === "closed") {
+      return;
+    }
+
+    setIsQuickApplyingSurplus(true);
+    setSurplusMessage(null);
+    setSurplusApplyError(null);
+
+    try {
+      const normalizedNetSurplus = Number(data.surplusRecommendations.netSurplus || "0");
+      const splitOverride = suggestedRows.map((row, index) => {
+        const normalizedAmount = Number(normalizeMoneyInput(row.amount) ?? row.amount ?? "0");
+        const splitPercent = normalizedNetSurplus > 0 ? (normalizedAmount / normalizedNetSurplus).toFixed(4) : "0.0000";
+
+        return {
+          slug: row.sourceSlug,
+          label: row.destinationLabel,
+          splitPercent,
+          sortOrder: index + 1,
+          isActive: true,
+          destinationType: row.destinationType,
+          destinationBucketSlug: row.destinationType === "bucket" ? row.destinationSlug : null,
+          destinationGoalId: row.destinationType === "goal" ? row.destinationGoalId : null,
+          destinationDebtId: row.destinationType === "debt" ? row.destinationDebtId : null,
+        };
+      });
+
+      await applyMonthlyReview({
+        reviewMonth: from,
+        splitOverride,
+      });
+
+      setSurplusMessage(`Surplus for ${activeMonthLabel} was applied. The month is now saved through Monthly Review.`);
+      await Promise.all([reload(), monthWorkflow.reload()]);
+    } catch (applyError) {
+      setSurplusApplyError(applyError instanceof Error ? applyError.message : "Quick apply failed.");
+    } finally {
+      setIsQuickApplyingSurplus(false);
+    }
   }
 
   return (
@@ -333,40 +396,69 @@ export function Dashboard() {
 
           {surplusExists ? (
             <Card
-              title="Surplus Suggestions"
-              subtitle="Review the current recommendation, adjust it if needed, and keep it manual until you apply it elsewhere."
-              actions={<Badge tone={alertTone(data.surplusRecommendations.alertStatus)}>Surplus {formatCurrency(data.surplusRecommendations.netSurplus)}</Badge>}
+              title="Surplus Allocation"
+              subtitle="Editable recommendations for extra funds this month."
+              actions={(
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link className="text-[11px] font-medium text-[var(--primary-color)]" to="/monthly-review">
+                    Default split in Monthly Review
+                  </Link>
+                  <Badge tone={alertTone(data.surplusRecommendations.alertStatus)}>Surplus</Badge>
+                </div>
+              )}
             >
               <div className="space-y-4">
                 <div className="rounded-2xl border border-[var(--border-color)] px-4 py-4" style={{ background: "var(--surface-plain)" }}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <div className="text-base font-semibold text-[var(--text-strong)]">Surplus available</div>
-                      <div className="mt-1 text-[12px] text-[var(--text-muted)]">{formatCurrency(data.surplusRecommendations.netSurplus)} ready for review.</div>
+                      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Surplus available</div>
+                      <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(data.surplusRecommendations.netSurplus)}</div>
+                      <div className="mt-2 text-[12px] text-[var(--text-muted)]">
+                        These are editable suggestions only. Nothing moves until you confirm it in Monthly Review.
+                      </div>
                     </div>
-                    <Link className="text-xs font-semibold text-[var(--primary-color)]" to="/monthly-review">
-                      Open Monthly Review -&gt;
-                    </Link>
-                  </div>
-                  <div className="mt-4 grid gap-2">
-                    {suggestedRows.map((row) => (
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
-                        key={row.id}
                         type="button"
-                        className="flex items-center justify-between rounded-2xl border border-[var(--border-color)] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-lift"
-                        style={{ background: "var(--surface-color)" }}
-                        onClick={() => openSurplusRowEditor(row)}
+                        className="inline-flex min-h-9 items-center rounded-full bg-[var(--primary-color)] px-3.5 py-1.5 text-xs font-semibold text-[var(--primary-contrast)] disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isQuickApplyingSurplus || !draftMatchesSurplus || monthWorkflow.data.closeSummary.canClose === false || monthWorkflow.data.activeMonthStatus.status === "closed"}
+                        onClick={() => void handleQuickApplySurplus()}
                       >
-                        <span className="min-w-0">
-                          <span className="block text-sm font-medium text-[var(--text-strong)]">+ {formatCurrency(row.amount)} to {row.destinationLabel}</span>
-                          {savingsFloorEnabled && isBelowSavingsFloor && row.destinationSlug === "savings" ? (
-                            <span className="mt-1 inline-flex rounded-full bg-[var(--badge-warning-bg,var(--surface-elevated))] px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
-                              Savings priority
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="text-[11px] font-medium text-[var(--text-muted)]">Edit</span>
+                        {isQuickApplyingSurplus ? "Applying..." : "Quick apply all"}
                       </button>
+                      <Link className="inline-flex min-h-9 items-center rounded-full border border-[var(--border-color)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)]" to="/monthly-review">
+                        Review in Monthly Review
+                      </Link>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-[12px] text-[var(--text-muted)]">
+                    Adjust the saved default split in Monthly Review when this month's surplus needs a different plan.
+                  </div>
+                  <div className="mt-4 grid gap-3">
+                    {suggestedRows.map((row) => (
+                      <div
+                        key={row.id}
+                        className="rounded-2xl border border-[var(--border-color)] px-3 py-3"
+                        style={{ background: "var(--surface-color)" }}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-base font-semibold text-[var(--text-strong)]">{formatCurrency(row.amount)}</div>
+                            <div className="mt-1 text-sm font-medium text-[var(--text-strong)]">To {row.destinationLabel}</div>
+                            <div className="mt-1 text-[12px] text-[var(--text-muted)]">Included in the current quick-apply draft.</div>
+                            {savingsFloorEnabled && isBelowSavingsFloor && row.destinationSlug === "savings" ? (
+                              <span className="mt-2 inline-flex rounded-full bg-[var(--badge-warning-bg,var(--surface-elevated))] px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
+                                Savings priority
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" variant="secondary" className="min-h-8 rounded-full px-3 py-1 text-[11px]" onClick={() => openSurplusRowEditor(row)}>
+                              Edit
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -376,7 +468,7 @@ export function Dashboard() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <div className="text-sm font-semibold text-[var(--text-strong)]">Edit suggestion</div>
-                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">Adjust the amount and destination bucket, then apply or cancel the change.</div>
+                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">Adjust the amount and destination bucket, then save the draft before using Quick apply.</div>
                       </div>
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -424,11 +516,12 @@ export function Dashboard() {
                           Cancel
                         </Button>
                         <Button type="button" className="min-h-9 rounded-full px-3 py-1.5 text-xs" disabled={!draftMatchesSurplus} onClick={handleApplySurplusRowEdit}>
-                          Apply
+                          Save draft
                         </Button>
                       </div>
                     </div>
                     {surplusMessage ? <p className="mt-3 text-[12px] italic text-[var(--text-muted)]">{surplusMessage}</p> : null}
+                    {surplusApplyError ? <p className="mt-3 text-[12px] italic text-rose-500">{surplusApplyError}</p> : null}
                   </div>
                 ) : null}
                 <div className="flex justify-end">
@@ -436,6 +529,8 @@ export function Dashboard() {
                     Reset suggestions
                   </Button>
                 </div>
+                {!editingSurplusRow && surplusApplyError ? <p className="text-[12px] italic text-rose-500">{surplusApplyError}</p> : null}
+                {!editingSurplusRow && surplusMessage ? <p className="text-[12px] italic text-[var(--text-muted)]">{surplusMessage}</p> : null}
               </div>
             </Card>
           ) : null}
@@ -443,7 +538,7 @@ export function Dashboard() {
           <Card
             title="Recent activity"
             actions={(
-              <Link className="text-[11px] font-medium text-stone-500" to="/transactions">
+              <Link className="text-[11px] font-medium text-[var(--primary-color)]" to="/transactions#transactions-table">
                 See all -&gt;
               </Link>
             )}
@@ -456,7 +551,11 @@ export function Dashboard() {
                     : "Unassigned";
 
                   return (
-                    <div key={transaction.id} className="flex min-h-9 items-center gap-3 py-2.5">
+                    <Link
+                      key={transaction.id}
+                      to="/transactions#transactions-table"
+                      className="flex min-h-9 items-center gap-3 py-2.5 transition hover:opacity-90"
+                    >
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[13px] font-medium text-[var(--text-strong)]">{transaction.description}</div>
                         <div className="mt-1 text-[10px] text-[var(--text-muted)]">{formatIsoDate(transaction.transactionDate)}</div>
@@ -465,7 +564,7 @@ export function Dashboard() {
                       <div className={`w-20 text-right text-[13px] font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
                         {formatCurrency(transaction.amount)}
                       </div>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>

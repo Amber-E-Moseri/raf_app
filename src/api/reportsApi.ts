@@ -9,8 +9,8 @@ export function getDashboardReport(params: { from: string; to: string }) {
   return getJson<DashboardReport>("/reports/dashboard", params);
 }
 
-export function getFinancialHealthReport() {
-  return getJson<FinancialHealthReport>("/reports/financial-health");
+export function getFinancialHealthReport(month?: string) {
+  return getJson<FinancialHealthReport>("/reports/financial-health", month ? { month } : undefined);
 }
 
 export function getSurplusRecommendations(month: string) {

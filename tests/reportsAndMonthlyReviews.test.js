@@ -20,6 +20,8 @@ function createDbDouble({
   incomeAllocations = [],
   transactions = [],
   debtPayments = [],
+  debts = [],
+  debtAdjustments = [],
   fixedBills = [],
   goals = [],
   allocationCategories = [
@@ -60,6 +62,12 @@ function createDbDouble({
     },
     async listDebtPayments({ from, to }) {
       return debtPayments.filter((entry) => entry.paymentDate >= from && entry.paymentDate < incrementMonth(to));
+    },
+    async listDebts() {
+      return debts;
+    },
+    async listDebtAdjustments({ debtId = null }) {
+      return debtAdjustments.filter((entry) => (debtId ? entry.debtId === debtId : true));
     },
     async listFixedBills() {
       return fixedBills;
@@ -560,11 +568,11 @@ test('dashboard monthly bucket progress separates current-month goal reservation
       bucket_id: 'bucket_savings',
       bucket_name: 'Savings',
       allocated_this_month: '500.00',
-      added_this_month: '200.00',
+      added_this_month: '325.00',
       used_this_month: '0.00',
       reserved_for_goals_this_month: '200.00',
-      available_this_month: '500.00',
-      remaining_this_month: '700.00',
+      available_this_month: '625.00',
+      remaining_this_month: '825.00',
       percent_used_this_month: 0,
       percent_reserved_for_goals_this_month: 40,
     },
@@ -623,7 +631,7 @@ test('dashboard goal progress clamps overfunded goals at zero remaining and 100 
       bucket: 'Savings',
       bucket_name: 'Savings',
       target_amount: '500.00',
-      bucket_balance: '750.00',
+      bucket_balance: '1500.00',
       reserved_amount: '750.00',
       current_amount: '750.00',
       remaining_amount: '0.00',
@@ -774,18 +782,129 @@ test('getFinancialHealthReport computes live health metrics from household, inco
   });
 
   assert.deepEqual(result, {
+    reviewMonth: '2026-03-01',
     activeMonthIncome: '1000.00',
     monthlyDebtPayments: '100.00',
     debtRatio: '0.1000',
     savingsBalance: '100.00',
     savingsFloor: '50.00',
     savingsFloorEnabled: false,
-    availableSavings: '50.00',
+    availableSavings: '100.00',
     emergencyFundBalance: '300.00',
     monthlyEssentials: '200.00',
     emergencyCoverageMonths: 1.5,
+    healthScore: 85,
+    healthPillars: [
+      {
+        key: 'budget_discipline',
+        label: 'Budget Discipline',
+        score: 100,
+        value: 'Overspending ratio 0.0%',
+      },
+      {
+        key: 'surplus_generation',
+        label: 'Surplus Generation',
+        score: 100,
+        value: 'Surplus to income 30.0%',
+      },
+      {
+        key: 'debt_ratio',
+        label: 'Debt Ratio',
+        score: 100,
+        value: 'Minimum debt load 0.0%',
+      },
+      {
+        key: 'debt_reduction',
+        label: 'Debt Reduction',
+        score: 100,
+        value: 'No active debt this month',
+      },
+      {
+        key: 'savings_coverage',
+        label: 'Savings Coverage',
+        score: 8,
+        value: '0.5 months covered',
+      },
+      {
+        key: 'spending_stability',
+        label: 'Spending Stability',
+        score: 100,
+        value: '0 of 2 categories overused',
+      },
+    ],
     alertStatus: 'ok',
   });
+});
+
+test('getFinancialHealthReport accepts an explicit month and returns the monthly score breakdown for that period', async () => {
+  const db = createDbDouble({
+    household: {
+      id: 'household_1',
+      activeMonth: '2026-03-01',
+      savingsFloor: '100.00',
+      monthlyEssentialsBaseline: '500.00',
+    },
+    allocationCategories: [
+      { id: 'cat_fixed_bills', slug: 'fixed_bills', label: 'Fixed Bills', isActive: true, sortOrder: 1 },
+      { id: 'cat_personal_spending', slug: 'personal_spending', label: 'Personal Spending', isActive: true, sortOrder: 2 },
+      { id: 'cat_savings', slug: 'savings', label: 'Savings', isActive: true, sortOrder: 3 },
+    ],
+    incomeEntries: [
+      { id: 'income_jan', sourceName: 'Payroll', amount: '1200.00', receivedDate: '2026-01-10', notes: null },
+      { id: 'income_feb', sourceName: 'Payroll', amount: '2000.00', receivedDate: '2026-02-10', notes: null },
+    ],
+    incomeAllocations: [
+      { incomeEntryId: 'income_jan', allocationCategoryId: 'cat_savings', receivedDate: '2026-01-10', slug: 'savings', allocatedAmount: '300.00' },
+      { incomeEntryId: 'income_feb', allocationCategoryId: 'cat_fixed_bills', receivedDate: '2026-02-10', slug: 'fixed_bills', allocatedAmount: '1000.00' },
+      { incomeEntryId: 'income_feb', allocationCategoryId: 'cat_personal_spending', receivedDate: '2026-02-10', slug: 'personal_spending', allocatedAmount: '500.00' },
+      { incomeEntryId: 'income_feb', allocationCategoryId: 'cat_savings', receivedDate: '2026-02-10', slug: 'savings', allocatedAmount: '200.00' },
+    ],
+    transactions: [
+      { id: 'txn_feb_1', transactionDate: '2026-02-14', amount: '700.00', direction: 'debit', categoryId: 'cat_personal_spending', linkedDebtId: null, description: 'Weekend spend', merchant: null },
+    ],
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Credit Card',
+        startingBalance: '1000.00',
+        apr: 12,
+        minimumPayment: '50.00',
+        monthlyPayment: '100.00',
+        sortOrder: 0,
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ],
+    debtPayments: [
+      { debtId: 'debt_1', paymentDate: '2026-02-20', amount: '100.00' },
+    ],
+    debtAdjustments: [
+      { debtId: 'debt_1', householdId: 'household_1', amount: '10.00', adjustmentType: 'interest', effectiveDate: '2026-02-05', note: 'Interest', createdAt: '2026-02-05T00:00:00.000Z' },
+    ],
+  });
+
+  const result = await getFinancialHealthReport({
+    db,
+    householdId: 'household_1',
+    month: '2026-02-01',
+  });
+
+  assert.equal(result.reviewMonth, '2026-02-01');
+  assert.equal(result.activeMonthIncome, '2000.00');
+  assert.equal(result.savingsBalance, '500.00');
+  assert.equal(result.healthScore, 78);
+  assert.deepEqual(
+    result.healthPillars.map((pillar) => [pillar.key, pillar.score]),
+    [
+      ['budget_discipline', 88],
+      ['surplus_generation', 100],
+      ['debt_ratio', 94],
+      ['debt_reduction', 100],
+      ['savings_coverage', 17],
+      ['spending_stability', 67],
+    ],
+  );
 });
 
 test('getMonthlyReviewReport computes deterministic monthly review recommendations', async () => {
@@ -810,11 +929,79 @@ test('getMonthlyReviewReport computes deterministic monthly review recommendatio
     reviewMonth: '2026-03-01',
     netSurplus: '666.67',
     distributions: [
-      { slug: 'emergency_fund', label: 'Emergency Fund', amount: '333.34' },
-      { slug: 'debt_payoff', label: 'Debt Payoff', amount: '200.00' },
-      { slug: 'investing', label: 'Investing', amount: '133.33' },
+      {
+        slug: 'emergency_fund',
+        label: 'Emergency Fund',
+        amount: '333.34',
+        splitPercent: '0.5000',
+        destinationType: 'bucket',
+        destinationBucketSlug: null,
+        destinationGoalId: null,
+        destinationDebtId: null,
+      },
+      {
+        slug: 'debt_payoff',
+        label: 'Debt Payoff',
+        amount: '200.00',
+        splitPercent: '0.3000',
+        destinationType: 'bucket',
+        destinationBucketSlug: null,
+        destinationGoalId: null,
+        destinationDebtId: null,
+      },
+      {
+        slug: 'investing',
+        label: 'Investing',
+        amount: '133.33',
+        splitPercent: '0.2000',
+        destinationType: 'bucket',
+        destinationBucketSlug: null,
+        destinationGoalId: null,
+        destinationDebtId: null,
+      },
     ],
     alertStatus: 'ok',
+    monthlySummary: {
+      totalIncome: '1000.00',
+      totalAllocated: '1000.00',
+      totalSpent: '333.33',
+      monthResult: '666.67',
+      surplusAllocatedToGoals: '0.00',
+      surplusAllocatedToDebt: '0.00',
+      remainingSurplus: '0.00',
+      finalMonthResult: '0.00',
+      statusLabel: 'On Budget',
+    },
+    categorySummaries: [
+      {
+        bucketId: 'cat_fixed_bills',
+        bucketName: 'fixed_bills',
+        slug: 'fixed_bills',
+        allocated: '0.00',
+        added: '0.00',
+        spent: '0.00',
+        goalContributions: '0.00',
+        available: '0.00',
+        overused: false,
+        overageAmount: '0.00',
+      },
+      {
+        bucketId: 'cat_personal_spending',
+        bucketName: 'personal_spending',
+        slug: 'personal_spending',
+        allocated: '0.00',
+        added: '0.00',
+        spent: '0.00',
+        goalContributions: '0.00',
+        available: '0.00',
+        overused: false,
+        overageAmount: '0.00',
+      },
+    ],
+    overspendingImpact: {
+      totalImpact: '0.00',
+      categories: [],
+    },
   });
 });
 
@@ -957,6 +1144,7 @@ test('report services handle empty-state data without persisting derived results
     goal_progress: [],
   });
   assert.deepEqual(financialHealth, {
+    reviewMonth: '2026-03-01',
     activeMonthIncome: '0.00',
     monthlyDebtPayments: '0.00',
     debtRatio: '0.0000',
@@ -967,15 +1155,104 @@ test('report services handle empty-state data without persisting derived results
     emergencyFundBalance: '0.00',
     monthlyEssentials: '0.00',
     emergencyCoverageMonths: null,
+    healthScore: 67,
+    healthPillars: [
+      {
+        key: 'budget_discipline',
+        label: 'Budget Discipline',
+        score: 100,
+        value: 'Overspending ratio 0.0%',
+      },
+      {
+        key: 'surplus_generation',
+        label: 'Surplus Generation',
+        score: 0,
+        value: 'Surplus to income 0.0%',
+      },
+      {
+        key: 'debt_ratio',
+        label: 'Debt Ratio',
+        score: 100,
+        value: 'Minimum debt load 0.0%',
+      },
+      {
+        key: 'debt_reduction',
+        label: 'Debt Reduction',
+        score: 100,
+        value: 'No active debt this month',
+      },
+      {
+        key: 'savings_coverage',
+        label: 'Savings Coverage',
+        score: 0,
+        value: 'Coverage baseline not set',
+      },
+      {
+        key: 'spending_stability',
+        label: 'Spending Stability',
+        score: 100,
+        value: '0 of 2 categories overused',
+      },
+    ],
     alertStatus: 'ok',
   });
   assert.deepEqual(monthlyReview, {
     reviewMonth: '2026-03-01',
     netSurplus: '0.00',
     distributions: [
-      { slug: 'emergency_fund', label: 'Emergency Fund', amount: '0.00' },
+      {
+        slug: 'emergency_fund',
+        label: 'Emergency Fund',
+        amount: '0.00',
+        splitPercent: '1.0000',
+        destinationType: 'bucket',
+        destinationBucketSlug: null,
+        destinationGoalId: null,
+        destinationDebtId: null,
+      },
     ],
     alertStatus: 'ok',
+    monthlySummary: {
+      totalIncome: '0.00',
+      totalAllocated: '0.00',
+      totalSpent: '0.00',
+      monthResult: '0.00',
+      surplusAllocatedToGoals: '0.00',
+      surplusAllocatedToDebt: '0.00',
+      remainingSurplus: '0.00',
+      finalMonthResult: '0.00',
+      statusLabel: 'On Budget',
+    },
+    categorySummaries: [
+      {
+        bucketId: 'cat_fixed_bills',
+        bucketName: 'fixed_bills',
+        slug: 'fixed_bills',
+        allocated: '0.00',
+        added: '0.00',
+        spent: '0.00',
+        goalContributions: '0.00',
+        available: '0.00',
+        overused: false,
+        overageAmount: '0.00',
+      },
+      {
+        bucketId: 'cat_personal_spending',
+        bucketName: 'personal_spending',
+        slug: 'personal_spending',
+        allocated: '0.00',
+        added: '0.00',
+        spent: '0.00',
+        goalContributions: '0.00',
+        available: '0.00',
+        overused: false,
+        overageAmount: '0.00',
+      },
+    ],
+    overspendingImpact: {
+      totalImpact: '0.00',
+      categories: [],
+    },
   });
   assert.equal(db.state.monthlyReviews.length, 0);
 });

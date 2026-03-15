@@ -21,6 +21,7 @@ const navigationGroups = [
       { to: "/monthly-review", label: "Monthly Review", icon: "calendar" },
       { to: "/allocation-preferences", label: "Allocation", icon: "pie" },
       { to: "/goals", label: "Goals", icon: "target" },
+      { to: "/insights", label: "Insights", icon: "chart" },
       { to: "/settings", label: "Settings", icon: "user" },
     ],
   },
@@ -97,6 +98,17 @@ function NavIcon({ type }: { type: string }) {
         <circle cx="12" cy="12" r="8" />
         <circle cx="12" cy="12" r="4" />
         <path d="M12 2v2M22 12h-2M12 22v-2M2 12h2" />
+      </svg>
+    );
+  }
+
+  if (type === "chart") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19h16" />
+        <path d="M7 16V9" />
+        <path d="M12 16V5" />
+        <path d="M17 16v-3" />
       </svg>
     );
   }

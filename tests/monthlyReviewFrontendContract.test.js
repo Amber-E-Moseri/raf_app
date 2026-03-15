@@ -9,6 +9,10 @@ test("monthly review frontend uses the apply endpoint and helper", async () => {
   ]);
 
   assert.match(apiSource, /postJson<ApplyMonthlyReviewResponse>\("\/monthly-reviews\/apply", payload\)/);
-  assert.match(pageSource, /import \{ applyMonthlyReview \} from "\.\.\/api\/monthlyReviewApi"/);
+  assert.match(pageSource, /from "\.\.\/api\/monthlyReviewApi";/);
+  assert.match(pageSource, /applyMonthlyReview/);
+  assert.match(pageSource, /applyMonthlyReviewsInRange/);
   assert.match(pageSource, /await applyMonthlyReview\(\{/);
+  assert.match(pageSource, /splitOverride/);
+  assert.match(pageSource, /Allocation/);
 });

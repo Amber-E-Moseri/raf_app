@@ -199,7 +199,7 @@ function compareValues(left: string | number, right: string | number, direction:
 function buildDraftFromImportedRow(item: ImportedTransaction): ImportReviewDraft {
   const appliedSuggestion = item.suggestion?.auto_apply ? item.suggestion : null;
   const fallbackClassificationType = (item.classification_type as ImportClassificationPayload["classification_type"] | null)
-    ?? (looksLikeSavingsTransfer(item) ? "goal_funding" : Number(item.amount) > 0 ? "income" : "transaction");
+    ?? (Number(item.amount) > 0 ? "income" : "transaction");
 
   return {
     classificationType: (appliedSuggestion?.classification_type as ImportClassificationPayload["classification_type"]) ?? fallbackClassificationType,
@@ -230,10 +230,10 @@ function requiresGoalSelection(classificationType: ImportClassificationPayload["
 }
 
 function primaryReviewLabel(classificationType: ImportClassificationPayload["classification_type"]) {
-  if (classificationType === "income") {
-    return "Add to income";
+  if (classificationType === "ignore") {
+    return "Ignore";
   }
-  return classificationType === "transaction" ? "Approve" : "Apply";
+  return "Approve";
 }
 
 function importRowStatus(item: ImportedTransaction, draft: ImportReviewDraft) {
@@ -1029,7 +1029,7 @@ export function Transactions() {
     try {
       const payload = buildImportClassificationPayload(item);
       await submitImportedReview(item, payload);
-      setReviewSuccess("Imported row reviewed and saved.");
+      setReviewSuccess("Imported row approved.");
       await reload();
     } catch (requestError) {
       setReviewError(userFacingReviewError(requestError instanceof Error ? requestError.message : "Imported row review failed."));
@@ -1071,18 +1071,6 @@ export function Transactions() {
       setReviewError(userFacingReviewError(requestError instanceof Error ? requestError.message : "Ignore action failed."));
       setReviewSuccess(null);
     }
-  }
-
-  function handleBulkAssignBucket() {
-    if (!bulkBucketId || !selectedNeedsReviewItems.length) {
-      return;
-    }
-
-    selectedNeedsReviewItems.forEach((item) => {
-      updateReviewDraft(item, { categoryId: bulkBucketId });
-    });
-    setReviewSuccess(`Assigned ${selectedNeedsReviewItems.length} selected row${selectedNeedsReviewItems.length === 1 ? "" : "s"} to a bucket.`);
-    setReviewError(null);
   }
 
   function handleBulkApplyRememberedRule() {
@@ -1663,9 +1651,6 @@ export function Transactions() {
                               <option key={category.id} value={category.id}>{category.label}</option>
                             ))}
                           </select>
-                          <Button type="button" variant="secondary" disabled={!bulkBucketId || isBulkReviewing} onClick={handleBulkAssignBucket}>
-                            Assign
-                          </Button>
                           <select
                             className="rounded-full border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
                             value={bulkRuleMode}
@@ -1680,7 +1665,7 @@ export function Transactions() {
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-sm text-[var(--text-muted)]">Select rows to assign a bucket and approve them in bulk.</span>
+                        <span className="text-sm text-[var(--text-muted)]">Select rows, choose a fallback bucket if needed, and approve them in bulk.</span>
                       )}
                     </div>
                   </div>
@@ -1749,7 +1734,7 @@ export function Transactions() {
                                 {activeRule?.auto_apply ? <Badge tone="success">Applied by rule</Badge> : null}
                                 {activeRule && !activeRule.auto_apply ? <Badge tone="neutral">{activeRule.rule_type === "reusable_rule" ? "Reusable rule" : "Suggestion"}</Badge> : null}
                               </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-500">
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                                 <span>{importStateNote(item, draft)}</span>
                                 {activeRule ? <span>Rule: "{activeRule.match_value ?? activeRule.normalized_description}"</span> : null}
                                 {activeRule?.auto_apply ? (
@@ -1758,8 +1743,8 @@ export function Transactions() {
                                 {item.review_note ? <span>Note: {item.review_note}</span> : null}
                               </div>
                             </div>
-                            <div className="min-w-0 rounded-xl bg-stone-50 px-3 py-2 text-right lg:bg-transparent lg:px-0 lg:py-1">
-                              <div className="text-[11px] font-semibold text-stone-500 lg:hidden">Amount</div>
+                            <div className="min-w-0 rounded-xl px-3 py-2 text-right lg:bg-transparent lg:px-0 lg:py-1" style={{ background: "var(--surface-plain)" }}>
+                              <div className="text-[11px] font-semibold text-[var(--text-muted)] lg:hidden">Amount</div>
                               <div className={`text-sm font-semibold ${isInflow ? "text-emerald-700" : "text-rose-700"}`}>
                                 {formatCurrency(item.amount)}
                               </div>
@@ -1778,10 +1763,10 @@ export function Transactions() {
                                   ))}
                                 </select>
                               ) : (
-                                <div className="truncate text-sm text-stone-600">{getBucketLabel(item)}</div>
+                                <div className="truncate text-sm text-[var(--text-muted)]">{getBucketLabel(item)}</div>
                               )}
                             </div>
-                            <div className="min-w-0 truncate text-sm text-stone-600 lg:pt-0.5">{getLinkedLabel(item)}</div>
+                            <div className="min-w-0 truncate text-sm text-[var(--text-muted)] lg:pt-0.5">{getLinkedLabel(item)}</div>
                             <div className="min-w-0 lg:pt-0.5">
                               {needsReview ? (
                                 <Button
@@ -1790,7 +1775,7 @@ export function Transactions() {
                                   disabled={isPending || isBulkReviewing}
                                   onClick={() => void handleReviewImportedRow(item)}
                                 >
-                                  {isPending ? <LoadingSpinner inline size="sm" label="Saving..." /> : primaryReviewLabel(draft.classificationType)}
+                                  {isPending ? <LoadingSpinner inline size="sm" label="Approving..." /> : primaryReviewLabel(draft.classificationType)}
                                 </Button>
                               ) : isIgnored ? (
                                 <Button
@@ -1815,15 +1800,35 @@ export function Transactions() {
                               )}
                             </div>
                             <div className="relative flex justify-end">
-                              <Button type="button" variant="ghost" className="min-h-9 rounded-full px-2 py-1.5 text-base leading-none" onClick={() => toggleImportMenu(item.id)}>
-                                •••
-                              </Button>
+                              <button
+                                type="button"
+                                aria-label="More import actions"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border transition hover:bg-[var(--surface-plain)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-color)]"
+                                style={{
+                                  borderColor: "var(--border-color)",
+                                  background: "var(--surface-color)",
+                                  color: "var(--text-strong)",
+                                }}
+                                onClick={() => toggleImportMenu(item.id)}
+                              >
+                                <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+                                  <circle cx="4" cy="10" r="1.6" />
+                                  <circle cx="10" cy="10" r="1.6" />
+                                  <circle cx="16" cy="10" r="1.6" />
+                                </svg>
+                              </button>
                               {isMenuOpen ? (
-                                <div className="absolute right-0 top-10 z-10 min-w-[190px] rounded-2xl border border-stone-200 bg-white p-2 shadow-lg">
+                                <div
+                                  className="absolute right-0 top-10 z-10 min-w-[210px] rounded-2xl border p-2 shadow-lg"
+                                  style={{
+                                    borderColor: "var(--border-color)",
+                                    background: "var(--surface-color)",
+                                  }}
+                                >
                                   {needsReview ? (
                                     <button
                                       type="button"
-                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-strong)] transition hover:bg-[var(--surface-plain)]"
                                       onClick={() => {
                                         openImportPanel(item.id, "review");
                                         setOpenImportMenuId(null);
@@ -1835,7 +1840,7 @@ export function Transactions() {
                                   {isIgnored ? (
                                     <button
                                       type="button"
-                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-strong)] transition hover:bg-[var(--surface-plain)]"
                                       onClick={() => void handleUnignoreImportedRow(item)}
                                     >
                                       Unignore
@@ -1844,7 +1849,7 @@ export function Transactions() {
                                   {!needsReview && !isIgnored ? (
                                     <button
                                       type="button"
-                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-strong)] transition hover:bg-[var(--surface-plain)]"
                                       onClick={() => void handleUnprocessImportedRow(item)}
                                     >
                                       Unprocess transaction
@@ -1852,7 +1857,7 @@ export function Transactions() {
                                   ) : null}
                                   <button
                                     type="button"
-                                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-strong)] transition hover:bg-[var(--surface-plain)]"
                                     onClick={() => {
                                       openImportPanel(item.id, "details");
                                       setOpenImportMenuId(null);
@@ -1863,25 +1868,27 @@ export function Transactions() {
                                   {needsReview ? (
                                     <button
                                       type="button"
-                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-700 hover:bg-stone-50"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 transition hover:bg-[var(--surface-plain)] hover:text-rose-500"
                                       onClick={() => void handleIgnoreImportedRow(item)}
                                     >
                                       Ignore transaction
                                     </button>
                                   ) : null}
-                                  <button
-                                    type="button"
-                                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
-                                    onClick={() => toggleAdvancedMenu(item.id)}
-                                  >
-                                    Advanced {isAdvancedOpen ? "v" : ">"}
-                                  </button>
+                                  {activeRule ? (
+                                    <button
+                                      type="button"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-strong)] transition hover:bg-[var(--surface-plain)]"
+                                      onClick={() => toggleAdvancedMenu(item.id)}
+                                    >
+                                      Rule actions {isAdvancedOpen ? "v" : ">"}
+                                    </button>
+                                  ) : null}
                                   {isAdvancedOpen && activeRule ? (
-                                    <div className="mt-2 space-y-1 border-t border-stone-100 pt-2">
+                                    <div className="mt-2 space-y-1 border-t pt-2" style={{ borderColor: "var(--border-color)" }}>
                                       {activeRule.rule_type !== "suggestion" ? (
                                         <button
                                           type="button"
-                                          className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                          className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-strong)] transition hover:bg-[var(--surface-plain)]"
                                           onClick={() => void handleRuleModeUpdate(activeRule, "suggestion", false)}
                                         >
                                           Convert to suggestion only
@@ -1889,7 +1896,7 @@ export function Transactions() {
                                       ) : null}
                                       <button
                                         type="button"
-                                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-raf-ink hover:bg-stone-50"
+                                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-strong)] transition hover:bg-[var(--surface-plain)]"
                                         onClick={() => {
                                           setEditingRuleId(activeRule.id);
                                           openImportPanel(item.id, "review");
@@ -1900,7 +1907,7 @@ export function Transactions() {
                                       </button>
                                       <button
                                         type="button"
-                                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-700 hover:bg-stone-50"
+                                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-rose-600 transition hover:bg-[var(--surface-plain)] hover:text-rose-500"
                                         onClick={() => void handleDeleteRule(activeRule)}
                                       >
                                         Delete rule
@@ -1913,11 +1920,17 @@ export function Transactions() {
                           </div>
 
                           {isExpanded ? (
-                            <div className="border-t border-stone-100 bg-stone-50 px-4 py-4">
+                            <div
+                              className="border-t px-4 py-4"
+                              style={{
+                                borderColor: "var(--border-color)",
+                                background: "color-mix(in srgb, var(--surface-plain) 84%, var(--surface-color))",
+                              }}
+                            >
                               {activeRule ? (
-                                <div className="mb-4 rounded-2xl border border-stone-200 bg-white px-4 py-3">
+                                <div className="mb-4 rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-color)" }}>
                                   <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div className="text-sm text-stone-600">
+                                    <div className="text-sm text-[var(--text-muted)]">
                                       {activeRule.auto_apply ? "Applied by rule" : "Suggestion available"}: "{activeRule.match_value ?? activeRule.normalized_description}".
                                     </div>
                                     <div className="flex flex-wrap gap-2">
@@ -1951,7 +1964,10 @@ export function Transactions() {
                                   onSave={() => void handleSaveRuleEdits(activeRule)}
                                 />
                               ) : panelMode === "review" && needsReview ? (
-                                <div className="rounded-2xl border border-stone-200 bg-white p-4">
+                                <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-color)" }}>
+                                  <div className="mb-4 rounded-2xl border px-3 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+                                    Choose a review outcome, set the bucket if needed, optionally save the rule, then approve.
+                                  </div>
                                   <div className="grid gap-4 md:grid-cols-2">
                                     <label className="block">
                                       <span className="mb-2 block text-sm font-medium text-raf-ink">Review action</span>
@@ -2117,7 +2133,7 @@ export function Transactions() {
                                       disabled={isPending || isBulkReviewing}
                                       onClick={() => void handleReviewImportedRow(item)}
                                     >
-                                      {isPending ? <LoadingSpinner inline size="sm" label="Saving review..." /> : "Save Review"}
+                                      {isPending ? <LoadingSpinner inline size="sm" label="Approving..." /> : primaryReviewLabel(draft.classificationType)}
                                     </Button>
                                   </div>
                                 </div>
@@ -2301,16 +2317,16 @@ export function Transactions() {
                     : typeLabel;
 
                   return (
-                    <tr key={transaction.id} className="hover:bg-stone-50/80">
-                      <td className="w-20 px-4 py-3 text-sm text-stone-600">{formatIsoDate(transaction.transactionDate)}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-raf-ink">
+                    <tr key={transaction.id} className="transition hover:bg-[var(--surface-plain)]">
+                      <td className="w-20 px-4 py-3 text-sm text-[var(--text-muted)]">{formatIsoDate(transaction.transactionDate)}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-[var(--text-strong)]">
                         <div className="max-w-[420px] whitespace-normal break-words">{transaction.description}</div>
                       </td>
                       <td className="w-[120px] px-4 py-3 text-sm">
-                        {categoryLabel ? <Badge tone={categoryTone(categoryLabel)} className="px-2.5 py-0.5 text-[11px] font-medium">{categoryLabel}</Badge> : null}
+                        {categoryLabel ? <Badge tone={categoryTone(categoryLabel)} className="px-2 py-0 text-[10px] font-medium leading-5">{categoryLabel}</Badge> : null}
                       </td>
                       <td className="w-[100px] px-4 py-3 text-sm">
-                        <div className="text-[12px] text-[var(--text-muted)]">{typeSummary}</div>
+                        <div className="text-[11px] text-[var(--text-muted)]">{typeSummary}</div>
                       </td>
                       <td className={`w-[88px] px-4 py-3 text-right text-sm font-bold ${amountClassName(transaction.direction)}`}>
                         {formatCurrency(transaction.amount)}

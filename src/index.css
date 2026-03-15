@@ -228,11 +228,21 @@ select {
     border: 1px solid var(--border-color);
     background: var(--surface-color);
     color: var(--text-strong);
+    color-scheme: light;
   }
 
   .ui-field:focus {
     border-color: var(--primary-color);
     box-shadow: var(--shadow-focus);
+  }
+
+  [data-mode="dark"] .ui-field {
+    color-scheme: dark;
+  }
+
+  [data-mode="dark"] select.ui-field option {
+    background: var(--surface-plain);
+    color: var(--text-strong);
   }
 
   .ui-table {

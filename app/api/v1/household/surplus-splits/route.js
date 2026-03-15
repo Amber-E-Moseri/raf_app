@@ -1,4 +1,8 @@
-import { MonthlyReviewHttpError, deleteMonthlyReview, updateMonthlyReview } from '../../../../../lib/monthlyReviews/monthlyReviews.js';
+import {
+  HouseholdSurplusSplitRulesHttpError,
+  listHouseholdSurplusSplitRules,
+  replaceHouseholdSurplusSplitRules,
+} from '../../../../../lib/household/surplusSplitRules.js';
 
 function json(body, status) {
   return Response.json(body, { status });
@@ -12,19 +16,16 @@ function getDb(context) {
   return context?.db ?? globalThis.__RAF_DB__;
 }
 
-export async function PATCH(request, context = {}) {
+export async function GET(request, context = {}) {
   try {
-    const input = await request.json();
-    const result = await updateMonthlyReview({
+    const result = await listHouseholdSurplusSplitRules({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
-      reviewId: context?.params?.id,
-      input,
     });
 
     return json(result, 200);
   } catch (error) {
-    if (error instanceof MonthlyReviewHttpError) {
+    if (error instanceof HouseholdSurplusSplitRulesHttpError) {
       return json({ error: error.message }, error.status);
     }
 
@@ -32,17 +33,18 @@ export async function PATCH(request, context = {}) {
   }
 }
 
-export async function DELETE(request, context = {}) {
+export async function PUT(request, context = {}) {
   try {
-    const result = await deleteMonthlyReview({
+    const input = await request.json();
+    const result = await replaceHouseholdSurplusSplitRules({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
-      reviewId: context?.params?.id,
+      input,
     });
 
     return json(result, 200);
   } catch (error) {
-    if (error instanceof MonthlyReviewHttpError) {
+    if (error instanceof HouseholdSurplusSplitRulesHttpError) {
       return json({ error: error.message }, error.status);
     }
 

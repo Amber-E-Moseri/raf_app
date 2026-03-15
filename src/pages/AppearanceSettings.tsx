@@ -4,7 +4,6 @@ import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { getDebts } from "../api/debtsApi";
 import { getFixedBills } from "../api/fixedBillsApi";
 import { getHouseholdSettings, updateHouseholdSettings } from "../api/householdApi";
-import { getDashboardReport } from "../api/reportsApi";
 import {
   deleteImportReviewRule,
   getImportReviewRules,
@@ -38,7 +37,6 @@ import type { AppearancePreferences, ThemeColor } from "../lib/appearance";
 import type {
   AllocationCategory,
   Debt,
-  DashboardReport,
   FixedBill,
   Goal,
   HouseholdSettings,
@@ -49,7 +47,6 @@ import { normalizeMoneyInput } from "../lib/validation";
 
 interface ProfileSettingsViewModel {
   categories: AllocationCategory[];
-  dashboard: DashboardReport;
   debts: Debt[];
   fixedBills: FixedBill[];
   goals: Goal[];
@@ -57,7 +54,7 @@ interface ProfileSettingsViewModel {
   rules: ImportReviewRule[];
 }
 
-type SettingsTab = "preferences" | "savings_floor" | "insights" | "import_rules";
+type SettingsTab = "preferences" | "savings_floor" | "import_rules";
 
 const settingsTabs: Array<{ id: SettingsTab; label: string; description: string }> = [
   {
@@ -71,34 +68,11 @@ const settingsTabs: Array<{ id: SettingsTab; label: string; description: string 
     description: "Warning threshold for protected savings.",
   },
   {
-    id: "insights",
-    label: "Insights",
-    description: "Year-to-date allocation analytics and summaries.",
-  },
-  {
     id: "import_rules",
     label: "Import Rules",
     description: "Suggestions, reusable rules, and auto-apply controls.",
   },
 ];
-
-function parseMoney(value: string | null | undefined) {
-  const numeric = Number(value ?? "0");
-  return Number.isFinite(numeric) ? numeric : 0;
-}
-
-function insightBarColor(index: number) {
-  const colors = [
-    "bg-emerald-500",
-    "bg-blue-500",
-    "bg-amber-600",
-    "bg-violet-500",
-    "bg-pink-500",
-    "bg-stone-500",
-  ];
-
-  return colors[index % colors.length];
-}
 
 const themeGroups: Array<{
   mood: string;
@@ -167,23 +141,19 @@ export function AppearanceSettings() {
   const [savingsFloorMessage, setSavingsFloorMessage] = useState<string | null>(null);
   const [savingsFloorError, setSavingsFloorError] = useState<string | null>(null);
   const [isSavingFloor, setIsSavingFloor] = useState(false);
-
   const rulesData = useAsyncData<ProfileSettingsViewModel>(async () => {
     const household = await getHouseholdSettings();
-    const yearStart = `${household.activeMonth.slice(0, 4)}-01-01`;
 
-    const [categories, debtsResponse, fixedBillsResponse, goalsResponse, rulesResponse, dashboard] = await Promise.all([
+    const [categories, debtsResponse, fixedBillsResponse, goalsResponse, rulesResponse] = await Promise.all([
       getAllocationCategories(),
       getDebts(),
       getFixedBills(),
       getGoals(),
       getImportReviewRules(),
-      getDashboardReport({ from: yearStart, to: household.activeMonth }),
     ]);
 
     return {
       categories,
-      dashboard,
       debts: debtsResponse.items,
       fixedBills: fixedBillsResponse.items,
       goals: goalsResponse.items,
@@ -669,90 +639,6 @@ export function AppearanceSettings() {
                 </div>
               </div>
             </Card>
-          ) : activeTab === "insights" ? (
-            <>
-              {rulesData.isLoading ? <LoadingState label="Loading insights..." /> : null}
-              {!rulesData.isLoading && rulesData.error ? <ErrorState title="Failed to load insights" message={rulesData.error} onRetry={() => void rulesData.reload()} /> : null}
-              {!rulesData.isLoading && !rulesData.error && rulesData.data ? (() => {
-                const ytdProgressByBucketId = new Map((rulesData.data.dashboard.ytd_bucket_progress ?? []).map((progress) => [progress.bucket_id, progress]));
-                const ytdRows = rulesData.data.categories
-                  .filter((category) => category.isActive !== false)
-                  .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug))
-                  .map((category) => {
-                    const progress = ytdProgressByBucketId.get(category.id);
-                    const allocated = parseMoney(progress?.allocated_this_month ?? "0.00") + parseMoney(progress?.added_this_month ?? "0.00");
-                    const spent = parseMoney(progress?.used_this_month ?? "0.00");
-                    const goals = parseMoney(progress?.reserved_for_goals_this_month ?? "0.00");
-
-                    return {
-                      id: category.id,
-                      label: category.label,
-                      allocated,
-                      spent,
-                      goals,
-                    };
-                  });
-                const ytdTotalAllocated = ytdRows.reduce((sum, row) => sum + row.allocated, 0);
-                const ytdTotalSpent = ytdRows.reduce((sum, row) => sum + row.spent, 0);
-                const ytdGoalFunding = ytdRows.reduce((sum, row) => sum + row.goals, 0);
-
-                return (
-                  <>
-                    <Card title="Dashboard Insights" subtitle="Year-to-date allocation overview">
-                      {ytdRows.length ? (
-                        <div className="space-y-3">
-                          {ytdRows.map((row, index) => {
-                            const width = ytdTotalAllocated === 0 ? 0 : Math.max(0, Math.min(100, (row.allocated / ytdTotalAllocated) * 100));
-
-                            return (
-                              <div key={row.id} className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="truncate text-[14px] font-semibold text-[var(--text-strong)]">{row.label}</div>
-                                    <div className="mt-1 text-[11px] text-[var(--text-muted)]">
-                                      Spent {formatCurrency(row.spent.toFixed(2))} | Goals {formatCurrency(row.goals.toFixed(2))}
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <div className="text-[11px] font-medium text-[var(--text-muted)]">YTD allocated</div>
-                                    <div className="mt-1 text-[17px] font-semibold text-[var(--text-strong)]">{formatCurrency(row.allocated.toFixed(2))}</div>
-                                  </div>
-                                </div>
-                                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
-                                  <div className={`h-full rounded-full ${insightBarColor(index)}`} style={{ width: `${width}%` }} />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <EmptyState
-                          title="No YTD insights yet"
-                          message="Once this year has bucket activity, RAF will show year-to-date allocation analytics here."
-                        />
-                      )}
-                    </Card>
-
-                    <Card title="YTD Summary" subtitle="High-level year-to-date totals">
-                      <div className="grid gap-3">
-                        <div className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
-                          <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Allocated</div>
-                          <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">{formatCurrency(ytdTotalAllocated.toFixed(2))}</div>
-                        </div>
-                        <div className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
-                          <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Spent</div>
-                          <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">{formatCurrency(ytdTotalSpent.toFixed(2))}</div>
-                        </div>
-                        <div className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
-                          <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Goal funding</div>
-                          <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">{formatCurrency(ytdGoalFunding.toFixed(2))}</div>
-                        </div>
-                      </div>
-                    </Card>
-                  </>
-                );
-              })() : null}
-            </>
           ) : (
             <>
               {rulesData.isLoading ? <LoadingState label="Loading import rules..." /> : null}

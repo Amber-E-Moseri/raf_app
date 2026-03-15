@@ -14,9 +14,11 @@ function getDb(context) {
 
 export async function GET(request, context = {}) {
   try {
+    const url = new URL(request.url);
     const result = await getFinancialHealthReport({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
+      month: url.searchParams.get('month'),
     });
 
     return json(result, 200);

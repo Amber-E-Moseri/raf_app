@@ -156,6 +156,7 @@ const DEFAULT_NEW_CATEGORY_FORM: NewCategoryFormState = {
 
 export function AllocationPreferences() {
   const [categories, setCategories] = useState<DraftCategory[]>([]);
+  const [percentInputDrafts, setPercentInputDrafts] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -244,6 +245,25 @@ export function AllocationPreferences() {
     )));
     setSaveError(null);
     setSaveSuccess(null);
+  }
+
+  function updatePercentDraft(id: string, value: string) {
+    setPercentInputDrafts((current) => ({
+      ...current,
+      [id]: value,
+    }));
+  }
+
+  function clearPercentDraft(id: string) {
+    setPercentInputDrafts((current) => {
+      if (!(id in current)) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   }
 
   function openAddCategoryModal() {
@@ -389,7 +409,7 @@ export function AllocationPreferences() {
             <div className="space-y-4">
               {categories.map((category) => {
                 const errors = validation.get(category.id) ?? {};
-                const percentInput = toPercentInput(category.allocationPercent);
+                const percentInput = percentInputDrafts[category.id] ?? toPercentInput(category.allocationPercent);
 
                 return (
                   <div
@@ -430,11 +450,28 @@ export function AllocationPreferences() {
                             step="0.01"
                             min="0"
                             max="100"
+                            inputMode="decimal"
                             value={percentInput}
-                            onChange={(event) => updateCategory(category.id, (current) => ({
-                              ...current,
-                              allocationPercent: toFractionString(event.target.value),
-                            }))}
+                            onFocus={(event) => {
+                              updatePercentDraft(category.id, percentInput);
+                              event.currentTarget.select();
+                            }}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              updatePercentDraft(category.id, nextValue);
+                              updateCategory(category.id, (current) => ({
+                                ...current,
+                                allocationPercent: toFractionString(nextValue),
+                              }));
+                            }}
+                            onBlur={(event) => {
+                              const normalizedPercent = normalizePercentDraft(event.target.value);
+                              updateCategory(category.id, (current) => ({
+                                ...current,
+                                allocationPercent: toFractionString(normalizedPercent),
+                              }));
+                              clearPercentDraft(category.id);
+                            }}
                           />
                           <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-[var(--text-muted)]">%</span>
                         </div>
@@ -473,11 +510,19 @@ export function AllocationPreferences() {
                         <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
                           Controls
                         </span>
-                        <div className="flex items-center justify-between rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+                        <div className="flex items-center justify-between rounded-[1.1rem] border px-3 py-2.5" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
                           <div className="flex items-center gap-2">
-                            {category.isSystem ? <Badge tone="warning">System</Badge> : <Badge tone="neutral">Custom</Badge>}
+                            {category.isSystem ? (
+                              <Badge tone="warning" className="px-2 py-0.5 text-[10px]">
+                                System
+                              </Badge>
+                            ) : (
+                              <Badge tone="neutral" className="px-2 py-0.5 text-[10px]">
+                                Custom
+                              </Badge>
+                            )}
                           </div>
-                          <span className="text-sm text-[var(--text-muted)]">
+                          <span className="text-[12px] text-[var(--text-muted)]">
                             {isAdvancedMode ? "Advanced open" : "Simple view"}
                           </span>
                         </div>

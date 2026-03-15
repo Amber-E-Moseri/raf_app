@@ -27,6 +27,7 @@ export async function GET(request, context = {}) {
       netSurplus: result.netSurplus,
       distributions: result.distributions,
       alertStatus: result.alertStatus,
+      targetDebtName: result.targetDebtName ?? null,
     }, 200);
   } catch (error) {
     if (error instanceof MonthlyReviewReportHttpError) {
