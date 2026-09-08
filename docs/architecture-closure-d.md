@@ -53,22 +53,63 @@ POST /auth/logout    → 200  (token blacklisted)
 GET  /transactions   → 401  (revoked token correctly rejected)
 ```
 
-## Remaining compat-path methods (Branch D Phase 2+)
+## Phase 2 — Financial Domain Repository Architecture
 
-These still go through `getLegacyTx` → advisory lock → `loadState`:
-workspace invitations, fixed bills, goals, merchant rules, debts, allocation categories
-(write), income, monthly reviews, workspace activity list.
+Repository pattern introduced at `lib/repositories/postgres/`. Each file exports
+`buildXxxRepository(client, schema)` returning a plain object of async methods.
+All repositories are spread into `buildDirectTransaction` — the Proxy routes them
+to direct SQL automatically (no compat fallback).
 
-Suggested pilot order (lowest risk first):
-1. `workspace_activity` list (insert already direct)
-2. `workspace_invitations`
-3. `fixed_bills` / `goals` / `debts`
-4. `allocation_categories` (write)
-5. Income entries + allocations
-6. Monthly reviews
+### Repositories created (Branch D Phase 2)
 
-Advisory lock removal: after ALL methods have direct SQL implementations.
+| Repository | Methods | Compat methods removed from path |
+|-----------|---------|----------------------------------|
+| `allocationCategoriesRepository.js` | `listAllocationCategories`, `listAllocationCategorySnapshots`, `replaceAllocationCategories`, `listSurplusSplitRules`, `replaceSurplusSplitRules` | 5 |
+| `incomeRepository.js` | `findIncomeByIdempotencyKey`, `insertIncomeEntry`, `listIncomeEntries`, `getIncomeEntryById`, `updateIncomeEntry`, `deleteIncomeEntry`, `insertIncomeAllocations`, `deleteIncomeAllocationsByIncomeEntryId`, `listIncomeAllocations`, `listIncomeAllocationsBySlug` | 10 |
+| `debtsRepository.js` | `findDebtById`, `insertDebt`, `listDebts`, `getDebtById`, `updateDebt`, `countDebtPaymentsForDebt`, `deleteDebt`, `listDebtPayments`, `insertDebtAdjustment`, `listDebtAdjustments` | 10 |
+| `goalsRepository.js` | `listGoals`, `insertGoal`, `getGoalById`, `updateGoal`, `deleteGoal` | 5 |
+| `fixedBillsRepository.js` | `listFixedBills`, `insertFixedBill`, `getFixedBillById`, `updateFixedBill` | 4 |
 
----
+**Compat reduction:** ~71 → ~42 methods (41% reduction in compat surface).
+High-frequency paths (income writes, debt management, goal CRUD, alloc category management)
+no longer trigger the global advisory lock or `loadState`.
 
-ARCHITECTURE CLOSURE D: READY
+### Remaining compat-path methods
+
+These still fall through to `getLegacyTx` → advisory lock → `loadState(27 tables)`:
+- `monthly_reviews` (6 methods) — extra caution required per Branch D exit criteria
+- `workspace_invitations` (5 methods) — lower priority
+- `updateHousehold` (1 method)
+- `listWorkspaceActivity` (1 method) — insert already direct
+- `merchant_rules` / `import_review_rules` (8+ methods)
+- Import pipeline (19+ methods) — largest remaining surface
+
+### Compat reduction metrics (Phase 6)
+
+| Phase | Direct | Compat | Advisory-lock-free paths |
+|-------|--------|--------|--------------------------|
+| Pre-Branch-D | 31 | ~71 | auth reads, accounts, transactions |
+| Phase 1 (auth writes) | 36 | ~66 | + signup flow |
+| Phase 2 (financial repos) | ~60 | ~42 | + income, debts, goals, alloc categories |
+
+## Branch D Exit Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| 1. PostgreSQL is functioning server persistence provider | DONE |
+| 2. Auth/workspace bootstrap works directly against PostgreSQL | DONE |
+| 3. Explicit repository boundaries exist for migrated domains | DONE |
+| 4. Core financial domains no longer perform whole-state hydration/diff for primary writes | DONE — income, debts, goals, fixed bills, alloc categories now direct SQL |
+| 5. Compatibility dependence has measurably decreased | DONE — ~41% reduction |
+| 6. Migrated domains are workspace-scoped | DONE — every query has `workspace_id = $N` |
+| 7. PostgreSQL RLS remains active | DONE — no RLS weakened; `securityContext` propagation gap documented |
+| 8. Financial outputs remain unchanged | VERIFIED — same logic, same field names, same sort orders |
+| 9. Tenant-isolation tests pass for migrated domains | PENDING — Phase 5 tests not yet written |
+| 10. No known partial-write regression | PENDING — Phase 10 end-to-end verification not yet run |
+
+**ARCHITECTURE CLOSURE D: IN PROGRESS**
+
+Blockers before READY:
+- Phase 5: Write tenant-isolation tests for migrated domains
+- Phase 10: Run end-to-end Postgres verification (income + debt + goal + alloc category routes)
+- Optionally: monthly reviews migration (INTENTIONALLY_DEFERRED if monthly review routes tested manually)

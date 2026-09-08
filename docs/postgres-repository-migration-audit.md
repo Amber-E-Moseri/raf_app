@@ -185,22 +185,25 @@ The `true` (transaction-local) flag prevents context leakage between pooled conn
 
 ---
 
-## 12. Candidate Migration Order
+## 12. Migration Status (Branch D Phase 2)
 
-| Rank | Domain | Justification |
-|---|---|---|
-| 1 | **Token blacklist** | Already fully direct SQL. 1 table, no workspace scoping, 3 operations. Zero-impact extraction. |
-| 2 | **Workspace activity — list** | Only `listWorkspaceActivity` falls back. Simple append-only table. |
-| 3 | **Workspace invitations** | Isolated collaboration domain. 1 table, no financial calculations. |
-| 4 | **Financial accounts + reconciliations** | Already fully direct SQL. 2 tables, no cross-domain writes. |
-| 5 | **Fixed bills** | Simple CRUD. 1 table, no cross-domain writes. |
-| 6 | **Goals** | Simple CRUD. 1 table. Referenced by transactions FK but doesn't write to others. |
-| 7 | **Merchant rules / import review rules** | Simple CRUD. 2 tables. Read during import, written independently. |
-| 8 | **Debts** | Moderate. `debt_payments` and `debt_adjustments` are sub-tables. `insertDebtPayment` already direct. DB trigger `trg_prevent_debt_delete_with_payments` must be respected. |
-| 9 | **Allocation categories + surplus split rules** | Complex snapshot mechanism (`snapshotId`, `effectiveFrom`, `supersededAt`). DB triggers enforce percent sums. `replaceAllocationCategories` touches many rows atomically. |
-| 10 | **Transactions** | Cross-domain writes (debt payment sync). Core CRUD already direct. |
-| 11 | **Income** | Complex: `createIncome` must atomically insert `income_entry` + all `income_allocations`. DB trigger enforces total. |
-| 12 | **Monthly review — apply** | Most complex transaction in system. Reads 7 tables, inserts `monthly_review` + N transactions + N debt payments atomically. Any partial state is financially inconsistent. |
+| Domain | Status | Repository file |
+|--------|--------|----------------|
+| Token blacklist | DIRECT (pre-existing) | inline in `postgresDb.js` |
+| Financial accounts + reconciliations | DIRECT (pre-existing) | inline in `postgresDb.js` |
+| Transactions | DIRECT (pre-existing) | inline in `postgresDb.js` |
+| Auth / workspace bootstrap | DIRECT (Branch D Phase 1) | inline in `postgresDb.js` |
+| **Allocation categories + surplus split rules** | **DIRECT (Branch D Phase 2)** | `lib/repositories/postgres/allocationCategoriesRepository.js` |
+| **Income entries + allocations** | **DIRECT (Branch D Phase 2)** | `lib/repositories/postgres/incomeRepository.js` |
+| **Debts** | **DIRECT (Branch D Phase 2)** | `lib/repositories/postgres/debtsRepository.js` |
+| **Goals** | **DIRECT (Branch D Phase 2)** | `lib/repositories/postgres/goalsRepository.js` |
+| **Fixed bills** | **DIRECT (Branch D Phase 2)** | `lib/repositories/postgres/fixedBillsRepository.js` |
+| Monthly reviews | COMPAT (deferred) | — |
+| Workspace invitations | COMPAT (deferred) | — |
+| Import pipeline | COMPAT (deferred) | — |
+| Workspace activity (list) | COMPAT (deferred) | — |
+| updateHousehold | COMPAT (deferred) | — |
+| Merchant rules | COMPAT (deferred) | — |
 
 ---
 
@@ -260,6 +263,29 @@ The `true` (transaction-local) flag prevents context leakage between pooled conn
 **Allocation category snapshot mechanism:** Non-trivial temporal versioning — each snapshot is a group of rows sharing a `snapshotId`. `pickSnapshotIdForDate()` selects the applicable snapshot for any date. SQL translation must preserve this history or historical income lookups break.
 
 **`workspaceId === householdId`:** These are the same value throughout. `workspaceIdFromHousehold(householdId)` returns `householdId` unchanged.
+
+---
+
+## 16. Compat Reduction Metrics (Phase 6)
+
+### Pre-Branch-D baseline
+- Direct SQL methods: 31 (accounts, reconciliations, transactions, workspace, auth lookups)
+- Compat-path methods: ~71 (all financial domains + auth write path + import pipeline)
+
+### After Branch D Phase 1 (auth domain)
+- Direct SQL methods: 36 (+5: createUser, createWorkspace/Household, createUserHousehold, listHouseholdsForUser)
+- Compat-path methods: ~66 (financial domains + import pipeline remain)
+
+### After Branch D Phase 2 (financial domain repositories)
+- Direct SQL methods: 36 + 5 + 10 + 5 + 4 = **~60** (+24 across 5 domains)
+  - allocationCategoriesRepository: 5 methods
+  - incomeRepository: 10 methods
+  - debtsRepository: 10 methods
+  - goalsRepository: 5 methods
+  - fixedBillsRepository: 4 methods
+- Compat-path methods: **~42** (monthly reviews, invitations, import pipeline, updateHousehold, activity list, merchant rules)
+- Advisory lock triggered: only when compat-path methods are called (monthly reviews, imports, invitations)
+- `loadState` hydrates all 27 tables: still happens when compat is triggered, but high-frequency financial CRUD paths now bypass it entirely
 
 ---
 
