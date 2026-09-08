@@ -1,3 +1,5 @@
+import globals from 'globals';
+
 export default [
   {
     ignores: ["node_modules/**", "coverage/**", "dist/**"]
@@ -8,6 +10,7 @@ export default [
       ecmaVersion: 2022,
       sourceType: "module",
       globals: {
+        ...globals.node,
         Request: "readonly",
         Response: "readonly",
         URL: "readonly",
@@ -26,7 +29,10 @@ export default [
     files: ["lib/**/*.js", "db/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
-      sourceType: "module"
+      sourceType: "module",
+      globals: {
+        ...globals.node
+      }
     },
     rules: {
       "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
