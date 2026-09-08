@@ -3,15 +3,33 @@ import { fileURLToPath } from 'node:url';
 
 import express from 'express';
 
-import { createInMemoryDb } from './lib/server/inMemoryDb.js';
+import { loadServerEnv } from './lib/server/env.js';
 import { createApiRouter } from './lib/server/routerLoader.js';
+import { createSqliteDb } from './lib/server/sqliteDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const port = Number(process.env.PORT ?? 3000);
 
-const db = createInMemoryDb();
+const { port, dbPath } = loadServerEnv({ cwd: __dirname });
+const db = createSqliteDb({ dbPath });
 const app = express();
+
+app.use((req, res, next) => {
+  const startedAt = process.hrtime.bigint();
+  res.on('finish', () => {
+    const durationMs = Number((process.hrtime.bigint() - startedAt) / 1000000n);
+    console.info(JSON.stringify({
+      level: 'info',
+      event: 'api_request',
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      durationMs,
+      householdId: req.headers['x-household-id'] ?? req.headers['x-household_id'] ?? null,
+    }));
+  });
+  next();
+});
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -21,7 +39,7 @@ app.use((req, res, next) => {
     res.header('Vary', 'Origin');
   }
 
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Idempotency-Key, x-household-id, x-household_id');
+  res.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, x-workspace-id, x-household-id, x-household_id');
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
 
   if (req.method === 'OPTIONS') {
@@ -39,13 +57,6 @@ app.use(express.raw({
   },
   limit: '10mb',
 }));
-
-app.use((req, _res, next) => {
-  if (!req.headers['x-household-id']) {
-    req.headers['x-household-id'] = db.defaultHouseholdId;
-  }
-  next();
-});
 
 app.get('/health', (_req, res) => {
   res.status(200).json({
@@ -96,6 +107,12 @@ app.use((req, res) => {
 
 app.use((error, _req, res, _next) => {
   const status = typeof error?.status === 'number' ? error.status : 500;
+  console.error(JSON.stringify({
+    level: 'error',
+    event: 'api_error',
+    status,
+    message: error?.message ?? 'Internal Server Error',
+  }));
   res.status(status).json({
     error: error?.message ?? 'Internal Server Error',
   });

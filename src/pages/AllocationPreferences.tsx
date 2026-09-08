@@ -183,7 +183,7 @@ export function AllocationPreferences() {
       setHistory(snapshots);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
-        setLoadError("The backend does not currently expose allocation category endpoints.");
+        setLoadError("Category settings are not available in this environment.");
       } else {
         setLoadError(error instanceof Error ? error.message : "Allocation categories could not be loaded.");
       }
@@ -335,7 +335,7 @@ export function AllocationPreferences() {
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         setUpdateEndpointMissing(true);
-        setSaveError("The backend allocation category update endpoint is not available.");
+        setSaveError("Category settings cannot be saved in this environment.");
       } else {
         setSaveError(error instanceof Error ? error.message : "Allocation preferences could not be saved.");
       }
@@ -348,7 +348,7 @@ export function AllocationPreferences() {
     <PageShell
       eyebrow="Planning"
       title="Allocation Preferences"
-      description="Adjust bucket percentages and keep the active total balanced."
+      description="Adjust category percentages and keep the active total balanced."
       actions={(
         <Button type="button" variant="ghost" onClick={() => setIsAdvancedMode((current) => !current)}>
           {isAdvancedMode ? "Hide Advanced" : "Show Advanced"}
@@ -357,8 +357,8 @@ export function AllocationPreferences() {
     >
       <section className="grid gap-4">
         <Card
-          title="Allocation Summary"
-          subtitle="Keep active buckets at exactly 100% before saving."
+          title="Category Summary"
+          subtitle="Keep active categories at exactly 100% before saving."
           actions={(
             <Badge tone={totalTone}>
               {activeCategoryCount} active
@@ -396,13 +396,13 @@ export function AllocationPreferences() {
           </div>
         </Card>
 
-        <Card title="Allocation Buckets" subtitle="Focus on names, percentages, and whether each bucket is active.">
-          {isLoading ? <LoadingState label="Loading allocation categories..." /> : null}
+        <Card title="Categories" subtitle="Focus on names, percentages, and whether each category is active.">
+          {isLoading ? <LoadingState label="Loading categories..." /> : null}
           {!isLoading && loadError ? <ErrorState title="Failed to load allocation preferences" message={loadError} onRetry={() => void loadCategories()} /> : null}
           {!isLoading && !loadError && !categories.length ? (
             <EmptyState
               title="No categories available"
-              message="Add your first allocation bucket to start splitting each deposit."
+              message="Add your first category to start splitting each deposit."
             />
           ) : null}
           {!isLoading && !loadError && categories.length ? (
@@ -578,7 +578,7 @@ export function AllocationPreferences() {
                                 Delete category
                               </Button>
                             ) : (
-                              <span className="text-xs text-[var(--text-muted)]">System buckets stay protected.</span>
+                              <span className="text-xs text-[var(--text-muted)]">System categories stay protected.</span>
                             )}
                           </div>
                         </div>
@@ -641,7 +641,7 @@ export function AllocationPreferences() {
           ) : (
             <EmptyState
               title="No history yet"
-              message="Your saved allocation snapshots will appear here after the first update."
+              message="Your saved category snapshots will appear here after the first update."
             />
           )}
         </Card>
@@ -655,7 +655,7 @@ export function AllocationPreferences() {
           <div className="w-full max-w-lg rounded-[28px] border p-6 shadow-2xl" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">New Bucket</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">New Category</p>
                 <h3 className="mt-2 text-xl font-bold tracking-tight text-[var(--text-strong)]">Add Category</h3>
                 <p className="mt-2 text-sm text-[var(--text-muted)]">
                   Start with the name, percentage, and active state. Backend details stay hidden until needed.

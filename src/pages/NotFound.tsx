@@ -8,7 +8,7 @@ export function NotFound() {
     <PageShell
       eyebrow="Routing"
       title="Page not found"
-      description="The route does not exist in the RAF frontend."
+      description="That page is not available in RAF."
       actions={<Link className="text-sm font-semibold text-raf-moss" to="/dashboard">Back to Dashboard</Link>}
     >
       <EmptyState

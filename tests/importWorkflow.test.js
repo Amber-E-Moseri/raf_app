@@ -303,6 +303,50 @@ test('approveImportBatch inserts approved non-duplicate transactions only', asyn
   assert.equal(db.state.insertedTransactions.length, 1);
 });
 
+test('approveImportBatch is idempotent after a batch has already been approved', async () => {
+  const db = createDbDouble({
+    batch: { id: 'batch_1', status: 'approved', filename: 'test.csv', rowCount: 2 },
+    rows: [
+      {
+        id: 'row_approved',
+        parsedDate: '2026-03-10',
+        parsedDescription: 'Coffee Shop',
+        parsedMerchant: 'Coffee Shop',
+        parsedAmount: '12.99',
+        parsedDirection: 'debit',
+        suggestedCategoryId: 'cat_food',
+        suggestedDebtId: null,
+        status: 'approved',
+      },
+      {
+        id: 'row_duplicate',
+        parsedDate: '2026-03-11',
+        parsedDescription: 'Duplicate',
+        parsedMerchant: 'Bank',
+        parsedAmount: '100.00',
+        parsedDirection: 'debit',
+        suggestedCategoryId: 'cat_food',
+        suggestedDebtId: null,
+        status: 'duplicate',
+      },
+    ],
+  });
+
+  const result = await approveImportBatch({
+    db,
+    householdId: 'household_1',
+    batchId: 'batch_1',
+  });
+
+  assert.deepEqual(result, {
+    inserted: 1,
+    skipped: 0,
+    duplicates: 1,
+    alreadyApproved: true,
+  });
+  assert.equal(db.state.insertedTransactions.length, 0);
+});
+
 test('approved debt-linked rows create debt payments in the same transaction', async () => {
   const db = createDbDouble({
     batch: { id: 'batch_1', status: 'review', filename: 'test.csv', rowCount: 1 },
@@ -362,6 +406,22 @@ test('rejectImportBatch marks rows rejected without creating transactions', asyn
   assert.deepEqual(db.state.rows.map((row) => row.status), ['rejected', 'rejected']);
 });
 
+test('reviewImportBatch rejects uploaded batches that were not parsed yet', async () => {
+  const db = createDbDouble({
+    batch: { id: 'batch_1', status: 'uploaded', filename: 'test.csv', rowCount: 1 },
+    rows: [{ id: 'row_1', status: 'pending' }],
+  });
+
+  await assert.rejects(
+    () => reviewImportBatch({
+      db,
+      householdId: 'household_1',
+      batchId: 'batch_1',
+    }),
+    /must be parsed before review/,
+  );
+});
+
 test('updateImportedRow updates review decisions', async () => {
   const db = createDbDouble({
     batch: { id: 'batch_1', status: 'review', filename: 'test.csv', rowCount: 1 },
@@ -392,6 +452,70 @@ test('updateImportedRow updates review decisions', async () => {
 
   assert.equal(result.status, 'approved');
   assert.equal(result.suggestedCategoryId, 'cat_food');
+});
+
+test('updateImportedRow requires the parent batch to be in review status', async () => {
+  const db = createDbDouble({
+    batch: { id: 'batch_1', status: 'approved', filename: 'test.csv', rowCount: 1 },
+    rows: [
+      {
+        id: 'row_1',
+        batchId: 'batch_1',
+        parsedDate: '2026-03-10',
+        parsedDescription: 'Coffee Shop',
+        parsedMerchant: 'Coffee Shop',
+        parsedAmount: '12.99',
+        parsedDirection: 'debit',
+        suggestedCategoryId: 'cat_food',
+        suggestedDebtId: null,
+        status: 'pending',
+      },
+    ],
+  });
+
+  await assert.rejects(
+    () => updateImportedRow({
+      db,
+      householdId: 'household_1',
+      rowId: 'row_1',
+      input: {
+        status: 'approved',
+      },
+    }),
+    /only be edited while batch is in review status/,
+  );
+});
+
+test('parseImportBatch marks the batch as failed when row parsing fails', async () => {
+  const db = createDbDouble({
+    batch: { id: 'batch_1', status: 'uploaded', filename: 'test.csv', rowCount: 1 },
+    rows: [
+      {
+        id: 'row_1',
+        rawData: {
+          Date: '03/10/2026',
+          Description: 'Coffee Shop',
+          Merchant: 'Coffee Shop',
+          Amount: '12.99',
+        },
+      },
+    ],
+  });
+
+  await assert.rejects(
+    () => parseImportBatch({
+      db,
+      householdId: 'household_1',
+      batchId: 'batch_1',
+      input: {
+        batchId: 'batch_1',
+        columnMap: { date: 'Date', description: 'Description', amount: 'Amount', merchant: 'Merchant' },
+      },
+    }),
+    /rawDate must be a valid ISO date/,
+  );
+
+  assert.equal(db.state.batch.status, 'failed');
 });
 
 test('import routes expose upload, parse, review, approve, and reject workflow', async () => {
@@ -481,4 +605,24 @@ test('import routes expose upload, parse, review, approve, and reject workflow',
     batchId: 'batch_2',
     rejected: 1,
   });
+});
+
+test('import parse route returns a validation error for malformed JSON payloads', async () => {
+  const db = createDbDouble();
+  const response = await parseBatchRoute(
+    new Request('http://localhost/api/v1/imports/parse', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-household-id': 'household_1',
+      },
+      body: '{"batchId":"batch_1"',
+    }),
+    { db },
+  );
+
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.equal(body.error, 'request body must be valid JSON');
+  assert.equal(body.errorCode, 'VALIDATION_ERROR');
 });

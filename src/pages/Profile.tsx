@@ -168,7 +168,7 @@ export function Profile() {
       ) : null}
       {!isLoading && !error && data ? (
         <section className="grid gap-4">
-          <Card title="User Information" subtitle="Current placeholder content until account profile APIs are connected.">
+          <Card title="User Information" subtitle="Account details and household context.">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-raf-ink">Jane Doe</h2>
@@ -180,12 +180,12 @@ export function Profile() {
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
                 <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Household</p>
                 <p className="mt-2 text-sm font-medium text-raf-ink">Local RAF Household</p>
-                <p className="mt-1 text-sm text-stone-500">Household/account details can be surfaced here when backend profile data exists.</p>
+                <p className="mt-1 text-sm text-stone-500">Household and account details will appear here when available.</p>
               </div>
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
                 <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Account</p>
                 <p className="mt-2 text-sm font-medium text-raf-ink">Google-auth account placeholder</p>
-                <p className="mt-1 text-sm text-stone-500">Connected user details are not available in the current frontend contract.</p>
+                <p className="mt-1 text-sm text-stone-500">Connected user details are not available yet.</p>
               </div>
             </div>
           </Card>
@@ -195,9 +195,9 @@ export function Profile() {
               <p className="text-2xl font-bold tracking-tight text-raf-ink">{data.monthlyReviewCount}</p>
               <p className="mt-2 text-sm text-stone-500">Saved monthly reviews this year</p>
             </Card>
-            <Card title="Allocations" subtitle="Current allocation setup summary.">
+            <Card title="Categories" subtitle="Current allocation setup summary.">
               <p className="text-2xl font-bold tracking-tight text-raf-ink">{data.activeAllocationCount}</p>
-              <p className="mt-2 text-sm text-stone-500">{data.allocationCount} total buckets configured</p>
+              <p className="mt-2 text-sm text-stone-500">{data.allocationCount} total categories configured</p>
             </Card>
             <Card title="Goals" subtitle="Goal planning placeholder.">
               <p className="text-2xl font-bold tracking-tight text-raf-ink">{data.goalCount}</p>

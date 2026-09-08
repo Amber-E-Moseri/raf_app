@@ -1,17 +1,6 @@
 import { importBankStatement } from '../../../../../lib/imports/bankStatementImports.js';
 import { ImportHttpError } from '../../../../../lib/imports/shared.js';
-
-function json(body, status) {
-  return Response.json(body, { status });
-}
-
-function getHouseholdId(request, context) {
-  return context?.householdId ?? request.headers.get('x-household-id') ?? request.headers.get('x-household_id');
-}
-
-function getDb(context) {
-  return context?.db ?? globalThis.__RAF_DB__;
-}
+import { buildErrorBody, getDb, getHouseholdId, json } from '../../_shared/http.js';
 
 export async function POST(request, context = {}) {
   try {
@@ -52,12 +41,19 @@ export async function POST(request, context = {}) {
     return json(result, 201);
   } catch (error) {
     if (error instanceof ImportHttpError) {
-      return json({
-        error: error.message,
-        ...(error.details ? error.details : {}),
-      }, error.status);
+      return json(
+        {
+          ...buildErrorBody({
+            status: error.status,
+            message: error.message,
+            details: error.details,
+          }),
+          ...(error.details ? error.details : {}),
+        },
+        error.status,
+      );
     }
 
-    return json({ error: 'Internal Server Error' }, 500);
+    return json(buildErrorBody({ status: 500, message: 'Internal Server Error' }), 500);
   }
 }

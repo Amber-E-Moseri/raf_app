@@ -14,5 +14,5 @@ test("monthly review frontend uses the apply endpoint and helper", async () => {
   assert.match(pageSource, /applyMonthlyReviewsInRange/);
   assert.match(pageSource, /await applyMonthlyReview\(\{/);
   assert.match(pageSource, /splitOverride/);
-  assert.match(pageSource, /Allocation/);
+  assert.match(pageSource, /Category|allocation transaction/);
 });

@@ -461,7 +461,7 @@ export function Goals() {
       {!goalsData.isLoading && !goalsData.error && goalsData.data ? (
         <section className="grid gap-4 xl:grid-cols-[1.4fr,0.9fr]">
           <div className="space-y-4">
-            <Card title="Goal Planning" subtitle="Track simple savings targets connected to your planning buckets.">
+            <Card title="Goal Planning" subtitle="Track simple savings targets connected to your planning categories.">
               {activeGoals.length ? (
                 <div className="space-y-3">
                   {activeGoals.map((goal) => {
@@ -507,10 +507,10 @@ export function Goals() {
                               <Badge tone={goalStatusTone(progress)}>{goalStatusLabel(progress)}</Badge>
                             </div>
                             <p className="mt-2 text-sm text-[var(--text-muted)]">
-                              Linked bucket: {goalBucketLabel(goal, progress, categoryLookup)}
+                              Linked category: {goalBucketLabel(goal, progress, categoryLookup)}
                             </p>
                             {progress?.bucket_balance ? (
-                              <p className="mt-1 text-sm text-[var(--text-muted)]">Bucket balance: {formatCurrency(progress.bucket_balance)}</p>
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">Category balance: {formatCurrency(progress.bucket_balance)}</p>
                             ) : null}
                             {goal.target_date ? (
                               <p className="mt-1 text-sm text-[var(--text-muted)]">Target date: {goal.target_date}</p>
@@ -626,7 +626,7 @@ export function Goals() {
               ) : (
                 <EmptyState
                   title="Set up allocation first"
-                  message="Goals are linked to allocation buckets, so add at least one active bucket before creating a goal."
+                  message="Goals are linked to categories, so add at least one active category before creating a goal."
                 />
               )}
             </Card>
@@ -641,7 +641,7 @@ export function Goals() {
                         <div>
                           <div className="font-medium text-[var(--text-strong)]">{goal.name}</div>
                           <div className="mt-1 text-sm text-[var(--text-muted)]">
-                            Linked bucket: {goalBucketLabel(goal, progress, categoryLookup)} - Target {formatCurrency(goal.target_amount)}
+                            Linked category: {goalBucketLabel(goal, progress, categoryLookup)} - Target {formatCurrency(goal.target_amount)}
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -677,8 +677,8 @@ export function Goals() {
             <Card
               title={editingGoalId ? "Edit Goal" : "Create Goal"}
               subtitle={editingGoalId
-                ? "Update the target, linked bucket, or notes for this goal."
-                : "Create a simple savings target linked to one planning bucket."}
+                ? "Update the target, linked category, or notes for this goal."
+                : "Create a simple savings target linked to one planning category."}
             >
               {goalsData.data.categories.length ? (
                 <div className="space-y-4">
@@ -690,13 +690,13 @@ export function Goals() {
                   />
 
                   <label className="block">
-                    <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">Linked bucket</span>
+                    <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">Linked category</span>
                     <select
                       className="ui-field"
                       value={form.bucketId}
                       onChange={(event) => setForm((current) => ({ ...current, bucketId: event.target.value }))}
                     >
-                      <option value="" disabled>Select a bucket</option>
+                      <option value="" disabled>Select a category</option>
                       {goalsData.data.categories.map((category) => (
                         <option key={category.id} value={category.id}>{category.label}</option>
                       ))}
@@ -748,8 +748,8 @@ export function Goals() {
                 </div>
               ) : (
                 <EmptyState
-                  title="No active buckets available"
-                  message="Goals can be created after allocation buckets are configured."
+                  title="No active categories available"
+                  message="Goals can be created after categories are configured."
                 />
               )}
             </Card>
@@ -757,7 +757,7 @@ export function Goals() {
             <Card title="Planning Notes" subtitle="Goals help you track savings progress without moving money outside RAF.">
               <div className="space-y-3 text-sm text-[var(--text-muted)]">
                 <p>Paid so far is based only on transactions explicitly linked to the goal.</p>
-                <p>Linked bucket and bucket balance stay visible for planning context, but they do not count as goal progress on their own.</p>
+                <p>Linked category and category balance stay visible for planning context, but they do not count as goal progress on their own.</p>
                 <p>Each goal tracks just three milestones so progress stays simple and easy to follow.</p>
               </div>
             </Card>

@@ -3,9 +3,20 @@ import type { ApiErrorPayload } from "../lib/types";
 const DEFAULT_API_BASE_PATH = "/api/v1";
 const FALLBACK_ORIGIN = "http://localhost:3000";
 const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-const rawApiBaseUrl = viteEnv?.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_PATH;
 const runtimeOrigin = typeof window !== "undefined" ? window.location.origin : FALLBACK_ORIGIN;
-const API_BASE_URL = new URL(rawApiBaseUrl, runtimeOrigin).toString();
+
+function resolveApiBaseUrl(rawValue: string | undefined, origin: string) {
+  const candidate = rawValue?.trim() || DEFAULT_API_BASE_PATH;
+  try {
+    return new URL(candidate, origin).toString();
+  } catch {
+    throw new Error(
+      `Invalid VITE_API_BASE_URL value "${candidate}". Use an absolute URL or a path like "/api/v1".`,
+    );
+  }
+}
+
+const API_BASE_URL = resolveApiBaseUrl(viteEnv?.VITE_API_BASE_URL, runtimeOrigin);
 const API_ORIGIN = new URL(API_BASE_URL).origin;
 
 export class ApiError extends Error {

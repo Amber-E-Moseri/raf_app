@@ -1,6 +1,8 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +11,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const port = 3100;
 const baseUrl = `http://localhost:${port}`;
+const sqlitePath = path.join(os.tmpdir(), `raf-live-api-${process.pid}.sqlite`);
 
 let serverProcess;
 
@@ -71,6 +74,7 @@ before(async () => {
     env: {
       ...process.env,
       PORT: String(port),
+      RAF_DB_PATH: sqlitePath,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -95,6 +99,13 @@ after(async () => {
   if (serverProcess && !serverProcess.killed) {
     serverProcess.kill('SIGTERM');
     await wait(250);
+  }
+
+  for (const suffix of ['', '-shm', '-wal']) {
+    const target = `${sqlitePath}${suffix}`;
+    if (fs.existsSync(target)) {
+      fs.unlinkSync(target);
+    }
   }
 });
 

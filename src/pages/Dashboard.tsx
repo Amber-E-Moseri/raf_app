@@ -5,13 +5,14 @@ import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
 import { applyMonthlyReview } from "../api/monthlyReviewApi";
-import { getDashboardReport, getFinancialHealthReport, getSurplusRecommendations } from "../api/reportsApi";
+import { getDashboardAggregateReport } from "../api/reportsApi";
 import { getTransactions } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
 import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { MonthReminderBanner } from "../components/feedback/MonthReminderBanner";
+import { SuccessNotice } from "../components/feedback/SuccessNotice";
 import { PageShell } from "../components/layout/PageShell";
 import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
@@ -21,6 +22,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useMonthWorkflow } from "../hooks/useMonthWorkflow";
+import { useAuth } from "../context/AuthContext";
 import { formatCurrency, formatIsoDate } from "../lib/format";
 import { normalizeMoneyInput } from "../lib/validation";
 import type {
@@ -53,8 +55,9 @@ interface SurplusSuggestionDraftRow {
   amount: string;
 }
 
-type DashboardViewModelReport = Awaited<ReturnType<typeof getDashboardReport>>;
-type DashboardHealthReport = Awaited<ReturnType<typeof getFinancialHealthReport>>;
+type DashboardAggregateReport = Awaited<ReturnType<typeof getDashboardAggregateReport>>;
+type DashboardViewModelReport = DashboardAggregateReport["dashboard"];
+type DashboardHealthReport = DashboardAggregateReport["financialHealth"];
 
 function alertTone(status: "ok" | "elevated" | "risky" | undefined) {
   if (status === "risky") {
@@ -76,8 +79,36 @@ function transactionTone(transaction: Transaction) {
   return transaction.direction === "credit" ? "success" : "warning";
 }
 
+function onboardingDismissalKey(workspaceId: string) {
+  return `raf:start-here-dismissed:${workspaceId}`;
+}
+
+function readOnboardingDismissed(workspaceId: string) {
+  if (!workspaceId || typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return localStorage.getItem(onboardingDismissalKey(workspaceId)) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeOnboardingDismissed(workspaceId: string) {
+  if (!workspaceId || typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.setItem(onboardingDismissalKey(workspaceId), "true");
+  } catch {}
+}
+
 export function Dashboard() {
   const { activeMonthLabel, activeRange, isCurrentMonth, jumpToCurrentMonth } = usePeriod();
+  const { session } = useAuth();
+  const activeWorkspaceId = session?.workspaceId ?? session?.householdId ?? "local";
   const { from, to } = activeRange;
   const monthWorkflow = useMonthWorkflow(activeRange.from.slice(0, 7));
   const [surplusDraftRows, setSurplusDraftRows] = useState<SurplusSuggestionDraftRow[]>([]);
@@ -86,12 +117,11 @@ export function Dashboard() {
   const [surplusMessage, setSurplusMessage] = useState<string | null>(null);
   const [surplusApplyError, setSurplusApplyError] = useState<string | null>(null);
   const [isQuickApplyingSurplus, setIsQuickApplyingSurplus] = useState(false);
+  const [startHereDismissed, setStartHereDismissed] = useState(() => readOnboardingDismissed(activeWorkspaceId));
 
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
-    const [dashboard, financialHealth, surplusRecommendations, incomeResponse, transactionsResponse] = await Promise.all([
-      getDashboardReport({ from, to }),
-      getFinancialHealthReport(from),
-      getSurplusRecommendations(from),
+    const [aggregate, incomeResponse, transactionsResponse] = await Promise.all([
+      getDashboardAggregateReport({ from, to }),
       getIncome({ from, to }),
       getTransactions({ from, to, limit: 10 }),
     ]);
@@ -111,12 +141,12 @@ export function Dashboard() {
     const latestPeriod = [...dashboard.periods].sort((left, right) => right.month.localeCompare(left.month))[0] ?? null;
 
     return {
-      dashboard,
+      dashboard: aggregate.dashboard,
       categories,
       latestAllocationReport,
       latestPeriod,
-      financialHealth,
-      surplusRecommendations,
+      financialHealth: aggregate.financialHealth,
+      surplusRecommendations: aggregate.surplusRecommendations,
       recentTransactions: transactionsResponse.items.slice(0, 5),
       incomeCount: incomeResponse.items.length,
     };
@@ -145,6 +175,10 @@ export function Dashboard() {
     setSurplusApplyError(null);
     setEditingSurplusRowId(null);
   }, [data?.surplusRecommendations]);
+
+  useEffect(() => {
+    setStartHereDismissed(readOnboardingDismissed(activeWorkspaceId));
+  }, [activeWorkspaceId]);
 
   if (isLoading || monthWorkflow.isLoading) {
     return (
@@ -213,6 +247,12 @@ export function Dashboard() {
     && editingSurplusRow.destinationSlug === "savings"
     && surplusRowDraft.destinationSlug !== "savings",
   );
+  const showStartHere = data.incomeCount === 0 && data.recentTransactions.length === 0 && !startHereDismissed;
+
+  function dismissStartHere() {
+    writeOnboardingDismissed(activeWorkspaceId);
+    setStartHereDismissed(true);
+  }
 
   function handleResetSurplusDraftRows() {
     setSurplusDraftRows(
@@ -332,11 +372,40 @@ export function Dashboard() {
         </div>
       ) : null}
       {monthWorkflow.data.reminderMonth ? <MonthReminderBanner monthKey={monthWorkflow.data.reminderMonth.monthKey} /> : null}
+      {showStartHere ? (
+        <Card
+          title="Start Here"
+          subtitle="A simple monthly setup path from RAF's allocation template."
+          actions={(
+            <Button type="button" variant="ghost" className="min-h-8 rounded-full px-3 py-1 text-xs" onClick={dismissStartHere}>
+              Dismiss
+            </Button>
+          )}
+        >
+          <div className="grid gap-3 md:grid-cols-4">
+            {[
+              { step: "1", label: "Pick your active month", to: "/dashboard" },
+              { step: "2", label: "Log income", to: "/income/new" },
+              { step: "3", label: "Track spending", to: "/transactions" },
+              { step: "4", label: "Review surplus", to: "/monthly-review" },
+            ].map((item) => (
+              <Link
+                key={item.step}
+                to={item.to}
+                className="rounded-2xl border border-[var(--border-color)] px-4 py-3 transition hover:bg-[var(--surface-plain)]"
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Step {item.step}</span>
+                <span className="mt-1 block text-sm font-semibold text-[var(--text-strong)]">{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </Card>
+      ) : null}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryMetricCard
           title="Income this month"
           value={formatCurrency(latestPeriodIncome)}
-          subtitle={`${data.incomeCount} deposit${data.incomeCount === 1 ? "" : "s"}`}
+          subtitle={data.incomeCount ? `${data.incomeCount} deposit${data.incomeCount === 1 ? "" : "s"}` : "Start here each month"}
           badge={data.latestPeriod?.alertStatus ?? "ok"}
           tone={alertTone(data.latestPeriod?.alertStatus)}
         />
@@ -468,7 +537,7 @@ export function Dashboard() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <div className="text-sm font-semibold text-[var(--text-strong)]">Edit suggestion</div>
-                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">Adjust the amount and destination bucket, then save the draft before using Quick apply.</div>
+                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">Adjust the amount and destination category, then save the draft before using Quick apply.</div>
                       </div>
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -482,7 +551,7 @@ export function Dashboard() {
                         }}
                       />
                       <label className="block">
-                        <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">Destination bucket</span>
+                        <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">Destination category</span>
                         <select
                           className="ui-field"
                           value={surplusRowDraft.destinationSlug}
@@ -520,7 +589,7 @@ export function Dashboard() {
                         </Button>
                       </div>
                     </div>
-                    {surplusMessage ? <p className="mt-3 text-[12px] italic text-[var(--text-muted)]">{surplusMessage}</p> : null}
+                    {surplusMessage ? <div className="mt-3"><SuccessNotice title="Surplus draft saved" message={surplusMessage} /></div> : null}
                     {surplusApplyError ? <p className="mt-3 text-[12px] italic text-rose-500">{surplusApplyError}</p> : null}
                   </div>
                 ) : null}
@@ -530,7 +599,7 @@ export function Dashboard() {
                   </Button>
                 </div>
                 {!editingSurplusRow && surplusApplyError ? <p className="text-[12px] italic text-rose-500">{surplusApplyError}</p> : null}
-                {!editingSurplusRow && surplusMessage ? <p className="text-[12px] italic text-[var(--text-muted)]">{surplusMessage}</p> : null}
+                {!editingSurplusRow && surplusMessage ? <SuccessNotice title="Surplus updated" message={surplusMessage} /> : null}
               </div>
             </Card>
           ) : null}

@@ -79,9 +79,9 @@ const themeGroups: Array<{
   values: ThemeColor[];
   helper: string;
 }> = [
-  { mood: "Professional", values: ["blue", "black"], helper: "Calm contrast for focused daily finance work." },
-  { mood: "Balanced", values: ["green"], helper: "RAF's default look with steady contrast and warmth." },
-  { mood: "Playful", values: ["pink"], helper: "A softer accent with a little more personality." },
+  { mood: "Professional", values: ["minimal", "violet"], helper: "Calm contrast for focused daily finance work." },
+  { mood: "Balanced", values: ["emerald"], helper: "RAF's default look with steady contrast and warmth." },
+  { mood: "Expressive", values: ["blush"], helper: "A softer accent with a little more personality." },
 ];
 
 function ruleActionLabel(rule: ImportReviewRule) {

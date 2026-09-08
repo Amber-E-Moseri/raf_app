@@ -21,18 +21,18 @@ export function SummaryMetricCard({
   icon,
 }: SummaryMetricCardProps) {
   return (
-    <Card className="min-h-[96px] overflow-hidden">
-      <div className="flex h-full flex-col gap-2.5">
+    <Card className="summary-metric-card min-h-[120px] overflow-hidden">
+      <div className="flex h-full flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] font-medium text-[var(--text-muted)]">{title}</p>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">{title}</p>
           {badge ? <Badge tone={tone}>{badge}</Badge> : null}
         </div>
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[24px] font-bold leading-none text-[var(--text-strong)]">{value}</p>
-            <p className="mt-2 text-[10px] font-medium text-[var(--text-muted)]">{subtitle}</p>
+            <p className="financial-value text-[30px] font-bold leading-none tracking-[-0.02em] text-[var(--text-primary)]">{value}</p>
+            <p className="mt-2 text-[12px] font-medium text-[var(--text-secondary)]">{subtitle}</p>
           </div>
-          {icon ? <div className="text-[var(--text-muted)]/40">{icon}</div> : null}
+          {icon ? <div className="text-[var(--text-subtle)]">{icon}</div> : null}
         </div>
       </div>
     </Card>

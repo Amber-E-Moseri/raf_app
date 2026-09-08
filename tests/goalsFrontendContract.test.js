@@ -13,7 +13,7 @@ test("goals are wired into planning navigation and the frontend route", async ()
   assert.match(appSource, /path="goals"/);
   assert.match(layoutSource, /to: "\/goals", label: "Goals"/);
   assert.match(goalsPageSource, /title="Goals"/);
-  assert.match(goalsPageSource, /reserved toward goal/i);
+  assert.match(goalsPageSource, /Paid so far/);
   assert.match(goalsPageSource, /getDashboardReport/);
   assert.match(goalsPageSource, /createGoal/);
   assert.match(goalsPageSource, /updateGoal/);

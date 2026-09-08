@@ -1,4 +1,4 @@
-export type ThemeColor = "green" | "pink" | "blue" | "black";
+export type ThemeColor = "emerald" | "blush" | "violet" | "minimal";
 export type FontFamilyOption = "inter" | "barlow" | "playfair-display" | "libre-franklin";
 export type AppearanceMode = "light" | "dark";
 export type InterfaceScale = "small" | "medium" | "large";
@@ -13,7 +13,7 @@ export interface AppearancePreferences {
 export const APPEARANCE_STORAGE_KEY = "raf_appearance_preferences";
 
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
-  theme_color: "green",
+  theme_color: "emerald",
   font_family: "inter",
   appearance_mode: "light",
   interface_scale: "medium",
@@ -24,12 +24,20 @@ export const THEME_OPTIONS: Array<{
   label: string;
   swatch: string;
   accent: string;
+  descriptor: string;
 }> = [
-  { value: "green", label: "Green", swatch: "#1f7a4f", accent: "#d8e6dd" },
-  { value: "pink", label: "Pink", swatch: "#d14d8b", accent: "#f7d7e7" },
-  { value: "blue", label: "Blue", swatch: "#2563eb", accent: "#dbe8ff" },
-  { value: "black", label: "Black", swatch: "#111111", accent: "#d8d8d8" },
+  { value: "emerald", label: "Emerald", swatch: "#10b981", accent: "#059669", descriptor: "Focused and fresh" },
+  { value: "blush", label: "Blush", swatch: "#ec4899", accent: "#db2777", descriptor: "Soft and warm" },
+  { value: "violet", label: "Violet", swatch: "#8b5cf6", accent: "#7c3aed", descriptor: "Bold and expressive" },
+  { value: "minimal", label: "Minimal", swatch: "#111827", accent: "#374151", descriptor: "Clean and neutral" },
 ];
+
+const LEGACY_THEME_MAP: Record<string, ThemeColor> = {
+  green: "emerald",
+  pink: "blush",
+  blue: "violet",
+  black: "minimal",
+};
 
 export const FONT_OPTIONS: Array<{
   value: FontFamilyOption;
@@ -68,8 +76,11 @@ export function parseAppearancePreferences(rawValue: string | null): AppearanceP
 
   try {
     const parsed = JSON.parse(rawValue) as Partial<AppearancePreferences>;
-    const theme_color = THEME_OPTIONS.some((option) => option.value === parsed.theme_color)
-      ? parsed.theme_color as ThemeColor
+    const candidateTheme = typeof parsed.theme_color === "string"
+      ? (LEGACY_THEME_MAP[parsed.theme_color] ?? parsed.theme_color)
+      : DEFAULT_APPEARANCE.theme_color;
+    const theme_color = THEME_OPTIONS.some((option) => option.value === candidateTheme)
+      ? candidateTheme as ThemeColor
       : DEFAULT_APPEARANCE.theme_color;
     const font_family = FONT_OPTIONS.some((option) => option.value === parsed.font_family)
       ? parsed.font_family as FontFamilyOption

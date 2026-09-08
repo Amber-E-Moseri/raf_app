@@ -28,12 +28,12 @@ interface AllocationBarChartProps {
 
 function barColor(index: number) {
   const colors = [
-    "bg-emerald-500",
-    "bg-blue-500",
-    "bg-amber-600",
-    "bg-violet-500",
-    "bg-pink-500",
-    "bg-stone-500",
+    "var(--chart-1)",
+    "var(--chart-2)",
+    "var(--chart-3)",
+    "var(--chart-4)",
+    "var(--chart-5)",
+    "var(--chart-6)",
   ];
 
   return colors[index % colors.length];
@@ -53,7 +53,7 @@ export function AllocationBarChart({ items, activeMonthLabel }: AllocationBarCha
   }, 0);
 
   return (
-    <Card title="Allocation buckets">
+    <Card title="Categories">
       {validItems.length ? (
         <div>
           <div className="space-y-3">
@@ -66,7 +66,8 @@ export function AllocationBarChart({ items, activeMonthLabel }: AllocationBarCha
               const spent = parseMoney(item.thisMonth.used);
               const available = Math.max(parseMoney(item.thisMonth.available), 0);
               const barBase = currentMonthAmount > 0 ? currentMonthAmount : reserved + spent;
-              const progress = barBase === 0 ? 0 : Math.max(0, Math.min(100, ((reserved + spent) / barBase) * 100));
+              const uncappedProgress = barBase === 0 ? 0 : Math.max(0, ((reserved + spent) / barBase) * 100);
+              const progress = Math.min(uncappedProgress, 100);
 
               return (
                 <Link
@@ -74,46 +75,52 @@ export function AllocationBarChart({ items, activeMonthLabel }: AllocationBarCha
                   to={item.slug
                     ? `/transactions?categorySlug=${encodeURIComponent(item.slug)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`
                     : `/transactions?categoryId=${encodeURIComponent(item.bucketId)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`}
-                  className="group block rounded-[1.35rem] border px-4 py-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-lift active:translate-y-0"
-                  style={{
-                    borderColor: "var(--border-color)",
-                    background: "var(--surface-plain)",
-                  }}
+                  className="group block rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-4 transition duration-150 hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]"
                 >
                   <div className="space-y-3">
                     <div className="flex items-center gap-4">
                       <div className="flex min-w-[152px] items-center gap-3">
-                        <div className={`h-[18px] w-[18px] shrink-0 rounded-md ${barColor(index)}`} />
+                        <div className="h-[14px] w-[14px] shrink-0 rounded-full" style={{ background: barColor(index) }} />
                         <div className="min-w-0">
-                          <div className="truncate text-[15px] font-semibold text-[var(--text-strong)]">{item.label}</div>
+                          <div className="truncate text-[15px] font-semibold text-[var(--text-primary)]">{item.label}</div>
                         </div>
                       </div>
 
                       <div className="flex min-w-0 flex-1 items-center gap-4">
-                        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
+                        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-muted)]">
                           <div
-                            className={`h-full rounded-full ${barColor(index)} transition-all duration-300`}
-                            style={{ width: `${progress}%` }}
+                            className="h-full rounded-full transition-all duration-300"
+                            aria-label={uncappedProgress > 100 ? "over budget" : "budget usage"}
+                            style={{
+                              width: `${progress}%`,
+                              background: uncappedProgress > 100 ? "var(--status-danger)" : barColor(index),
+                            }}
                           />
                         </div>
 
                         <div className="flex min-w-[116px] items-baseline justify-end gap-3 text-right">
-                          <div className="text-[11px] font-medium text-[var(--text-muted)]">
+                          <div className="text-[11px] font-medium text-[var(--text-secondary)]">
                             {allocationPercent ?? "--"}
                           </div>
-                          <div className="text-[18px] font-semibold tracking-tight text-[var(--text-strong)]">
+                          <div className="financial-value text-[18px] font-semibold tracking-tight text-[var(--text-primary)]">
                             {formatCurrency(currentMonthAmount.toFixed(2))}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="pl-[30px] text-[11px] text-[var(--text-muted)]">
+                    <div className="pl-[24px] text-[11px] text-[var(--text-secondary)]">
                       <span>Spent {formatCurrency(spent.toFixed(2))}</span>
                       <span>{" | "}</span>
                       <span>Goals {formatCurrency(reserved.toFixed(2))}</span>
                       <span>{" | "}</span>
                       <span>Available {formatCurrency(available.toFixed(2))}</span>
+                      {spent + reserved > currentMonthAmount && currentMonthAmount > 0 ? (
+                        <>
+                          <span>{" | "}</span>
+                          <span className="font-semibold text-[var(--status-danger)]">Over budget</span>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </Link>
@@ -121,15 +128,15 @@ export function AllocationBarChart({ items, activeMonthLabel }: AllocationBarCha
             })}
           </div>
 
-          <div className="mt-4 flex items-center justify-between border-t border-[var(--border-color)] pt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
-            <span>{activeMonthLabel} | {validItems.length} buckets</span>
+          <div className="mt-4 flex items-center justify-between border-t border-[var(--border-subtle)] pt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+            <span>{activeMonthLabel} | {validItems.length} categories</span>
             <span>{formatCurrency(totalAllocated.toFixed(2))} allocated</span>
           </div>
         </div>
       ) : (
         <EmptyState
-          title="No bucket usage data yet"
-          message="Once the current month has allocations, this view will show the current bucket distribution."
+          title="No category usage data yet"
+          message="Once the current month has allocations, this view will show the current category distribution."
         />
       )}
     </Card>

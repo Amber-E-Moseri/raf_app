@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { GET as getDashboardRoute } from '../app/api/v1/reports/dashboard/route.js';
+import { GET as getDashboardAggregateRoute } from '../app/api/v1/reports/dashboard-aggregate/route.js';
 import { GET as getFinancialHealthRoute } from '../app/api/v1/reports/financial-health/route.js';
 import { GET as getIncomeAllocationsRoute } from '../app/api/v1/reports/income-allocations/route.js';
 import { GET as getMonthlyReviewReportRoute } from '../app/api/v1/reports/monthly-review/route.js';
@@ -1005,6 +1006,48 @@ test('getMonthlyReviewReport computes deterministic monthly review recommendatio
   });
 });
 
+test('monthly review category summaries use the shared goal contribution computation path', async () => {
+  const db = createDbDouble({
+    allocationCategories: [
+      { id: 'bucket_savings', slug: 'savings', label: 'Savings', isActive: true, sortOrder: 1 },
+    ],
+    incomeEntries: [{ receivedDate: '2026-03-10', amount: '1000.00' }],
+    incomeAllocations: [{ allocationCategoryId: 'bucket_savings', receivedDate: '2026-03-10', amount: '1000.00', allocatedAmount: '1000.00' }],
+    transactions: [
+      {
+        id: 'txn_goal_credit',
+        transactionDate: '2026-03-12',
+        amount: '125.00',
+        direction: 'credit',
+        categoryId: 'bucket_savings',
+        linkedGoalId: 'goal_1',
+      },
+    ],
+    goals: [
+      {
+        id: 'goal_1',
+        householdId: 'household_1',
+        bucketId: 'bucket_savings',
+        name: 'Emergency Fund',
+        targetAmount: '1000.00',
+        active: true,
+      },
+    ],
+    surplusSplitRules: [
+      { slug: 'emergency_fund', label: 'Emergency Fund', splitPercent: '1.0000', sortOrder: 1, isActive: true },
+    ],
+  });
+
+  const result = await getMonthlyReviewReport({
+    db,
+    householdId: 'household_1',
+    month: '2026-03-01',
+  });
+
+  assert.equal(result.categorySummaries[0].goalContributions, '125.00');
+  assert.equal(result.categorySummaries[0].available, '1000.00');
+});
+
 test('report services handle empty-state data without persisting derived results', async () => {
   const db = createDbDouble({
     household: {
@@ -1347,6 +1390,54 @@ test('financial health savings floor uses global savings bucket balance', async 
   assert.equal(financialHealth.availableSavings, '250.00');
 });
 
+test('financial health report uses period-aware debt history so paid-off debts stay paid in historical months', async () => {
+  const db = createDbDouble({
+    household: {
+      id: 'household_1',
+      name: 'Household 1',
+      timezone: 'America/Toronto',
+      activeMonth: '2026-06-01',
+      periodStartDay: 1,
+      savingsFloor: '0.00',
+      savingsFloorEnabled: false,
+      monthlyEssentialsBaseline: '200.00',
+    },
+    incomeEntries: [
+      { receivedDate: '2026-03-10', amount: '1000.00' },
+    ],
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Visa',
+        startingBalance: '500.00',
+        apr: 0,
+        minimumPayment: '50.00',
+        monthlyPayment: '50.00',
+        sortOrder: 1,
+        isActive: true,
+      },
+    ],
+    debtPayments: [
+      { debtId: 'debt_1', paymentDate: '2026-01-15', amount: '300.00' },
+      { debtId: 'debt_1', paymentDate: '2026-02-15', amount: '200.00' },
+    ],
+  });
+
+  const financialHealth = await getFinancialHealthReport({
+    db,
+    householdId: 'household_1',
+    month: '2026-03-01',
+  });
+
+  assert.equal(financialHealth.monthlyDebtPayments, '0.00');
+  assert.equal(financialHealth.debtRatio, '0.0000');
+  assert.equal(
+    financialHealth.healthPillars.find((pillar) => pillar.key === 'debt_reduction')?.value,
+    'No active debt this month',
+  );
+});
+
 test('surplus recommendations route exposes the spec-compatible alias', async () => {
   const db = createDbDouble({
     surplusSplitRules: [
@@ -1474,6 +1565,18 @@ test('dashboard and monthly review routes expose report payloads', async () => {
   assert.equal(Array.isArray(dashboardPayload.bucket_balances), true);
   assert.equal(Array.isArray(dashboardPayload.monthly_bucket_progress), true);
   assert.equal(Array.isArray(dashboardPayload.goal_progress), true);
+
+  const aggregateResponse = await getDashboardAggregateRoute(
+    new Request('http://localhost/api/v1/reports/dashboard-aggregate?from=2026-03-01&to=2026-03-01', {
+      headers: { 'x-household-id': 'household_1' },
+    }),
+    { db },
+  );
+  assert.equal(aggregateResponse.status, 200);
+  const aggregatePayload = await aggregateResponse.json();
+  assert.equal(Array.isArray(aggregatePayload.dashboard.periods), true);
+  assert.equal(typeof aggregatePayload.financialHealth.healthScore, 'number');
+  assert.equal(typeof aggregatePayload.surplusRecommendations.netSurplus, 'string');
 
   const incomeAllocationsResponse = await getIncomeAllocationsRoute(
     new Request('http://localhost/api/v1/reports/income-allocations?incomeId=income_1', {

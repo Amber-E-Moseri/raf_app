@@ -1,4 +1,5 @@
 import type {
+  DashboardAggregateReport,
   DashboardReport,
   FinancialHealthReport,
   SurplusRecommendationsReport,
@@ -7,6 +8,10 @@ import { getJson } from "./client";
 
 export function getDashboardReport(params: { from: string; to: string }) {
   return getJson<DashboardReport>("/reports/dashboard", params);
+}
+
+export function getDashboardAggregateReport(params: { from: string; to: string }) {
+  return getJson<DashboardAggregateReport>("/reports/dashboard-aggregate", params);
 }
 
 export function getFinancialHealthReport(month?: string) {

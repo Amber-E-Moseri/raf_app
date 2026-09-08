@@ -149,7 +149,7 @@ function importedStatusLabel(item: ImportedTransaction) {
 function importStateNote(item: ImportedTransaction, draft: ImportReviewDraft) {
   if (item.status === "unreviewed") {
     if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
-      return "Needs bucket";
+      return "Needs category";
     }
 
     return "Ready to review";
@@ -300,6 +300,7 @@ export function Transactions() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showCreateTransactionForm, setShowCreateTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionEditState | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isDeletingTransaction, setIsDeletingTransaction] = useState<string | null>(null);
@@ -746,7 +747,7 @@ export function Transactions() {
       return "Approved";
     }
 
-    return "Select a bucket";
+    return "Select a category";
   }
 
   function getLinkedLabel(item: ImportedTransaction) {
@@ -826,7 +827,7 @@ export function Transactions() {
     }
 
     if (form.linkedGoalId && !form.categoryId) {
-      nextErrors.linkedGoalId = "Linked goal requires a bucket";
+      nextErrors.linkedGoalId = "Linked goal requires a category";
     }
 
     setFieldErrors(nextErrors);
@@ -857,6 +858,7 @@ export function Transactions() {
       });
 
       setSubmitSuccess("Transaction created.");
+      setShowCreateTransactionForm(false);
       setForm({
         transactionDate: defaultReviewDateForMonth(activeMonth),
         description: "",
@@ -971,7 +973,7 @@ export function Transactions() {
   function buildImportClassificationPayload(item: ImportedTransaction, draftOverride?: ImportReviewDraft) {
     const draft = draftOverride ?? getReviewDraft(item);
     if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
-      throw new Error("Select an allocation bucket before approving this imported row.");
+      throw new Error("Select a category before approving this imported row.");
     }
     if (requiresDebtSelection(draft.classificationType) && !draft.debtId) {
       throw new Error("Select a debt before saving this imported row.");
@@ -1248,6 +1250,14 @@ export function Transactions() {
       description={`${activeMonthLabel} transactions, imports, and review flow.`}
       actions={
         <div className="flex gap-2">
+          {data?.transactions.items.length ? (
+            <Button
+              type="button"
+              onClick={() => setShowCreateTransactionForm((current) => !current)}
+            >
+              {showCreateTransactionForm ? "Hide Add Transaction" : "Add Transaction"}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="secondary"
@@ -1270,8 +1280,9 @@ export function Transactions() {
         </div>
       }
     >
+      {(showCreateTransactionForm || (!isLoading && !error && data && data.transactions.items.length === 0)) ? (
       <section className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
-        <Card title="Create Transaction" subtitle="Format checks only. Ledger rules remain backend-owned.">
+        <Card title="Create Transaction" subtitle="Record spending, income, transfers, and linked payments.">
           <form className="space-y-4" onSubmit={handleCreateTransaction}>
             <Input
               label="Transaction date"
@@ -1359,7 +1370,7 @@ export function Transactions() {
               </label>
             </div>
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-raf-ink">Allocation bucket</span>
+              <span className="mb-2 block text-sm font-medium text-raf-ink">Category</span>
               <select
                 className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
                 value={form.categoryId}
@@ -1392,7 +1403,7 @@ export function Transactions() {
                     setForm((current) => ({ ...current, linkedGoalId }));
                     setFieldErrors((current) => ({
                       ...current,
-                      linkedGoalId: linkedGoalId && !form.categoryId ? "Linked goal requires a bucket" : null,
+                      linkedGoalId: linkedGoalId && !form.categoryId ? "Linked goal requires a category" : null,
                     }));
                   }}
                 >
@@ -1415,7 +1426,7 @@ export function Transactions() {
         <div className="space-y-4">
           {submitError ? <ErrorState title="Failed to record transaction" message={submitError} /> : null}
           {submitSuccess ? <SuccessNotice title="Transaction saved" message={submitSuccess} /> : null}
-          <Card title="Filter Ledger" subtitle="Date and bucket filters query the API. Search and sorting are applied to the current page.">
+          <Card title="Filter Ledger" subtitle="Date and category filters shape the current page.">
             <div className="grid gap-4 md:grid-cols-2">
               <Input
                 label="From date"
@@ -1447,7 +1458,7 @@ export function Transactions() {
                 onChange={(event) => setSearchTerm(event.target.value)}
               />
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-raf-ink">Filter by bucket</span>
+                <span className="mb-2 block text-sm font-medium text-raf-ink">Filter by category</span>
                 <select
                   className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
                   value={categoryFilter}
@@ -1455,7 +1466,7 @@ export function Transactions() {
                     updateCategoryFilter(event.target.value);
                   }}
                 >
-                  <option value="">All buckets</option>
+                  <option value="">All categories</option>
                   {(data?.categories ?? []).map((category) => (
                     <option key={category.id} value={category.id}>{category.label}</option>
                   ))}
@@ -1465,6 +1476,7 @@ export function Transactions() {
           </Card>
         </div>
       </section>
+      ) : null}
 
       <Card
         title="Import Bank Statement"
@@ -1519,7 +1531,7 @@ export function Transactions() {
           >
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">Review queue</h3>
-              <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">Imported rows stay separate from the ledger until you classify them into RAF buckets, debt payments, fixed bills, savings goals, duplicates, or transfers.</p>
+              <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">Imported rows stay separate from the ledger until you classify them into categories, debt payments, fixed bills, savings goals, duplicates, or transfers.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge tone="neutral">{importsSummary.total} total</Badge>
@@ -1653,7 +1665,7 @@ export function Transactions() {
                             value={bulkBucketId}
                             onChange={(event) => setBulkBucketId(event.target.value)}
                           >
-                            <option value="">Choose bucket</option>
+                            <option value="">Choose category</option>
                             {data.categories.map((category) => (
                               <option key={category.id} value={category.id}>{category.label}</option>
                             ))}
@@ -1672,7 +1684,7 @@ export function Transactions() {
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-sm text-[var(--text-muted)]">Select rows, choose a fallback bucket if needed, and approve them in bulk.</span>
+                        <span className="text-sm text-[var(--text-muted)]">Select rows, choose a fallback category if needed, and approve them in bulk.</span>
                       )}
                     </div>
                   </div>
@@ -1764,7 +1776,7 @@ export function Transactions() {
                                   disabled={isPending || isBulkReviewing}
                                   onChange={(event) => updateReviewDraft(item, { categoryId: event.target.value })}
                                 >
-                                  <option value="">Select a bucket</option>
+                                  <option value="">Select a category</option>
                                   {data.categories.map((category) => (
                                     <option key={category.id} value={category.id}>{category.label}</option>
                                   ))}
@@ -1973,7 +1985,7 @@ export function Transactions() {
                               ) : panelMode === "review" && needsReview ? (
                                 <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-color)" }}>
                                   <div className="mb-4 rounded-2xl border px-3 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-                                    Choose a review outcome, set the bucket if needed, optionally save the rule, then approve.
+                                    Choose a review outcome, set the category if needed, optionally save the rule, then approve.
                                   </div>
                                   <div className="grid gap-4 md:grid-cols-2">
                                     <label className="block">
@@ -2010,7 +2022,7 @@ export function Transactions() {
                                           disabled={isPending || isBulkReviewing}
                                           onChange={(event) => updateReviewDraft(item, { categoryId: event.target.value })}
                                         >
-                                          <option value="">Select a bucket</option>
+                                          <option value="">Select a category</option>
                                           {data.categories.map((category) => (
                                             <option key={category.id} value={category.id}>{category.label}</option>
                                           ))}
@@ -2375,7 +2387,7 @@ export function Transactions() {
                     : "No transactions match these filters"}
                   message={dashboardFocusedBucketLabel
                     ? "Clear the filter to return to the full Transactions table."
-                    : "Adjust the quick filter, date range, bucket filter, or description search to widen the current view."}
+                    : "Adjust the quick filter, date range, category filter, or description search to widen the current view."}
                 />
                 {dashboardFocusedBucketLabel ? (
                   <div className="flex justify-center">
@@ -2400,7 +2412,7 @@ export function Transactions() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold text-[var(--text-strong)]">Edit Transaction</div>
-                <div className="mt-1 text-sm text-[var(--text-muted)]">Update the ledger row without losing its month or bucket context.</div>
+                <div className="mt-1 text-sm text-[var(--text-muted)]">Update the ledger row without losing its month or category context.</div>
               </div>
               <Button
                 type="button"
@@ -2450,7 +2462,7 @@ export function Transactions() {
                 </select>
               </label>
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Allocation bucket</span>
+                <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Category</span>
                 <select
                   className="ui-field"
                   value={editingTransaction.categoryId}

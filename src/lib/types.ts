@@ -375,6 +375,12 @@ export interface DashboardReport {
   goal_progress: GoalProgress[];
 }
 
+export interface DashboardAggregateReport {
+  dashboard: DashboardReport;
+  financialHealth: FinancialHealthReport;
+  surplusRecommendations: SurplusRecommendationsReport;
+}
+
 export interface FinancialHealthReport {
   reviewMonth?: string;
   activeMonthIncome: string;

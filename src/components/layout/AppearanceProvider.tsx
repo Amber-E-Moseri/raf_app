@@ -23,6 +23,11 @@ function applyAppearance(preferences: AppearancePreferences) {
 
   const root = document.documentElement;
   const appRoot = document.getElementById("root");
+  const body = document.body;
+  const themeClasses = ["theme-emerald", "theme-blush", "theme-violet", "theme-minimal"];
+
+  body.classList.remove(...themeClasses);
+  body.classList.add(`theme-${preferences.theme_color}`);
 
   root.dataset.theme = preferences.theme_color;
   root.dataset.font = preferences.font_family;

@@ -8,12 +8,12 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export function Input({ label, error, className = "", ...props }: InputProps) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">{label}</span>
+      <span className="mb-2 block text-sm font-semibold tracking-[0.01em] text-[var(--text-primary)]">{label}</span>
       <input
         className={`ui-field ${className}`.trim()}
         {...props}
       />
-      {error ? <span className="mt-2 block text-sm leading-6 text-rose-600">{error}</span> : null}
+      {error ? <span className="mt-2 block text-sm leading-6 text-[var(--status-danger)]">{error}</span> : null}
     </label>
   );
 }

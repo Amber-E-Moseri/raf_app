@@ -140,6 +140,7 @@ export function Debts() {
   const [editError, setEditError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean }>>({});
+  const [showCreateDebtForm, setShowCreateDebtForm] = useState(false);
 
   function isSectionExpanded(debtId: string, section: "month" | "payoff") {
     return expandedSections[debtId]?.[section] ?? false;
@@ -274,6 +275,7 @@ export function Debts() {
       });
 
       setSubmitSuccess("Debt account created.");
+      setShowCreateDebtForm(false);
       setForm({
         name: "",
         startingBalance: "",
@@ -300,8 +302,14 @@ export function Debts() {
     <PageShell
       eyebrow="Liabilities"
       title="Debts"
-      description="Current balances come straight from the backend. The client only renders what the API provides."
+      description="Track payoff progress and keep debt reduction visible in your monthly plan."
+      actions={data?.items.length ? (
+        <Button type="button" onClick={() => setShowCreateDebtForm((current) => !current)}>
+          {showCreateDebtForm ? "Hide Add Debt" : "Add Debt"}
+        </Button>
+      ) : undefined}
     >
+      {(showCreateDebtForm || (!isLoading && !error && data && data.items.length === 0)) ? (
       <section className="grid gap-4 xl:grid-cols-[0.95fr,1.05fr]">
         <Card className="p-5">
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -467,7 +475,7 @@ export function Debts() {
         <div className="space-y-4">
           {submitError ? <ErrorState title="Failed to add debt" message={submitError} /> : null}
           {submitSuccess ? <SuccessNotice title="Debt saved" message={submitSuccess} /> : null}
-          <Card title="Form Guidance" subtitle="Debt balances stay derived server-side.">
+          <Card title="Form Guidance" subtitle="RAF keeps balances current as payments and charges are recorded.">
             <ul className="space-y-2 text-sm text-[var(--text-muted)]">
               <li>Starting balance must be greater than zero.</li>
               <li>APR must be between 0 and 100 with up to two decimals.</li>
@@ -477,6 +485,7 @@ export function Debts() {
           </Card>
         </div>
       </section>
+      ) : null}
 
       {isLoading ? <LoadingState label="Loading debt accounts..." /> : null}
       {!isLoading && error ? <ErrorState title="Failed to fetch debts" message={error} onRetry={() => void reload()} /> : null}
@@ -486,10 +495,10 @@ export function Debts() {
             <Card title="Total starting" subtitle="Original starting balances">
               <p className="text-3xl font-semibold text-[var(--text-strong)]">{formatCurrency(data.summary.totalStarting)}</p>
             </Card>
-            <Card title="Remaining balance" subtitle="Current backend-derived balance">
+            <Card title="Remaining balance" subtitle="Current balance after recorded activity">
               <p className="text-3xl font-semibold text-[var(--text-strong)]">{formatCurrency(data.summary.totalRemaining)}</p>
             </Card>
-            <Card title="Paid all time" subtitle="Historical payoff recorded by the backend">
+            <Card title="Paid all time" subtitle="Historical payoff recorded in RAF">
               <p className="text-3xl font-semibold text-[var(--text-strong)]">{formatCurrency(data.summary.totalPaidAllTime)}</p>
             </Card>
           </section>
@@ -675,7 +684,7 @@ export function Debts() {
           ) : (
             <EmptyState
               title="No debts configured"
-              message="Debt accounts will appear here when the backend has active debt records to report."
+              message="Add your first debt to track its payment plan and payoff progress."
             />
           )}
         </>

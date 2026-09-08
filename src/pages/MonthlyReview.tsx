@@ -421,6 +421,9 @@ export function MonthlyReview() {
       title="Monthly Review"
       description={`Close ${activeMonthLabel} with a deliberate review step.`}
     >
+      <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+        At month end, review the surplus or deficit, confirm where any surplus should go, and save the month.
+      </div>
       {!isCurrentMonth ? (
         <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
           Viewing {activeMonthLabel} - this is a historical snapshot.{" "}
@@ -712,10 +715,10 @@ export function MonthlyReview() {
                         <div className="min-w-0">
                           <div className="text-[15px] font-semibold text-[var(--text-strong)]">{distribution.label}</div>
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-muted)]">
-                            <Badge tone="neutral">{distribution.destinationType === "bucket" ? "Bucket" : distribution.destinationType === "goal" ? "Goal" : "Debt"}</Badge>
+                            <Badge tone="neutral">{distribution.destinationType === "bucket" ? "Category" : distribution.destinationType === "goal" ? "Goal" : "Debt"}</Badge>
                             <span>
                               {distribution.destinationType === "bucket"
-                                ? "Saved monthly review default"
+                                   ? "Category destination from your saved default"
                                 : distribution.destinationType === "goal"
                                   ? "Goal destination from your saved default"
                                   : "Debt destination from your saved default"}
@@ -871,7 +874,7 @@ export function MonthlyReview() {
                 </div>
               </div>
               <div className="rounded-2xl border p-4 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-color)" }}>
-                This applies each month sequentially. If a month already has a saved review, the batch stops on that month and returns the backend error.
+                This applies each month sequentially. If a month already has a saved review, the batch stops there for you to review it.
               </div>
               {batchResult ? (
                 <div>
@@ -947,7 +950,7 @@ export function MonthlyReview() {
         <Card title="Review Applied" subtitle={`Review month ${result.review.reviewMonth}`}>
           <SuccessNotice
             title="Monthly review applied"
-            message={`The backend persisted the review and created ${result.appliedTransactions.length} allocation transaction${result.appliedTransactions.length === 1 ? "" : "s"}.`}
+            message={`RAF saved the review and created ${result.appliedTransactions.length} allocation transaction${result.appliedTransactions.length === 1 ? "" : "s"}.`}
           />
           <div className="mt-4 grid gap-4 lg:grid-cols-[0.7fr,1fr]">
             <div className="rounded-2xl p-4" style={{ background: "var(--surface-plain)" }}>

@@ -94,11 +94,11 @@ export function AddIncome() {
     <PageShell
       eyebrow="Income"
       title="Add Income"
-      description="Record a new deposit and let the backend return the allocation split it actually created."
+      description="Start the month by recording the income that RAF can allocate intentionally."
       actions={<Link className="text-sm font-semibold text-raf-moss" to="/dashboard">Back to Dashboard</Link>}
     >
       <section className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
-        <Card title="New Deposit" subtitle="Required fields match the backend contract.">
+        <Card title="New Deposit" subtitle="Record income when it actually arrives.">
           <form className="space-y-4" onSubmit={handleSubmit}>
             <Input
               label="Source name"
@@ -172,13 +172,13 @@ export function AddIncome() {
         <div className="space-y-6">
           <Card
             title={success ? "Current Allocation Preferences + Deposit Allocation" : "Current Allocation Preferences"}
-            subtitle={success ? `Income ID: ${success.incomeId}` : "Loaded from the allocation category API when available."}
+            subtitle={success ? "This deposit was split using your saved category percentages." : "Your current category percentages."}
           >
             {success ? (
               <div className="mb-4">
                 <SuccessNotice
                   title="Deposit recorded"
-                  message="Allocated amounts below come from the persisted backend response for this deposit."
+                  message="Allocated amounts below show the saved split for this deposit."
                 />
               </div>
             ) : null}
@@ -205,18 +205,18 @@ export function AddIncome() {
             ) : null}
             {!categoriesLoading && !categoriesError && !categories?.length ? (
               <EmptyState
-                title="Preferences endpoint unavailable"
-                message="This runtime does not currently expose allocation category routes, so the backend is still the only source of truth for configured allocation percentages."
+                title="Categories unavailable"
+                message="Set up categories before recording deposits that need an allocation split."
               />
             ) : null}
           </Card>
           {error ? <ErrorState title="Failed to record income" message={error} /> : null}
           {!success ? (
-            <Card title="What happens next" subtitle="The frontend does not compute any splits itself.">
+            <Card title="What happens next" subtitle="RAF allocates each deposit from your saved category plan.">
               <ul className="space-y-3 text-sm text-[var(--text-muted)]">
-                <li>The backend validates the payload and records the deposit.</li>
-                <li>Allocation rows are created server-side using deterministic rounding.</li>
-                <li>The response comes back with the real allocation snapshot for this deposit.</li>
+                <li>RAF records the deposit for the selected date.</li>
+                <li>Your saved category percentages split the deposit automatically.</li>
+                <li>The allocation shown here is the saved result for this deposit.</li>
                 <li>Use today&apos;s date in ISO format, for example {formatIsoDate(new Date().toISOString())}.</li>
               </ul>
             </Card>

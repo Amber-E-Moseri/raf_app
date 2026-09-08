@@ -202,7 +202,7 @@ export function Insights() {
         ) : (
           <EmptyState
             title="No YTD insights yet"
-            message="Once this year has bucket activity, RAF will show year-to-date allocation analytics here."
+            message="Once this year has category activity, RAF will show year-to-date allocation analytics here."
           />
         )}
       </Card>

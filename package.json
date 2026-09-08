@@ -8,6 +8,7 @@
     "dev": "vite",
     "dev:api": "node index.js",
     "start": "node index.js",
+    "seed:demo": "node scripts/seedDemoData.js",
     "test": "node --test",
     "lint": "eslint .",
     "build": "vite build",
@@ -23,6 +24,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "better-sqlite3": "^12.9.0",
     "cors": "^2.8.6",
     "express": "^4.22.1",
     "pdf-parse": "^1.1.1",

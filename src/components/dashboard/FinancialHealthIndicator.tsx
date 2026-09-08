@@ -34,6 +34,37 @@ function pillarTone(score: number) {
   return "success";
 }
 
+function ScoreGauge({ score }: { score: number }) {
+  const clamped = Math.max(0, Math.min(100, score));
+  const radius = 44;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference - (clamped / 100) * circumference;
+
+  return (
+    <div className="relative grid h-[124px] w-[124px] place-items-center">
+      <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+        <circle cx="60" cy="60" r={radius} fill="none" stroke="var(--surface-muted)" strokeWidth="10" />
+        <circle
+          cx="60"
+          cy="60"
+          r={radius}
+          fill="none"
+          stroke="var(--theme-primary)"
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          style={{ transition: "stroke-dashoffset 240ms ease" }}
+        />
+      </svg>
+      <div className="absolute text-center">
+        <div className="financial-value text-[32px] font-bold leading-none text-[var(--text-primary)]">{clamped}</div>
+        <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--text-secondary)]">Health</div>
+      </div>
+    </div>
+  );
+}
+
 export function FinancialHealthIndicator({
   report,
   title = "Financial Health Score",
@@ -43,25 +74,19 @@ export function FinancialHealthIndicator({
 
   return (
     <Card title={title} subtitle={subtitle}>
-      <div className="space-y-4">
-        <div
-          className="rounded-[1.5rem] border px-4 py-4"
-          style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}
-        >
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                {monthLabel ? `${monthLabel} score` : "Current score"}
-              </div>
-              <div className="mt-2 flex items-end gap-2">
-                <div className="text-[2rem] font-semibold leading-none tracking-tight text-[var(--text-strong)]">
-                  {report.healthScore}
-                </div>
-                <div className="pb-1 text-sm text-[var(--text-muted)]">/ 100</div>
-              </div>
-              <div className="mt-2 text-[12px] text-[var(--text-muted)]">
-                Debt ratio {formatPercentWithDigits(report.debtRatio, 1)} · Savings coverage{" "}
-                {report.emergencyCoverageMonths == null ? "N/A" : `${report.emergencyCoverageMonths.toFixed(1)} mo`}
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <ScoreGauge score={report.healthScore} />
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                  {monthLabel ? `${monthLabel} score` : "Current score"}
+                </p>
+                <p className="text-[13px] leading-6 text-[var(--text-secondary)]">
+                  Debt ratio {formatPercentWithDigits(report.debtRatio, 1)} | Savings coverage{" "}
+                  {report.emergencyCoverageMonths == null ? "N/A" : `${report.emergencyCoverageMonths.toFixed(1)} mo`}
+                </p>
               </div>
             </div>
             <Badge tone={alertTone(report.alertStatus)}>{report.alertStatus}</Badge>
@@ -70,48 +95,45 @@ export function FinancialHealthIndicator({
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {report.healthPillars.map((pillar) => (
-            <div
-              key={pillar.key}
-              className="rounded-[1.35rem] border px-4 py-3"
-              style={{ borderColor: "var(--border-color)", background: "var(--surface-color)" }}
-            >
+            <div key={pillar.key} className="space-y-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                    {pillar.label}
-                  </div>
-                  <div className="mt-2 text-[1.35rem] font-semibold leading-none text-[var(--text-strong)]">
-                    {pillar.score}
-                  </div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-secondary)]">{pillar.label}</p>
+                  <p className="financial-value mt-1 text-[24px] font-semibold leading-none text-[var(--text-primary)]">{pillar.score}</p>
                 </div>
-                <Badge tone={pillarTone(pillar.score)} className="px-2.5 py-0.5 text-[10px]">
-                  {pillar.score}
-                </Badge>
+                <Badge tone={pillarTone(pillar.score)}>{pillar.score}</Badge>
               </div>
-              <div className="mt-3 text-[12px] leading-5 text-[var(--text-muted)]">{pillar.value}</div>
+              <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                <div
+                  className="h-full rounded-full bg-[var(--theme-primary)]"
+                  style={{ width: `${Math.max(0, Math.min(pillar.score, 100))}%` }}
+                />
+              </div>
+              <p className="text-[12px] leading-5 text-[var(--text-secondary)]">{pillar.value}</p>
             </div>
           ))}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-[1.2rem] border px-3 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Income</div>
-            <div className="mt-2 text-sm font-semibold text-[var(--text-strong)]">{formatCurrency(report.activeMonthIncome)}</div>
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Income</p>
+            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(report.activeMonthIncome)}</p>
           </div>
-          <div className="rounded-[1.2rem] border px-3 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Debt payments</div>
-            <div className="mt-2 text-sm font-semibold text-[var(--text-strong)]">{formatCurrency(report.monthlyDebtPayments)}</div>
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Debt payments</p>
+            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(report.monthlyDebtPayments)}</p>
           </div>
-          <div className="rounded-[1.2rem] border px-3 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Savings balance</div>
-            <div className="mt-2 text-sm font-semibold text-[var(--text-strong)]">{formatCurrency(report.savingsBalance)}</div>
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Savings balance</p>
+            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(report.savingsBalance)}</p>
           </div>
-          <div className="rounded-[1.2rem] border px-3 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Available savings</div>
-            <div className="mt-2 text-sm font-semibold text-[var(--text-strong)]">{formatCurrency(report.availableSavings)}</div>
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Available savings</p>
+            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(report.availableSavings)}</p>
           </div>
         </div>
       </div>
     </Card>
   );
 }
+

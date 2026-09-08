@@ -160,13 +160,13 @@ export function ImportRuleEditor({
 
         {requiresCategorySelection(draft.classificationType) ? (
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-raf-ink">Bucket assignment</span>
+            <span className="mb-2 block text-sm font-medium text-raf-ink">Category assignment</span>
             <select
               className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
               value={draft.categoryId}
               onChange={(event) => onChange({ categoryId: event.target.value })}
             >
-              <option value="">Select bucket</option>
+              <option value="">Select category</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>{category.label}</option>
               ))}

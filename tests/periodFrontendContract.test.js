@@ -13,8 +13,8 @@ test("app wiring includes the global period provider and month-aware pages", asy
 
   assert.match(appSource, /<PeriodProvider>/);
   assert.match(layoutSource, /usePeriod\(\)/);
-  assert.match(layoutSource, /setActiveMonth\(option\.value\)/);
-  assert.match(layoutSource, /jumpToCurrentMonth\(\)/);
+  assert.match(layoutSource, /onSelect\(option\.value\)/);
+  assert.match(layoutSource, /onCurrent=\{jumpToCurrentMonth\}/);
   assert.match(layoutSource, /disabled=\{isCurrentMonth\}/);
   assert.match(layoutSource, /Current month/);
   assert.match(dashboardSource, /usePeriod\(\)/);
