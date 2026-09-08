@@ -24,10 +24,12 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "better-sqlite3": "^12.9.0",
     "cors": "^2.8.6",
     "express": "^4.22.1",
     "pdf-parse": "^1.1.1",
+    "pg": "^8.23.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.1",

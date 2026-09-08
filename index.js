@@ -5,13 +5,15 @@ import express from 'express';
 
 import { loadServerEnv } from './lib/server/env.js';
 import { createApiRouter } from './lib/server/routerLoader.js';
-import { createSqliteDb } from './lib/server/sqliteDb.js';
+import { createServerDb } from './lib/server/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const { port, dbPath } = loadServerEnv({ cwd: __dirname });
-const db = createSqliteDb({ dbPath });
+const { port, dbPath, persistenceDriver, postgresConnectionString, authRequired } = loadServerEnv({ cwd: __dirname });
+const db = createServerDb({ persistenceDriver, dbPath, postgresConnectionString });
+
+console.log(`[RAF] persistence: ${persistenceDriver}`);
 const app = express();
 
 app.use((req, res, next) => {
@@ -93,7 +95,7 @@ const aliases = [
 const apiRouter = await createApiRouter({
   apiRootDir,
   db,
-  defaultHouseholdId: db.defaultHouseholdId,
+  defaultHouseholdId: authRequired ? null : (db.defaultHouseholdId ?? null),
   aliases,
 });
 
