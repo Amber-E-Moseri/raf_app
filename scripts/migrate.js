@@ -37,6 +37,7 @@ const RAF_MIGRATIONS = [
   '20260910000000_fix_signup_rls_bootstrap.sql',
   '20260910000001_fix_signup_rls_bootstrap_2.sql',
   '20260910000002_fix_workspace_members_bootstrap.sql',
+  '20260910000003_workspace_members_split_policies.sql',
 ];
 
 const migrationsDir = path.join(
