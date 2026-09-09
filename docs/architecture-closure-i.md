@@ -114,9 +114,7 @@ Audit log failures are swallowed (`console.error`, not re-thrown) — audit logg
 `loadServerEnv` throws on missing required vars. `checkRuntimeRolePrivileges` verifies DB role at startup. The server refuses to start if BYPASSRLS in production (`authRequired=true`).
 
 **Health endpoints**
-`/health` and `/api/v1/health` both respond 200. Neither verifies DB connectivity — they confirm only that the process is alive, not that the DB is reachable. A DB failure would return 200 from `/health` while all API calls fail with 500.
-
-**Gap:** Health endpoint is process-level, not DB-level. Under load, a Neon connection limit or DB unavailability would not be reflected in the health check. This is a production hardening item.
+Liveness/readiness split implemented (`792f597`). `/health` is static (process-alive, no DB call). `/api/v1/health` calls `db.ping()` and returns `{"ok":true,"db":"connected"}` on success or `{"ok":false,"db":"unavailable"}` + 503 on DB failure. Load balancer should use `/api/v1/health` as the readiness probe and `/health` as the liveness probe. Eight tests covering both paths, DB failure isolation, and no-auth requirement.
 
 ---
 
@@ -139,13 +137,13 @@ Four-job CI pipeline defined in `.github/workflows/ci.yml`: unit (always), Postg
 
 ---
 
-### 7. Operational Readiness — 6 / 10
+### 7. Operational Readiness — 8 / 10
 
 **Observability**
-Structured JSON request logging in `index.js` (lines 25–38): `{ level, event, method, path, status, durationMs, householdId }`. Format is machine-readable. Missing: `userId`, `workspaceId` in request logs (needed for incident investigation; requires careful PII handling). Missing: error monitoring (Sentry or equivalent) for unhandled exceptions.
+Structured JSON request logging in `index.js`: `{ level, event, method, path, status, durationMs, householdId }`. Format is machine-readable. `@sentry/node@10.73.0` wired (`aedd1f5`): initialises on `SENTRY_DSN`, no-op when absent, `beforeSend` scrubs auth headers and request body. Awaiting `SENTRY_DSN` deployment verification. Remaining gap: `userId`/`workspaceId` absent from request logs (H2 — PII review required).
 
 **Health check**
-`/health` is present but shallow — no DB connectivity verification, no schema version check. Not suitable as a load balancer health check under DB failure scenarios.
+Liveness/readiness split in place (see Reliability §5). `/api/v1/health` is suitable as a load balancer readiness probe; `/health` as liveness probe.
 
 **Backup and restore**
 Neon automated backups exist at the platform level. No backup/restore procedure is documented in this repository. No restore drill has been run.
@@ -159,7 +157,7 @@ Forward-only migration runner with schema_migrations tracking. Migrations are no
 **Secrets hygiene**
 `.env.example` documents all required vars. `.env` is gitignored. No secrets appear in git history based on current tracking audit.
 
-**Gap severity:** Missing error monitoring and shallow health check are the two items that most directly affect production incident response time.
+**Gap severity:** Error monitoring is code-complete; health probe is resolved. Remaining gaps (backup/restore docs, pre-flight schema check) are hardening items, not incident-response blockers.
 
 ---
 
@@ -173,8 +171,8 @@ Forward-only migration runner with schema_migrations tracking. Migrations are no
 | Security | 9 / 10 |
 | Reliability | 8 / 10 |
 | Testing | 8 / 10 |
-| Operational readiness | 6 / 10 |
-| **Composite** | **8.0 / 10** |
+| Operational readiness | 8 / 10 |
+| **Composite** | **8.3 / 10** |
 
 ---
 
@@ -182,10 +180,10 @@ Forward-only migration runner with schema_migrations tracking. Migrations are no
 
 | # | Blocker | Status |
 |---|---------|--------|
-| **B1** | `raf_app` role not yet created in Neon Console and `POSTGRES_CONNECTION_STRING_APP` not yet set → RLS Layer 3 is inactive | **OPEN** — deployment step (Neon Console + env) |
-| **B2** | No error monitoring — unhandled exceptions are silent beyond server logs | **RESOLVED** — `@sentry/node@10.73.0` wired in `aedd1f5`; no-op when `SENTRY_DSN` absent |
+| **B1** | `raf_app` role not yet created in Neon Console and `POSTGRES_CONNECTION_STRING_APP` not yet set → RLS Layer 3 is inactive | **RESOLVED** — role created, `POSTGRES_CONNECTION_STRING_APP` set, 16/16 RLS suite passes under `NOBYPASSRLS` runtime role |
+| **B2** | No error monitoring — unhandled exceptions are silent beyond server logs | **CODE COMPLETE** — `@sentry/node@10.73.0` wired in `aedd1f5`; awaiting deployment verification (set `SENTRY_DSN`, trigger test 500, confirm scrubbing) |
 
-Until B1 is complete, Layer 3 (PostgreSQL RLS) is a documented policy with correct code but no active enforcement. Layers 1 and 2 remain fully active and provide independent isolation.
+B1 resolution evidence: `[RAF] runtime role "raf_app": NOBYPASSRLS NOSUPERUSER — RLS active ✓` confirmed at server startup. `tests/branchERlsEnforcement.test.js` 16/16 pass under `appPool` (raf_app role, NOBYPASSRLS) — cross-workspace SELECT blocked, INSERT/UPDATE/DELETE blocked, fail-closed on missing context, no pool leakage. All three tenant-isolation layers now independently active.
 
 B2 resolution notes: `lib/server/sentry.js` initialises Sentry conditionally on `SENTRY_DSN`. `beforeSend` scrubs `Authorization`/`cookie` headers and the request body before any event reaches Sentry (`sendDefaultPii: false`). `Sentry.setupExpressErrorHandler(app)` is placed before the existing structured-logging error handler so unhandled exceptions are captured and then re-thrown to the handler for response serialisation. Set `SENTRY_DSN` in the deployment environment to activate.
 
