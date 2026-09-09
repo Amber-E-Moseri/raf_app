@@ -6,6 +6,7 @@ import express from 'express';
 import { loadServerEnv, checkRuntimeRolePrivileges } from './lib/server/env.js';
 import { createApiRouter } from './lib/server/routerLoader.js';
 import { createServerDb } from './lib/server/db.js';
+import { checkReadiness } from './lib/server/readinessHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,10 +73,9 @@ app.get('/health', (_req, res) => {
   });
 });
 
-app.get('/api/v1/health', (_req, res) => {
-  res.status(200).json({
-    ok: true,
-  });
+app.get('/api/v1/health', async (_req, res) => {
+  const { status, body } = await checkReadiness(db);
+  res.status(status).json(body);
 });
 
 const apiRootDir = path.join(__dirname, 'app', 'api', 'v1');
