@@ -13,6 +13,8 @@ const financialAccountsMigrationPath = path.join(repoRoot, 'db', 'migrations', '
 const financialAccountsSql = fs.readFileSync(financialAccountsMigrationPath, 'utf8');
 const tokenBlacklistMigrationPath = path.join(repoRoot, 'db', 'migrations', '20260905000000_add_token_blacklist.sql');
 const tokenBlacklistSql = fs.readFileSync(tokenBlacklistMigrationPath, 'utf8');
+const ownerBootstrapMigrationPath = path.join(repoRoot, 'db', 'migrations', '20260910000006_owner_scoped_signup_bootstrap.sql');
+const ownerBootstrapSql = fs.readFileSync(ownerBootstrapMigrationPath, 'utf8');
 
 const tenantTables = [
   'households',
@@ -157,4 +159,13 @@ test('token blacklist migration creates durable jti revocation storage and clean
   assert.match(tokenBlacklistSql, /expires_at\s+timestamptz\s+not null/i);
   assert.match(tokenBlacklistSql, /create or replace function raf\.cleanup_expired_tokens\(\)/i);
   assert.match(tokenBlacklistSql, /delete from raf\.token_blacklist where expires_at < now\(\)/i);
+});
+
+test('owner-scoped signup bootstrap migration avoids broad insert policies', () => {
+  assert.match(ownerBootstrapSql, /CREATE OR REPLACE FUNCTION raf\.is_workspace_owner[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = raf, pg_catalog/);
+  assert.match(ownerBootstrapSql, /CREATE POLICY workspaces_insert_policy[\s\S]*WITH CHECK \(owner_user_id = raf\.current_app_user_id\(\)\)/);
+  assert.match(ownerBootstrapSql, /CREATE POLICY workspace_members_insert_policy[\s\S]*user_id = raf\.current_app_user_id\(\)[\s\S]*role = 'owner'[\s\S]*status = 'active'[\s\S]*raf\.is_workspace_owner\(workspace_id, user_id\)/);
+  assert.match(ownerBootstrapSql, /CREATE POLICY households_insert_policy[\s\S]*raf\.has_workspace_role\(workspace_id, ARRAY\['owner', 'admin'\]::raf\.workspace_role\[\]\)/);
+  assert.doesNotMatch(ownerBootstrapSql, /WITH CHECK\s*\(\s*true\s*\)/i);
+  assert.doesNotMatch(ownerBootstrapSql, /workspace_has_no_members/);
 });

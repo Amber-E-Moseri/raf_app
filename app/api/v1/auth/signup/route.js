@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { hashPassword } from '../../../../../lib/auth/password.js';
 import { createToken } from '../../../../../lib/auth/jwt.js';
 import { ensureUserOnboarded, formatAuthSessionPayload } from '../../../../../lib/auth/onboarding.js';
@@ -53,27 +54,33 @@ export async function POST(request, context) {
     }
   }
 
-  let user, household, userHousehold;
+  let user, workspace, member;
   try {
     const passwordHash = await hashPassword(password);
+    const userId = crypto.randomUUID();
+    const workspaceId = crypto.randomUUID();
 
     const result = await db.transaction(async (tx) => {
-      const newUser = await tx.createUser({ email, passwordHash });
-      const newHousehold = await tx.createHousehold({
-        ownerUserId: newUser.id,
+      const newUser = await tx.createUser({ id: userId, email, passwordHash });
+      const newWorkspace = await tx.createWorkspaceRecord({
+        id: workspaceId,
+        ownerUserId: userId,
         name: householdName ?? 'My Household',
+        type: 'household',
       });
-      const link = await tx.createUserHousehold({
-        userId: newUser.id,
-        householdId: newHousehold.id,
+      const newMember = await tx.createWorkspaceMember({
+        workspaceId,
+        userId,
         role: 'owner',
+        status: 'active',
       });
-      return { user: newUser, household: newHousehold, link };
-    });
+      await tx.initializeWorkspaceDefaults({ workspace: newWorkspace });
+      return { user: newUser, workspace: newWorkspace, member: newMember };
+    }, { userId, workspaceId });
 
     user = result.user;
-    household = result.household;
-    userHousehold = result.link;
+    workspace = result.workspace;
+    member = result.member;
   } catch (err) {
     if (err.message === 'EMAIL_TAKEN') {
       return json({ error: 'An account with that email already exists' }, 409);
@@ -88,23 +95,23 @@ export async function POST(request, context) {
     email: user.email,
     token,
     household: {
-      id: household.id,
-      name: household.name,
-      role: userHousehold.role,
+      id: workspace.id,
+      name: workspace.name,
+      role: member.role,
     },
     workspace: {
-      id: household.id,
-      name: household.name,
-      type: household.type ?? 'household',
-      role: userHousehold.role,
-      status: userHousehold.status ?? 'active',
+      id: workspace.id,
+      name: workspace.name,
+      type: workspace.type ?? 'household',
+      role: member.role,
+      status: member.status ?? 'active',
     },
     workspaces: [{
-      id: household.id,
-      name: household.name,
-      type: household.type ?? 'household',
-      role: userHousehold.role,
-      status: userHousehold.status ?? 'active',
+      id: workspace.id,
+      name: workspace.name,
+      type: workspace.type ?? 'household',
+      role: member.role,
+      status: member.status ?? 'active',
     }],
   }, 201);
 }
