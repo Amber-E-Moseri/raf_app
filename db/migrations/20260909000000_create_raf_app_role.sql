@@ -65,13 +65,10 @@ BEGIN
 END
 $$;
 
--- Ensure the role is NOT a superuser and does NOT have BYPASSRLS.
--- These are the no-ops if already correct, and the explicit guard against
--- accidental privilege grants via Neon Console or a prior ALTER ROLE.
-ALTER ROLE raf_app NOSUPERUSER;
--- Note: NOBYPASSRLS is the default; ALTER ROLE raf_app NOBYPASSRLS is valid
--- syntax in PG 16+ but may not be supported in all Neon versions — the
--- absence of BYPASSRLS from the CREATE ROLE above is the controlling setting.
+-- NOBYPASSRLS is the Neon Console default and is set via CREATE ROLE above.
+-- ALTER ROLE raf_app NOSUPERUSER is omitted: neondb_owner lacks superuser
+-- and cannot change the SUPERUSER attribute; the CREATE ROLE NOSUPERUSER
+-- above is the controlling setting.
 
 -- Schema access.
 GRANT USAGE ON SCHEMA raf TO raf_app;
