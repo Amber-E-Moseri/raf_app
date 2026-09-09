@@ -75,9 +75,31 @@ export function AllocationBarChart({ items, activeMonthLabel }: AllocationBarCha
                   to={item.slug
                     ? `/transactions?categorySlug=${encodeURIComponent(item.slug)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`
                     : `/transactions?categoryId=${encodeURIComponent(item.bucketId)}&focusLabel=${encodeURIComponent(item.label)}#transactions-table`}
-                  className="group block rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-4 transition duration-150 hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]"
+                  className="group block rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-3.5 transition duration-150 hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] sm:py-4"
                 >
-                  <div className="space-y-3">
+                  {/* Mobile layout */}
+                  <div className="space-y-2 sm:hidden">
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 w-3 shrink-0 rounded-full" style={{ background: barColor(index) }} />
+                      <div className="min-w-0 flex-1 truncate text-[14px] font-semibold text-[var(--text-primary)]">{item.label}</div>
+                      <div className="financial-value text-[14px] font-semibold tracking-tight text-[var(--text-primary)]">
+                        {formatCurrency(currentMonthAmount.toFixed(2))}
+                      </div>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        aria-label={uncappedProgress > 100 ? "over budget" : "budget usage"}
+                        style={{
+                          width: `${progress}%`,
+                          background: uncappedProgress > 100 ? "var(--status-danger)" : barColor(index),
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Desktop layout */}
+                  <div className="hidden space-y-3 sm:block">
                     <div className="flex items-center gap-4">
                       <div className="flex min-w-[152px] items-center gap-3">
                         <div className="h-[14px] w-[14px] shrink-0 rounded-full" style={{ background: barColor(index) }} />

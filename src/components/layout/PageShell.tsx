@@ -11,7 +11,7 @@ interface PageShellProps {
 export function PageShell({ eyebrow, title, description, actions, children }: PageShellProps) {
   return (
     <div className="space-y-8">
-      <header className="ui-card p-5 sm:p-6">
+      <header className="ui-card hidden p-5 sm:p-6 md:block">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">

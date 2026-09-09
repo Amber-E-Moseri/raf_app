@@ -12,7 +12,7 @@ import { checkReadiness } from './lib/server/readinessHandler.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const { port, dbPath, persistenceDriver, postgresConnectionString, authRequired, sentryDsn } = loadServerEnv({ cwd: __dirname });
+const { port, dbPath, persistenceDriver, postgresConnectionString, authRequired, sentryDsn, allowedOrigins } = loadServerEnv({ cwd: __dirname });
 
 initSentry(sentryDsn);
 
@@ -42,10 +42,15 @@ app.use((req, res, next) => {
   next();
 });
 
+const allowedOriginsSet = new Set(allowedOrigins);
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
-  if (origin && /^https?:\/\/localhost:\d+$/.test(origin)) {
+  const isLocalhost = origin && /^https?:\/\/localhost:\d+$/.test(origin);
+  const isAllowed = origin && allowedOriginsSet.has(origin);
+
+  if (isLocalhost || isAllowed) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Vary', 'Origin');
   }

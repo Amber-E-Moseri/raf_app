@@ -401,7 +401,7 @@ export function Dashboard() {
           </div>
         </Card>
       ) : null}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-3">
         <SummaryMetricCard
           title="Income this month"
           value={formatCurrency(latestPeriodIncome)}
@@ -416,13 +416,15 @@ export function Dashboard() {
           badge={monthWorkflow.data.activeMonthStatus.status}
           tone={monthWorkflow.data.activeMonthStatus.status === "closed" ? "success" : alertTone(data.latestPeriod?.alertStatus)}
         />
-        <SummaryMetricCard
-          title="Active categories"
-          value={String(activeCategoryCount)}
-          subtitle={activeCategoryCount ? "Configuration ready" : "Awaiting setup"}
-          badge={activeCategoryCount ? "configured" : "empty"}
-          tone={activeCategoryCount ? "success" : "warning"}
-        />
+        <div className="col-span-2 xl:col-span-1">
+          <SummaryMetricCard
+            title="Active categories"
+            value={String(activeCategoryCount)}
+            subtitle={activeCategoryCount ? "Configuration ready" : "Awaiting setup"}
+            badge={activeCategoryCount ? "configured" : "empty"}
+            tone={activeCategoryCount ? "success" : "warning"}
+          />
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.6fr,1fr]">
@@ -605,7 +607,7 @@ export function Dashboard() {
           ) : null}
 
           <Card
-            title="Recent activity"
+            title="Recent transactions"
             actions={(
               <Link className="text-[11px] font-medium text-[var(--primary-color)]" to="/transactions#transactions-table">
                 See all -&gt;
@@ -631,7 +633,7 @@ export function Dashboard() {
                       </div>
                       <Badge tone={transactionTone(transaction)}>{categoryLabel}</Badge>
                       <div className={`w-20 text-right text-[13px] font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
-                        {formatCurrency(transaction.amount)}
+                        {transaction.direction === "credit" ? "+" : ""}{formatCurrency(transaction.amount)}
                       </div>
                     </Link>
                   );

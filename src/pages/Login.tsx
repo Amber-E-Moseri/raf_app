@@ -44,11 +44,11 @@ export function Login() {
     >
       <div className="w-full max-w-sm">
         {/* Brand */}
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="brand-mark text-lg">R</div>
+        <div className="mb-8 flex flex-col items-center gap-4">
+          <div className="brand-mark" style={{ width: 60, height: 60, borderRadius: 18, fontSize: 24 }}>R</div>
           <div className="text-center">
             <p className="text-[22px] font-bold tracking-[-0.02em] text-[var(--text-strong)]">RAF</p>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Finance OS</p>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Resource Allocation Framework</p>
           </div>
         </div>
 

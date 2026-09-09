@@ -49,10 +49,10 @@ const desktopNavigation = [
 
 const mobileTabs = [
   { to: "/dashboard", label: "Home", icon: "home" },
-  { to: "/transactions", label: "Transactions", icon: "list" },
+  { to: "/transactions", label: "Txns", icon: "list" },
   { to: "/remi", label: "Remi", icon: "remi" },
   { to: "/monthly-review", label: "Review", icon: "calendar" },
-  { to: "/settings", label: "Settings", icon: "user" },
+  { to: "/settings", label: "More", icon: "user" },
 ];
 
 function navClassName(isActive: boolean) {

@@ -21,7 +21,7 @@ export function SummaryMetricCard({
   icon,
 }: SummaryMetricCardProps) {
   return (
-    <Card className="summary-metric-card min-h-[120px] overflow-hidden">
+    <Card className="summary-metric-card min-h-[100px] overflow-hidden sm:min-h-[120px]">
       <div className="flex h-full flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">{title}</p>
@@ -29,8 +29,8 @@ export function SummaryMetricCard({
         </div>
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="financial-value text-[30px] font-bold leading-none tracking-[-0.02em] text-[var(--text-primary)]">{value}</p>
-            <p className="mt-2 text-[12px] font-medium text-[var(--text-secondary)]">{subtitle}</p>
+            <p className="financial-value text-[22px] font-bold leading-none tracking-[-0.02em] text-[var(--text-primary)] sm:text-[30px]">{value}</p>
+            <p className="mt-1.5 text-[11px] font-medium text-[var(--text-secondary)] sm:mt-2 sm:text-[12px]">{subtitle}</p>
           </div>
           {icon ? <div className="text-[var(--text-subtle)]">{icon}</div> : null}
         </div>
