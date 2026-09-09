@@ -180,12 +180,14 @@ Forward-only migration runner with schema_migrations tracking. Migrations are no
 
 ## Conditional Blockers — Required Before Launch
 
-| # | Blocker | Where to fix |
-|---|---------|-------------|
-| **B1** | `raf_app` role not yet created in Neon Console and `POSTGRES_CONNECTION_STRING_APP` not yet set → RLS Layer 3 is inactive | Neon Console + deployment env |
-| **B2** | No error monitoring — unhandled exceptions are silent beyond server logs | Production hardening: Sentry or equivalent |
+| # | Blocker | Status |
+|---|---------|--------|
+| **B1** | `raf_app` role not yet created in Neon Console and `POSTGRES_CONNECTION_STRING_APP` not yet set → RLS Layer 3 is inactive | **OPEN** — deployment step (Neon Console + env) |
+| **B2** | No error monitoring — unhandled exceptions are silent beyond server logs | **RESOLVED** — `@sentry/node@10.73.0` wired in `aedd1f5`; no-op when `SENTRY_DSN` absent |
 
 Until B1 is complete, Layer 3 (PostgreSQL RLS) is a documented policy with correct code but no active enforcement. Layers 1 and 2 remain fully active and provide independent isolation.
+
+B2 resolution notes: `lib/server/sentry.js` initialises Sentry conditionally on `SENTRY_DSN`. `beforeSend` scrubs `Authorization`/`cookie` headers and the request body before any event reaches Sentry (`sendDefaultPii: false`). `Sentry.setupExpressErrorHandler(app)` is placed before the existing structured-logging error handler so unhandled exceptions are captured and then re-thrown to the handler for response serialisation. Set `SENTRY_DSN` in the deployment environment to activate.
 
 ---
 
@@ -193,7 +195,7 @@ Until B1 is complete, Layer 3 (PostgreSQL RLS) is a documented policy with corre
 
 | # | Item |
 |---|------|
-| H1 | Health endpoint should verify DB connectivity (SELECT 1) before returning 200 |
+| H1 | ~~Health endpoint should verify DB connectivity (SELECT 1) before returning 200~~ **RESOLVED** — liveness/readiness split (`792f597`) |
 | H2 | Add `workspaceId` to structured request logs (PII review required) |
 | H3 | Document backup and restore procedure; run one restore drill |
 | H4 | Pre-flight schema version check at server startup |
