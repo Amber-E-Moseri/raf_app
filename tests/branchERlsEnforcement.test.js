@@ -50,6 +50,8 @@ let appPool;   // raf_app — NOBYPASSRLS, for RLS assertions (proves real enfor
 
 // Fixture identities — created once, used across tests
 let userA, userB;
+// Shared allocation_category for workspace A (goals require a non-null bucket_id FK)
+let bucketAId;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -165,6 +167,14 @@ before(async () => {
     const ts = Date.now();
     userA = await createWorkspaceFixture(adminClient, { email: `rls-a-${ts}@test.test` });
     userB = await createWorkspaceFixture(adminClient, { email: `rls-b-${ts}@test.test` });
+    // Create a shared allocation_category for workspace A — goals require a non-null bucket_id.
+    // allocation_percent = 1.0 (100%) so enforce_active_allocation_percent_sum passes at COMMIT.
+    bucketAId = uuid();
+    await adminClient.query(
+      `INSERT INTO raf.allocation_categories (id, workspace_id, snapshot_id, slug, label, allocation_percent)
+       VALUES ($1, $2, gen_random_uuid(), 'rls-test', 'RLS Test Bucket', 1.0)`,
+      [bucketAId, userA.workspaceId],
+    );
     await adminClient.query('COMMIT');
   } catch (err) {
     await adminClient.query('ROLLBACK');
@@ -207,14 +217,29 @@ after(async () => {
 maybeTest('Phase 7 RLS SELECT: income_entries WS-A row invisible to WS-B raf_app session', async () => {
   const incId = uuid();
 
-  // Setup: INSERT into WS-A via privileged admin connection
+  // Setup: INSERT income_entry + matching allocation in one transaction.
+  // The deferred enforce_income_entry_allocation_total trigger fires at COMMIT and
+  // requires SUM(allocations) = amount. income_entries_amount_check also requires amount > 0.
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.income_entries (id, workspace_id, source_name, amount, received_date, created_at, updated_at)
-     VALUES ($1, $2, 'A Secret Income', 1500.00, '2026-08-01', now(), now())`,
-    [incId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    await adminClient.query('BEGIN');
+    await adminClient.query(
+      `INSERT INTO raf.income_entries (id, workspace_id, source_name, amount, received_date, created_at, updated_at)
+       VALUES ($1, $2, 'A Secret Income', 50.00, '2026-08-01', now(), now())`,
+      [incId, userA.workspaceId],
+    );
+    await adminClient.query(
+      `INSERT INTO raf.income_allocations (workspace_id, income_entry_id, allocation_category_id, allocated_amount, allocation_percent)
+       VALUES ($1, $2, $3, 50.00, 1.0)`,
+      [userA.workspaceId, incId, bucketAId],
+    );
+    await adminClient.query('COMMIT');
+  } catch (e) {
+    await adminClient.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    adminClient.release();
+  }
 
   // Assertion: WS-B session via raf_app — must see 0 rows
   const appClient = await appPool.connect();
@@ -236,21 +261,34 @@ maybeTest('Phase 7 RLS SELECT: income_entries WS-A row invisible to WS-B raf_app
     appClient.release();
   }
 
-  // Cleanup
+  // Cleanup — allocations first (FK), then entry
   const cleanClient = await adminPool.connect();
-  await cleanClient.query(`DELETE FROM raf.income_entries WHERE id = $1`, [incId]);
-  cleanClient.release();
+  try {
+    await cleanClient.query('BEGIN');
+    await cleanClient.query(`DELETE FROM raf.income_allocations WHERE income_entry_id = $1`, [incId]);
+    await cleanClient.query(`DELETE FROM raf.income_entries WHERE id = $1`, [incId]);
+    await cleanClient.query('COMMIT');
+  } catch (e) {
+    await cleanClient.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    cleanClient.release();
+  }
 });
 
 maybeTest('Phase 7 RLS SELECT: debts WS-A row invisible to WS-B raf_app session', async () => {
   const debtId = uuid();
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.debts (id, workspace_id, name, starting_balance, current_balance, apr, minimum_payment, monthly_payment, created_at, updated_at)
-     VALUES ($1, $2, 'A Secret Debt', 5000.00, 5000.00, 10.0, 50.00, 200.00, now(), now())`,
-    [debtId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    // current_balance was removed from the schema; apr/minimum_payment/monthly_payment have defaults
+    await adminClient.query(
+      `INSERT INTO raf.debts (id, workspace_id, name, starting_balance)
+       VALUES ($1, $2, 'A Secret Debt', 5000.00)`,
+      [debtId, userA.workspaceId],
+    );
+  } finally {
+    adminClient.release();
+  }
 
   const appClient = await appPool.connect();
   try {
@@ -271,12 +309,17 @@ maybeTest('Phase 7 RLS SELECT: debts WS-A row invisible to WS-B raf_app session'
 maybeTest('Phase 7 RLS SELECT: goals WS-A row invisible to WS-B raf_app session', async () => {
   const goalId = uuid();
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.goals (id, workspace_id, name, target_amount, created_at, updated_at)
-     VALUES ($1, $2, 'A Secret Goal', 20000.00, now(), now())`,
-    [goalId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    // Use the shared bucketAId from the before hook — avoids a second active allocation_category
+    // (which would break the enforce_active_allocation_percent_sum trigger).
+    await adminClient.query(
+      `INSERT INTO raf.goals (id, workspace_id, bucket_id, name, target_amount, created_at, updated_at)
+       VALUES ($1, $2, $3, 'A Secret Goal', 20000.00, now(), now())`,
+      [goalId, userA.workspaceId, bucketAId],
+    );
+  } finally {
+    adminClient.release();
+  }
 
   const appClient = await appPool.connect();
   try {
@@ -290,19 +333,26 @@ maybeTest('Phase 7 RLS SELECT: goals WS-A row invisible to WS-B raf_app session'
   }
 
   const cleanClient = await adminPool.connect();
-  await cleanClient.query(`DELETE FROM raf.goals WHERE id = $1`, [goalId]);
-  cleanClient.release();
+  try {
+    await cleanClient.query(`DELETE FROM raf.goals WHERE id = $1`, [goalId]);
+  } finally {
+    cleanClient.release();
+  }
 });
 
 maybeTest('Phase 7 RLS SELECT: transactions WS-A row invisible to WS-B raf_app session', async () => {
   const txId = uuid();
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.transactions (id, workspace_id, description, amount, transaction_date, created_at, updated_at)
-     VALUES ($1, $2, 'A Secret Txn', 99.99, '2026-08-15', now(), now())`,
-    [txId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    // direction is NOT NULL with no default; source and raw_json have defaults
+    await adminClient.query(
+      `INSERT INTO raf.transactions (id, workspace_id, description, amount, transaction_date, direction, created_at, updated_at)
+       VALUES ($1, $2, 'A Secret Txn', 99.99, '2026-08-15', 'debit', now(), now())`,
+      [txId, userA.workspaceId],
+    );
+  } finally {
+    adminClient.release();
+  }
 
   const appClient = await appPool.connect();
   try {
@@ -323,12 +373,15 @@ maybeTest('Phase 7 RLS SELECT: transactions WS-A row invisible to WS-B raf_app s
 maybeTest('Phase 7 RLS SELECT: fixed_bills WS-A row invisible to WS-B raf_app session', async () => {
   const billId = uuid();
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.fixed_bills (id, workspace_id, name, expected_amount, due_day_of_month, category_slug, created_at, updated_at)
-     VALUES ($1, $2, 'A Secret Bill', 1200.00, 1, 'fixed_bills', now(), now())`,
-    [billId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    await adminClient.query(
+      `INSERT INTO raf.fixed_bills (id, workspace_id, name, expected_amount, due_day_of_month, category_slug, created_at, updated_at)
+       VALUES ($1, $2, 'A Secret Bill', 1200.00, 1, 'fixed_bills', now(), now())`,
+      [billId, userA.workspaceId],
+    );
+  } finally {
+    adminClient.release();
+  }
 
   const appClient = await appPool.connect();
   try {
@@ -355,9 +408,9 @@ maybeTest('Phase 7 RLS INSERT: WS-B raf_app session cannot INSERT into WS-A (WIT
     // Attempt to INSERT a goal with workspace_id = WS-A while authenticated as WS-B
     await asAuthenticated(appClient, { userId: userB.userId, workspaceId: userB.workspaceId }, async (c) => {
       await c.query(
-        `INSERT INTO raf.goals (id, workspace_id, name, target_amount, created_at, updated_at)
-         VALUES ($1, $2, 'B Injected into A', 99.00, now(), now())`,
-        [goalId, userA.workspaceId],
+        `INSERT INTO raf.goals (id, workspace_id, bucket_id, name, target_amount, created_at, updated_at)
+         VALUES ($1, $2, $3, 'B Injected into A', 99.00, now(), now())`,
+        [goalId, userA.workspaceId, bucketAId],
       );
     });
   } catch (err) {
@@ -372,8 +425,12 @@ maybeTest('Phase 7 RLS INSERT: WS-B raf_app session cannot INSERT into WS-A (WIT
 
   // The row must not appear in WS-A regardless of whether RLS threw or silently blocked
   const adminClient = await adminPool.connect();
-  const { rows } = await adminClient.query(`SELECT id FROM raf.goals WHERE id = $1`, [goalId]);
-  adminClient.release();
+  let rows;
+  try {
+    ({ rows } = await adminClient.query(`SELECT id FROM raf.goals WHERE id = $1`, [goalId]));
+  } finally {
+    adminClient.release();
+  }
 
   if (!rlsRejected) {
     // If no error, the row must be absent (USING-only policy silently blocks visibility)
@@ -387,12 +444,15 @@ maybeTest('Phase 7 RLS INSERT: WS-B raf_app session cannot INSERT into WS-A (WIT
 maybeTest('Phase 7 RLS UPDATE: WS-B raf_app session cannot UPDATE WS-A row', async () => {
   const debtId = uuid();
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.debts (id, workspace_id, name, starting_balance, current_balance, apr, minimum_payment, monthly_payment, created_at, updated_at)
-     VALUES ($1, $2, 'Original Name', 3000.00, 3000.00, 5.0, 50.00, 100.00, now(), now())`,
-    [debtId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    await adminClient.query(
+      `INSERT INTO raf.debts (id, workspace_id, name, starting_balance)
+       VALUES ($1, $2, 'Original Name', 3000.00)`,
+      [debtId, userA.workspaceId],
+    );
+  } finally {
+    adminClient.release();
+  }
 
   const appClient = await appPool.connect();
   try {
@@ -425,12 +485,15 @@ maybeTest('Phase 7 RLS UPDATE: WS-B raf_app session cannot UPDATE WS-A row', asy
 maybeTest('Phase 7 RLS DELETE: WS-B raf_app session cannot DELETE WS-A row', async () => {
   const goalId = uuid();
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.goals (id, workspace_id, name, target_amount, created_at, updated_at)
-     VALUES ($1, $2, 'A Goal to Protect', 5000.00, now(), now())`,
-    [goalId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    await adminClient.query(
+      `INSERT INTO raf.goals (id, workspace_id, bucket_id, name, target_amount, created_at, updated_at)
+       VALUES ($1, $2, $3, 'A Goal to Protect', 5000.00, now(), now())`,
+      [goalId, userA.workspaceId, bucketAId],
+    );
+  } finally {
+    adminClient.release();
+  }
 
   const appClient = await appPool.connect();
   try {
@@ -462,12 +525,25 @@ maybeTest('Phase 7 RLS DELETE: WS-B raf_app session cannot DELETE WS-A row', asy
 maybeTest('Phase 8: no session vars → income_entries returns 0 rows from raf_app', async () => {
   const incId = uuid();
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.income_entries (id, workspace_id, source_name, amount, received_date, created_at, updated_at)
-     VALUES ($1, $2, 'Fail-Closed Test', 100.00, '2026-08-01', now(), now())`,
-    [incId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    await adminClient.query('BEGIN');
+    await adminClient.query(
+      `INSERT INTO raf.income_entries (id, workspace_id, source_name, amount, received_date, created_at, updated_at)
+       VALUES ($1, $2, 'Fail-Closed Test', 50.00, '2026-08-01', now(), now())`,
+      [incId, userA.workspaceId],
+    );
+    await adminClient.query(
+      `INSERT INTO raf.income_allocations (workspace_id, income_entry_id, allocation_category_id, allocated_amount, allocation_percent)
+       VALUES ($1, $2, $3, 50.00, 1.0)`,
+      [userA.workspaceId, incId, bucketAId],
+    );
+    await adminClient.query('COMMIT');
+  } catch (e) {
+    await adminClient.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    adminClient.release();
+  }
 
   const appClient = await appPool.connect();
   try {
@@ -482,19 +558,41 @@ maybeTest('Phase 8: no session vars → income_entries returns 0 rows from raf_a
   }
 
   const cleanClient = await adminPool.connect();
-  await cleanClient.query(`DELETE FROM raf.income_entries WHERE id = $1`, [incId]);
-  cleanClient.release();
+  try {
+    await cleanClient.query('BEGIN');
+    await cleanClient.query(`DELETE FROM raf.income_allocations WHERE income_entry_id = $1`, [incId]);
+    await cleanClient.query(`DELETE FROM raf.income_entries WHERE id = $1`, [incId]);
+    await cleanClient.query('COMMIT');
+  } catch (e) {
+    await cleanClient.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    cleanClient.release();
+  }
 });
 
 maybeTest('Phase 8: only user_id set (no workspace) → financial tables return 0 rows', async () => {
   const incId = uuid();
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.income_entries (id, workspace_id, source_name, amount, received_date, created_at, updated_at)
-     VALUES ($1, $2, 'User-Only Context', 200.00, '2026-08-01', now(), now())`,
-    [incId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    await adminClient.query('BEGIN');
+    await adminClient.query(
+      `INSERT INTO raf.income_entries (id, workspace_id, source_name, amount, received_date, created_at, updated_at)
+       VALUES ($1, $2, 'User-Only Context', 50.00, '2026-08-01', now(), now())`,
+      [incId, userA.workspaceId],
+    );
+    await adminClient.query(
+      `INSERT INTO raf.income_allocations (workspace_id, income_entry_id, allocation_category_id, allocated_amount, allocation_percent)
+       VALUES ($1, $2, $3, 50.00, 1.0)`,
+      [userA.workspaceId, incId, bucketAId],
+    );
+    await adminClient.query('COMMIT');
+  } catch (e) {
+    await adminClient.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    adminClient.release();
+  }
 
   const appClient = await appPool.connect();
   try {
@@ -516,8 +614,17 @@ maybeTest('Phase 8: only user_id set (no workspace) → financial tables return 
   }
 
   const cleanClient = await adminPool.connect();
-  await cleanClient.query(`DELETE FROM raf.income_entries WHERE id = $1`, [incId]);
-  cleanClient.release();
+  try {
+    await cleanClient.query('BEGIN');
+    await cleanClient.query(`DELETE FROM raf.income_allocations WHERE income_entry_id = $1`, [incId]);
+    await cleanClient.query(`DELETE FROM raf.income_entries WHERE id = $1`, [incId]);
+    await cleanClient.query('COMMIT');
+  } catch (e) {
+    await cleanClient.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    cleanClient.release();
+  }
 });
 
 maybeTest('Phase 8: workspace_members readable with user_id-only (auth path requirement)', async () => {
@@ -592,12 +699,25 @@ maybeTest('Phase 9 pool: transaction-local vars cleared after ROLLBACK (raf_app 
 maybeTest('Phase 9 pool: WS-A data not visible in subsequent WS-B transaction on same connection', async () => {
   const incId = uuid();
   const adminClient = await adminPool.connect();
-  await adminClient.query(
-    `INSERT INTO raf.income_entries (id, workspace_id, source_name, amount, received_date, created_at, updated_at)
-     VALUES ($1, $2, 'Leakage Test', 50.00, '2026-08-01', now(), now())`,
-    [incId, userA.workspaceId],
-  );
-  adminClient.release();
+  try {
+    await adminClient.query('BEGIN');
+    await adminClient.query(
+      `INSERT INTO raf.income_entries (id, workspace_id, source_name, amount, received_date, created_at, updated_at)
+       VALUES ($1, $2, 'Leakage Test', 50.00, '2026-08-01', now(), now())`,
+      [incId, userA.workspaceId],
+    );
+    await adminClient.query(
+      `INSERT INTO raf.income_allocations (workspace_id, income_entry_id, allocation_category_id, allocated_amount, allocation_percent)
+       VALUES ($1, $2, $3, 50.00, 1.0)`,
+      [userA.workspaceId, incId, bucketAId],
+    );
+    await adminClient.query('COMMIT');
+  } catch (e) {
+    await adminClient.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    adminClient.release();
+  }
 
   const appClient = await appPool.connect();
   try {
@@ -620,8 +740,17 @@ maybeTest('Phase 9 pool: WS-A data not visible in subsequent WS-B transaction on
   }
 
   const cleanClient = await adminPool.connect();
-  await cleanClient.query(`DELETE FROM raf.income_entries WHERE id = $1`, [incId]);
-  cleanClient.release();
+  try {
+    await cleanClient.query('BEGIN');
+    await cleanClient.query(`DELETE FROM raf.income_allocations WHERE income_entry_id = $1`, [incId]);
+    await cleanClient.query(`DELETE FROM raf.income_entries WHERE id = $1`, [incId]);
+    await cleanClient.query('COMMIT');
+  } catch (e) {
+    await cleanClient.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    cleanClient.release();
+  }
 });
 
 // ---------------------------------------------------------------------------
