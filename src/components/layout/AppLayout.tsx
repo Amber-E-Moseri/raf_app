@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { APP_NAME } from "../../lib/constants";
+import rafLogo from "../../assets/raf-logo.png";
 import { useAuth } from "../../context/AuthContext";
 import { buildMonthOptions } from "../../lib/period";
 import { usePeriod } from "./PeriodProvider";
@@ -279,7 +280,7 @@ export function AppLayout() {
       <header className="mobile-top md:hidden">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="brand-mark">R</div>
+            <img src={rafLogo} alt="RAF" className="brand-logo" />
             <div className="leading-none">
               <p className="text-[15px] font-bold text-[var(--text-primary)]">{APP_NAME}</p>
               <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">Finance OS</p>
@@ -303,7 +304,7 @@ export function AppLayout() {
           <div className="sidebar-shell">
             <div className="space-y-4 border-b border-[var(--border-subtle)] pb-4">
               <div className="flex items-center gap-3">
-                <div className="brand-mark">R</div>
+                <img src={rafLogo} alt="RAF" className="brand-logo" />
                 <div>
                   <p className="text-[16px] font-bold tracking-[-0.01em] text-[var(--text-primary)]">{APP_NAME}</p>
                   <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">Finance OS</p>

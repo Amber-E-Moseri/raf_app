@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { apiLogin, apiSignup } from "../api/authApi";
 import { ApiError } from "../api/client";
+import rafLogo from "../assets/raf-logo.png";
 
 type Tab = "login" | "signup";
 
@@ -45,7 +46,7 @@ export function Login() {
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="mb-8 flex flex-col items-center gap-4">
-          <div className="brand-mark" style={{ width: 60, height: 60, borderRadius: 18, fontSize: 24 }}>R</div>
+          <img src={rafLogo} alt="RAF" className="brand-logo brand-logo-lg" />
           <div className="text-center">
             <p className="text-[22px] font-bold tracking-[-0.02em] text-[var(--text-strong)]">RAF</p>
             <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Resource Allocation Framework</p>

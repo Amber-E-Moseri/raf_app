@@ -236,6 +236,21 @@ select {
     letter-spacing: 0.02em;
   }
 
+  .brand-logo {
+    display: block;
+    height: 34px;
+    width: 34px;
+    flex: 0 0 auto;
+    border-radius: 10px;
+    object-fit: contain;
+  }
+
+  .brand-logo-lg {
+    height: 60px;
+    width: 60px;
+    border-radius: 18px;
+  }
+
   .nav-group-title {
     padding-left: 10px;
     margin: 0;
