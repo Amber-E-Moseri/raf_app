@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: raf-api
+    env: node
+    # Use "starter" ($7/mo) for always-on — free tier sleeps after 15 min inactivity
+    plan: free
+    region: oregon
+    buildCommand: npm ci
+    # Runs migrations (idempotent) then starts the server
+    startCommand: node scripts/migrate.js && node index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: PERSISTENCE_DRIVER
+        value: postgres
+      - key: RAF_AUTH_REQUIRED
+        value: "true"
+      # Set these in the Render dashboard (Environment → Secret Files or env vars)
+      - key: POSTGRES_CONNECTION_STRING
+        sync: false
+      - key: POSTGRES_CONNECTION_STRING_APP
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
