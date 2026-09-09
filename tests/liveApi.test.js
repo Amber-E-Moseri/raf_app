@@ -74,7 +74,13 @@ before(async () => {
     env: {
       ...process.env,
       PORT: String(port),
+      // Force SQLite + no auth so these tests work independently of .env settings.
+      PERSISTENCE_DRIVER: 'sqlite',
       RAF_DB_PATH: sqlitePath,
+      POSTGRES_CONNECTION_STRING: '',
+      POSTGRES_CONNECTION_STRING_APP: '',
+      RAF_AUTH_REQUIRED: 'false',
+      SENTRY_DSN: '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
