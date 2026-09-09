@@ -35,6 +35,7 @@ const RAF_MIGRATIONS = [
   '20260909000000_create_raf_app_role.sql',
   '20260909010000_branch_g_activity_category.sql',
   '20260910000000_fix_signup_rls_bootstrap.sql',
+  '20260910000001_fix_signup_rls_bootstrap_2.sql',
 ];
 
 const migrationsDir = path.join(
