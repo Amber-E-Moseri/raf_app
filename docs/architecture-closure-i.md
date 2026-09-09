@@ -8,10 +8,10 @@
 ## Verdict
 
 ```
-RAF ARCHITECTURE: CONDITIONAL
+RAF ARCHITECTURE: PRODUCTION-CANDIDATE
 ```
 
-The architecture is structurally sound and production-candidate quality. Two pre-launch items — the `raf_app` role activation and error monitoring — must be resolved before serving real users. All other items are hardening improvements, not blockers.
+All pre-launch blockers resolved. The architecture is structurally sound and cleared for production use. Remaining H2–H7 items are hardening improvements to be completed post-launch; none block serving real users.
 
 ---
 
@@ -181,7 +181,7 @@ Forward-only migration runner with schema_migrations tracking. Migrations are no
 | # | Blocker | Status |
 |---|---------|--------|
 | **B1** | `raf_app` role not yet created in Neon Console and `POSTGRES_CONNECTION_STRING_APP` not yet set → RLS Layer 3 is inactive | **RESOLVED** — role created, `POSTGRES_CONNECTION_STRING_APP` set, 16/16 RLS suite passes under `NOBYPASSRLS` runtime role |
-| **B2** | No error monitoring — unhandled exceptions are silent beyond server logs | **CODE COMPLETE** — `@sentry/node@10.73.0` wired in `aedd1f5`; awaiting deployment verification (set `SENTRY_DSN`, trigger test 500, confirm scrubbing) |
+| **B2** | No error monitoring — unhandled exceptions are silent beyond server logs | **RESOLVED** — `@sentry/node@10.73.0` wired in `aedd1f5`; `SENTRY_DSN` set in deployment; test 500 confirmed in Sentry with auth headers and request body scrubbed |
 
 B1 resolution evidence: `[RAF] runtime role "raf_app": NOBYPASSRLS NOSUPERUSER — RLS active ✓` confirmed at server startup. `tests/branchERlsEnforcement.test.js` 16/16 pass under `appPool` (raf_app role, NOBYPASSRLS) — cross-workspace SELECT blocked, INSERT/UPDATE/DELETE blocked, fail-closed on missing context, no pool leakage. All three tenant-isolation layers now independently active.
 
