@@ -131,7 +131,13 @@ before(async () => {
     env: {
       ...process.env,
       PORT: String(livePort),
+      // Force SQLite regardless of the .env file — these tests must not need Postgres.
+      PERSISTENCE_DRIVER: 'sqlite',
       RAF_DB_PATH: sqlitePath,
+      POSTGRES_CONNECTION_STRING: '',
+      POSTGRES_CONNECTION_STRING_APP: '',
+      RAF_AUTH_REQUIRED: 'false',
+      SENTRY_DSN: '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 
 import { loadServerEnv, checkRuntimeRolePrivileges } from './lib/server/env.js';
+import { initSentry, Sentry } from './lib/server/sentry.js';
 import { createApiRouter } from './lib/server/routerLoader.js';
 import { createServerDb } from './lib/server/db.js';
 import { checkReadiness } from './lib/server/readinessHandler.js';
@@ -11,7 +12,9 @@ import { checkReadiness } from './lib/server/readinessHandler.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const { port, dbPath, persistenceDriver, postgresConnectionString, authRequired } = loadServerEnv({ cwd: __dirname });
+const { port, dbPath, persistenceDriver, postgresConnectionString, authRequired, sentryDsn } = loadServerEnv({ cwd: __dirname });
+
+initSentry(sentryDsn);
 
 if (persistenceDriver === 'postgres') {
   await checkRuntimeRolePrivileges({ postgresConnectionString, authRequired });
@@ -111,6 +114,8 @@ app.use((req, res) => {
     error: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
+
+Sentry.setupExpressErrorHandler(app);
 
 app.use((error, _req, res, _next) => {
   const status = typeof error?.status === 'number' ? error.status : 500;
