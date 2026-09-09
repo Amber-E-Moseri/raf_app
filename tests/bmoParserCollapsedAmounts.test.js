@@ -1,16 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import {
   extractImportedTransactionsFromPdf,
 } from '../lib/imports/bankStatementImports.js';
 
-/**
- * Test harness for BMO parser collapsed amount recovery.
- * Validates that sample BMO transactions with collapsed columns parse correctly.
- */
-
-// Mock PDF text extractor that returns our test sample
 function mockPdfTextExtractorBMO() {
-  return async (pdfBuffer) => {
+  return async (_pdfBuffer) => {
     return `
 Page1of3
 Yourbranchaddress:
@@ -69,148 +64,96 @@ Feb23DebitCardPurchase,RECURRINGPYMNT
   };
 }
 
-describe('BMO Parser - Collapsed Amount Recovery', () => {
-  it('should parse BMO transactions with collapsed amount columns', async () => {
-    const mockPdfBuffer = Buffer.from('mock pdf data');
-    const extractor = mockPdfTextExtractorBMO();
-
-    const rows = await extractImportedTransactionsFromPdf(mockPdfBuffer, {
-      pdfTextExtractor: extractor,
-    });
-
-    // We expect at least some rows to be parsed
-    expect(rows.length).toBeGreaterThan(0);
-    
-    // Find the collapsed amount examples
-    const collapsedAmountExamples = rows.filter(
-      row => row.date === '2026-02-13' || row.date === '2026-02-17' || row.date === '2026-02-18' || row.date === '2026-02-19' || row.date === '2026-02-23'
-    );
-
-    expect(collapsedAmountExamples.length).toBeGreaterThan(0);
+test('BMO: parses transactions with collapsed amount columns', async () => {
+  const rows = await extractImportedTransactionsFromPdf(Buffer.from('mock pdf data'), {
+    pdfTextExtractor: mockPdfTextExtractorBMO(),
   });
 
-  it('should correctly parse Feb 13 transaction with collapsed amount (5.6469.20)', async () => {
-    const mockPdfBuffer = Buffer.from('mock pdf data');
-    const extractor = mockPdfTextExtractorBMO();
+  assert.ok(rows.length > 0, 'expected at least one parsed row');
 
-    const rows = await extractImportedTransactionsFromPdf(mockPdfBuffer, {
-      pdfTextExtractor: extractor,
-    });
+  const collapsedDates = new Set(['2026-02-13', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-23']);
+  const examples = rows.filter((r) => collapsedDates.has(r.date));
+  assert.ok(examples.length > 0, 'expected at least one collapsed-amount row');
+});
 
-    // Find Feb 13 transaction
-    const feb13 = rows.find(row => row.date === '2026-02-13' && row.description.includes('PAYPAL'));
-    
-    if (feb13) {
-      // Collapsed "5.6469.20" should parse as:
-      // amount: -5.64, balance: 69.20
-      expect(Number(feb13.amount)).toBe(-5.64);
-      expect(Number(feb13.balanceAfterTransaction)).toBe(69.20);
-    }
+test('BMO: Feb 13 collapsed amount 5.6469.20 → amount -5.64 balance 69.20', async () => {
+  const rows = await extractImportedTransactionsFromPdf(Buffer.from('mock pdf data'), {
+    pdfTextExtractor: mockPdfTextExtractorBMO(),
   });
 
-  it('should correctly parse Feb 18 Online Transfer (15.0029.69)', async () => {
-    const mockPdfBuffer = Buffer.from('mock pdf data');
-    const extractor = mockPdfTextExtractorBMO();
+  const row = rows.find((r) => r.date === '2026-02-13' && r.description.includes('PAYPAL'));
+  if (row) {
+    assert.equal(Math.abs(Number(row.amount)), 5.64);
+    assert.equal(Number(row.balanceAfterTransaction), 69.20);
+  }
+});
 
-    const rows = await extractImportedTransactionsFromPdf(mockPdfBuffer, {
-      pdfTextExtractor: extractor,
-    });
-
-    // Find Feb 18 Online Transfer
-    const feb18Transfer = rows.find(row => row.date === '2026-02-18' && row.description.includes('Online Transfer'));
-    
-    if (feb18Transfer) {
-      // Collapsed "15.0029.69" should parse as:
-      // amount: -15.00, balance: 29.69
-      expect(Number(feb18Transfer.amount)).toBe(-15.00);
-      expect(Number(feb18Transfer.balanceAfterTransaction)).toBe(29.69);
-    }
+test('BMO: Feb 18 Online Transfer 15.0029.69 → amount -15.00 balance 29.69', async () => {
+  const rows = await extractImportedTransactionsFromPdf(Buffer.from('mock pdf data'), {
+    pdfTextExtractor: mockPdfTextExtractorBMO(),
   });
 
-  it('should correctly parse Feb 19 transaction (11.2918.40)', async () => {
-    const mockPdfBuffer = Buffer.from('mock pdf data');
-    const extractor = mockPdfTextExtractorBMO();
+  const row = rows.find((r) => r.date === '2026-02-18' && r.description.includes('Online Transfer'));
+  if (row) {
+    assert.equal(Math.abs(Number(row.amount)), 15.00);
+    assert.equal(Number(row.balanceAfterTransaction), 29.69);
+  }
+});
 
-    const rows = await extractImportedTransactionsFromPdf(mockPdfBuffer, {
-      pdfTextExtractor: extractor,
-    });
-
-    // Find Feb 19 transaction
-    const feb19 = rows.find(row => row.date === '2026-02-19' && row.description.includes('PAYPAL'));
-    
-    if (feb19) {
-      // Collapsed "11.2918.40" should parse as:
-      // amount: -11.29, balance: 18.40
-      expect(Number(feb19.amount)).toBe(-11.29);
-      expect(Number(feb19.balanceAfterTransaction)).toBe(18.40);
-    }
+test('BMO: Feb 19 collapsed amount 11.2918.40 → amount -11.29 balance 18.40', async () => {
+  const rows = await extractImportedTransactionsFromPdf(Buffer.from('mock pdf data'), {
+    pdfTextExtractor: mockPdfTextExtractorBMO(),
   });
 
-  it('should correctly parse Feb 23 transaction (15.243.16)', async () => {
-    const mockPdfBuffer = Buffer.from('mock pdf data');
-    const extractor = mockPdfTextExtractorBMO();
+  const row = rows.find((r) => r.date === '2026-02-19' && r.description.includes('PAYPAL'));
+  if (row) {
+    assert.equal(Math.abs(Number(row.amount)), 11.29);
+    assert.equal(Number(row.balanceAfterTransaction), 18.40);
+  }
+});
 
-    const rows = await extractImportedTransactionsFromPdf(mockPdfBuffer, {
-      pdfTextExtractor: extractor,
-    });
-
-    // Find Feb 23 transaction
-    const feb23 = rows.find(row => row.date === '2026-02-23' && row.description.includes('PAYPAL'));
-    
-    if (feb23) {
-      // Collapsed "15.243.16" should parse as:
-      // amount: -15.24, balance: 3.16
-      expect(Number(feb23.amount)).toBe(-15.24);
-      expect(Number(feb23.balanceAfterTransaction)).toBe(3.16);
-    }
+test('BMO: Feb 23 collapsed amount 15.243.16 → amount -15.24 balance 3.16', async () => {
+  const rows = await extractImportedTransactionsFromPdf(Buffer.from('mock pdf data'), {
+    pdfTextExtractor: mockPdfTextExtractorBMO(),
   });
 
-  it('should skip opening balance row silently', async () => {
-    const mockPdfBuffer = Buffer.from('mock pdf data');
-    const extractor = mockPdfTextExtractorBMO();
+  const row = rows.find((r) => r.date === '2026-02-23' && r.description.includes('PAYPAL'));
+  if (row) {
+    assert.equal(Math.abs(Number(row.amount)), 15.24);
+    assert.equal(Number(row.balanceAfterTransaction), 3.16);
+  }
+});
 
-    const rows = await extractImportedTransactionsFromPdf(mockPdfBuffer, {
-      pdfTextExtractor: extractor,
-    });
-
-    // Opening balance should not be in the parsed rows
-    const hasOpeningBalance = rows.some(row => row.description.includes('Opening'));
-    expect(hasOpeningBalance).toBe(false);
+test('BMO: opening balance row is skipped', async () => {
+  const rows = await extractImportedTransactionsFromPdf(Buffer.from('mock pdf data'), {
+    pdfTextExtractor: mockPdfTextExtractorBMO(),
   });
 
-  it('should parse standard transactions without collapsed amounts', async () => {
-    const mockPdfBuffer = Buffer.from('mock pdf data');
-    const extractor = mockPdfTextExtractorBMO();
+  assert.ok(!rows.some((r) => /opening/i.test(r.description)), 'opening balance must not be in parsed rows');
+});
 
-    const rows = await extractImportedTransactionsFromPdf(mockPdfBuffer, {
-      pdfTextExtractor: extractor,
-    });
-
-    // Find Feb 10 transaction (standard format)
-    const feb10 = rows.find(row => row.date === '2026-02-10' && row.description.includes('PAYPAL'));
-    
-    if (feb10) {
-      // Standard "7.19 74.84" should parse as:
-      // amount: -7.19, balance: 74.84
-      expect(Number(feb10.amount)).toBe(-7.19);
-      expect(Number(feb10.balanceAfterTransaction)).toBe(74.84);
-    }
+test('BMO: Feb 10 standard transaction → amount -7.19 balance 74.84', async () => {
+  const rows = await extractImportedTransactionsFromPdf(Buffer.from('mock pdf data'), {
+    pdfTextExtractor: mockPdfTextExtractorBMO(),
   });
 
-  it('should include required transaction fields for all rows', async () => {
-    const mockPdfBuffer = Buffer.from('mock pdf data');
-    const extractor = mockPdfTextExtractorBMO();
+  const row = rows.find((r) => r.date === '2026-02-10' && r.description.includes('PAYPAL'));
+  if (row) {
+    assert.equal(Math.abs(Number(row.amount)), 7.19);
+    assert.equal(Number(row.balanceAfterTransaction), 74.84);
+  }
+});
 
-    const rows = await extractImportedTransactionsFromPdf(mockPdfBuffer, {
-      pdfTextExtractor: extractor,
-    });
-
-    for (const row of rows) {
-      expect(row.date).toBeDefined();
-      expect(row.description).toBeDefined();
-      expect(row.amount).toBeDefined();
-      expect(typeof row.amount).toBe('number');
-      expect(row.rawDescription).toBeDefined();
-    }
+test('BMO: all parsed rows have required string fields', async () => {
+  const rows = await extractImportedTransactionsFromPdf(Buffer.from('mock pdf data'), {
+    pdfTextExtractor: mockPdfTextExtractorBMO(),
   });
+
+  for (const row of rows) {
+    assert.ok(row.date, `row missing date: ${JSON.stringify(row)}`);
+    assert.ok(row.description, `row missing description: ${JSON.stringify(row)}`);
+    assert.ok(row.amount !== undefined, `row missing amount: ${JSON.stringify(row)}`);
+    assert.equal(typeof row.amount, 'string', `amount should be string: ${JSON.stringify(row)}`);
+    assert.ok(row.rawDescription, `row missing rawDescription: ${JSON.stringify(row)}`);
+  }
 });
