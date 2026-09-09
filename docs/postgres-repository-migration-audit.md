@@ -185,7 +185,7 @@ The `true` (transaction-local) flag prevents context leakage between pooled conn
 
 ---
 
-## 12. Migration Status (Branch D Phase 2)
+## 12. Migration Status (Branch D Final)
 
 | Domain | Status | Repository file |
 |--------|--------|----------------|
@@ -198,12 +198,13 @@ The `true` (transaction-local) flag prevents context leakage between pooled conn
 | **Debts** | **DIRECT (Branch D Phase 2)** | `lib/repositories/postgres/debtsRepository.js` |
 | **Goals** | **DIRECT (Branch D Phase 2)** | `lib/repositories/postgres/goalsRepository.js` |
 | **Fixed bills** | **DIRECT (Branch D Phase 2)** | `lib/repositories/postgres/fixedBillsRepository.js` |
-| Monthly reviews | COMPAT (deferred) | — |
-| Workspace invitations | COMPAT (deferred) | — |
-| Import pipeline | COMPAT (deferred) | — |
-| Workspace activity (list) | COMPAT (deferred) | — |
-| updateHousehold | COMPAT (deferred) | — |
-| Merchant rules | COMPAT (deferred) | — |
+| Monthly reviews | COMPAT — INTENTIONALLY_DEFERRED | `docs/monthly-review-persistence-semantics.md` |
+| Import pipeline + merchant rules | COMPAT — INTENTIONALLY_DEFERRED | `docs/import-pipeline-classification.md` |
+| Workspace invitations | COMPAT — INTENTIONALLY_DEFERRED (collaboration, out of financial scope) | — |
+| Workspace activity (list) | COMPAT — INTENTIONALLY_DEFERRED (insert already direct) | — |
+| updateHousehold / updateWorkspace | COMPAT — INTENTIONALLY_DEFERRED (no direct SQL repo yet) | — |
+
+**Final metric:** 69 direct / 38 compat / 0 dead — 45% reduction from pre-Branch-D baseline.
 
 ---
 

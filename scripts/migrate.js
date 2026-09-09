@@ -30,6 +30,8 @@ const RAF_MIGRATIONS = [
   '20260903120000_financial_accounts.sql',
   '20260904000000_collaboration.sql',
   '20260905000000_add_token_blacklist.sql',
+  '20260908000000_fix_income_entry_allocation_trigger.sql',
+  '20260908020000_tighten_financial_rls_policies.sql',
 ];
 
 const migrationsDir = path.join(

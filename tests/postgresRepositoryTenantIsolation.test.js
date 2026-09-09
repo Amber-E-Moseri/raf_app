@@ -116,11 +116,17 @@ maybeTest('alloc categories: Workspace B sees its own seeded data, not Workspace
   const a = await signup(`alloc-a-${Date.now()}@example.test`);
   const b = await signup(`alloc-b-${Date.now()}@example.test`);
 
-  // Replace alloc categories in Workspace A
+  // Replace alloc categories in Workspace A — must include ALL non-buffer seeded slugs.
+  // Uses distinct percentages so that if B somehow sees A's data the test will catch it.
   const replacePayload = JSON.stringify({
     items: [
-      { slug: 'savings', label: 'Savings', sortOrder: 1, allocationPercent: '0.5000', isActive: true },
-      { slug: 'buffer', label: 'Buffer', sortOrder: 9, allocationPercent: '0.5000', isActive: true },
+      { slug: 'savings', label: 'Savings', sortOrder: 1, allocationPercent: '0.4000', isActive: true },
+      { slug: 'fixed_bills', label: 'Fixed Bills', sortOrder: 2, allocationPercent: '0.2000', isActive: true },
+      { slug: 'personal_spending', label: 'Personal Spending', sortOrder: 3, allocationPercent: '0.1000', isActive: true },
+      { slug: 'investment', label: 'Investment', sortOrder: 4, allocationPercent: '0.1000', isActive: true },
+      { slug: 'debt_payoff', label: 'Debt Payoff', sortOrder: 5, allocationPercent: '0.1000', isActive: true },
+      { slug: 'partnership', label: 'Partnership', sortOrder: 6, allocationPercent: '0.0900', isActive: true },
+      { slug: 'buffer', label: 'Buffer', sortOrder: 9, allocationPercent: '0.0100', isActive: true },
     ],
   });
   const replaced = await request('/api/v1/household/allocation-categories', {
@@ -132,17 +138,16 @@ maybeTest('alloc categories: Workspace B sees its own seeded data, not Workspace
   });
   assert.equal(replaced.status, 200, `replace failed: ${JSON.stringify(replaced.data)}`);
 
-  // Workspace B must still have its own seeded categories (7 items from createWorkspace seed)
+  // Workspace B must still have its own seeded percentages (savings=0.1000, not A's 0.4000)
   const bCategories = await request('/api/v1/household/allocation-categories', {
     token: b.token,
     workspaceId: b.workspaceId,
   });
   assert.equal(bCategories.status, 200);
-  // B should have 7 seeded categories, not 2 from A's replacement
-  assert.ok(
-    bCategories.data.items.length >= 2 && bCategories.data.items.length !== 2,
-    `Workspace B unexpectedly got ${bCategories.data.items.length} categories (expected 7, not A's 2)`,
-  );
+  assert.equal(bCategories.data.items.length, 7, `Workspace B should have 7 seeded categories, got ${bCategories.data.items.length}`);
+  const bSavings = bCategories.data.items.find((c) => c.slug === 'savings');
+  assert.ok(bSavings, 'Workspace B must have savings category');
+  assert.equal(bSavings.allocationPercent ?? bSavings.percent, '0.1000', `Workspace B savings percent must be seeded 0.1000, got ${bSavings.allocationPercent ?? bSavings.percent}`);
   // A's workspace_id must not appear in B's response
   const bJson = JSON.stringify(bCategories.data);
   assert.ok(!bJson.includes(a.workspaceId), 'Workspace B response must not leak Workspace A id');
@@ -156,13 +161,15 @@ maybeTest('surplus split rules: Workspace B cannot read Workspace A rules after 
   const a = await signup(`surplus-a-${Date.now()}@example.test`);
   const b = await signup(`surplus-b-${Date.now()}@example.test`);
 
-  // Replace surplus rules in A
+  // Replace surplus rules in A — emergency_fund slug is required by domain rules.
+  // Use a distinctive second rule that Workspace B should never see.
   const replacePayload = JSON.stringify({
     items: [
-      { slug: 'secret_rule', label: 'Secret', splitPercent: '1.0000', sortOrder: 1, destinationType: 'bucket', destinationBucketSlug: 'savings', isActive: true },
+      { slug: 'emergency_fund', label: 'Emergency Fund', splitPercent: '0.7000', sortOrder: 1, destinationType: 'bucket', destinationBucketSlug: 'savings', isActive: true },
+      { slug: 'secret_rule', label: 'Secret A Rule', splitPercent: '0.3000', sortOrder: 2, destinationType: 'bucket', destinationBucketSlug: 'savings', isActive: true },
     ],
   });
-  const replaced = await request('/api/v1/household/surplus-split-rules', {
+  const replaced = await request('/api/v1/household/surplus-splits', {
     method: 'PUT',
     token: a.token,
     workspaceId: a.workspaceId,
@@ -172,7 +179,7 @@ maybeTest('surplus split rules: Workspace B cannot read Workspace A rules after 
   assert.equal(replaced.status, 200, `replace failed: ${JSON.stringify(replaced.data)}`);
 
   // B's rules must not include A's secret_rule
-  const bRules = await request('/api/v1/household/surplus-split-rules', {
+  const bRules = await request('/api/v1/household/surplus-splits', {
     token: b.token,
     workspaceId: b.workspaceId,
   });
@@ -243,7 +250,7 @@ maybeTest('debts: Workspace B cannot list Workspace A debts', async () => {
     token: a.token,
     workspaceId: a.workspaceId,
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: 'A Secret Debt', startingBalance: '5000.00', apr: '19.99', monthlyPayment: '200.00' }),
+    body: JSON.stringify({ name: 'A Secret Debt', startingBalance: '5000.00', apr: '19.99', minimumPayment: '50.00', monthlyPayment: '200.00' }),
   });
   assert.equal(created.status, 201, `debt create failed: ${JSON.stringify(created.data)}`);
 
@@ -264,7 +271,7 @@ maybeTest('debts: Workspace B using Workspace A debt ID gets 404', async () => {
     token: a.token,
     workspaceId: a.workspaceId,
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: 'A Debt', startingBalance: '1000.00', apr: '5.0', monthlyPayment: '100.00' }),
+    body: JSON.stringify({ name: 'A Debt', startingBalance: '1000.00', apr: '5.0', minimumPayment: '25.00', monthlyPayment: '100.00' }),
   });
   assert.equal(created.status, 201);
   const aDebtId = created.data.id ?? created.data.debt?.id;
@@ -284,12 +291,22 @@ maybeTest('goals: Workspace B cannot list Workspace A goals', async () => {
   const a = await signup(`goal-a-${Date.now()}@example.test`);
   const b = await signup(`goal-b-${Date.now()}@example.test`);
 
+  // Fetch Workspace A's categories to get the actual savings bucket UUID
+  const aCategories = await request('/api/v1/household/allocation-categories', {
+    token: a.token,
+    workspaceId: a.workspaceId,
+  });
+  assert.equal(aCategories.status, 200, `fetch categories failed: ${JSON.stringify(aCategories.data)}`);
+  const savingsCat = aCategories.data.items.find((c) => c.slug === 'savings');
+  assert.ok(savingsCat, 'savings category must exist in Workspace A');
+  const savingsBucketId = savingsCat.id;
+
   const created = await request('/api/v1/goals', {
     method: 'POST',
     token: a.token,
     workspaceId: a.workspaceId,
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: 'A Secret Goal', targetAmount: '10000.00', bucketId: 'savings' }),
+    body: JSON.stringify({ name: 'A Secret Goal', targetAmount: '10000.00', bucket_id: savingsBucketId }),
   });
   assert.equal(created.status, 201, `goal create failed: ${JSON.stringify(created.data)}`);
 
@@ -309,7 +326,7 @@ maybeTest('fixed bills: Workspace B cannot list Workspace A fixed bills', async 
   const a = await signup(`bill-a-${Date.now()}@example.test`);
   const b = await signup(`bill-b-${Date.now()}@example.test`);
 
-  const created = await request('/api/v1/fixed-bills', {
+  const created = await request('/api/v1/household/fixed-bills', {
     method: 'POST',
     token: a.token,
     workspaceId: a.workspaceId,
@@ -318,7 +335,7 @@ maybeTest('fixed bills: Workspace B cannot list Workspace A fixed bills', async 
   });
   assert.equal(created.status, 201, `fixed bill create failed: ${JSON.stringify(created.data)}`);
 
-  const bBills = await request('/api/v1/fixed-bills', {
+  const bBills = await request('/api/v1/household/fixed-bills', {
     token: b.token,
     workspaceId: b.workspaceId,
   });

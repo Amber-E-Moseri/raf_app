@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import express from 'express';
 
-import { loadServerEnv } from './lib/server/env.js';
+import { loadServerEnv, checkRuntimeRolePrivileges } from './lib/server/env.js';
 import { createApiRouter } from './lib/server/routerLoader.js';
 import { createServerDb } from './lib/server/db.js';
 
@@ -11,6 +11,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const { port, dbPath, persistenceDriver, postgresConnectionString, authRequired } = loadServerEnv({ cwd: __dirname });
+
+if (persistenceDriver === 'postgres') {
+  await checkRuntimeRolePrivileges({ postgresConnectionString, authRequired });
+}
+
 const db = createServerDb({ persistenceDriver, dbPath, postgresConnectionString });
 
 console.log(`[RAF] persistence: ${persistenceDriver}`);
