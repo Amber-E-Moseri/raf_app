@@ -82,7 +82,32 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
+function getStoredAuth(): { token: string | null; workspaceId: string | null } {
+  try {
+    const raw = localStorage.getItem("raf_auth");
+    if (!raw) return { token: null, workspaceId: null };
+    const session = JSON.parse(raw);
+    return {
+      token: session.token ?? session.accessToken ?? null,
+      workspaceId: session.workspaceId ?? session.householdId ?? null,
+    };
+  } catch {
+    return { token: null, workspaceId: null };
+  }
+}
+
 async function performRequest(input: RequestInfo | URL, init?: RequestInit) {
+  const auth = getStoredAuth();
+  if (auth.token) {
+    const headers = new Headers(init?.headers);
+    if (!headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${auth.token}`);
+    }
+    if (auth.workspaceId && !headers.has("X-Workspace-Id")) {
+      headers.set("X-Workspace-Id", auth.workspaceId);
+    }
+    init = { ...init, headers };
+  }
   try {
     return await fetch(input, init);
   } catch {

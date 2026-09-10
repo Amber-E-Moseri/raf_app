@@ -138,7 +138,7 @@ export function Dashboard() {
 
     const latestIncome = [...incomeResponse.items].sort((left, right) => right.receivedDate.localeCompare(left.receivedDate))[0];
     const latestAllocationReport = latestIncome ? await getIncomeAllocations(latestIncome.incomeId) : null;
-    const latestPeriod = [...dashboard.periods].sort((left, right) => right.month.localeCompare(left.month))[0] ?? null;
+    const latestPeriod = [...aggregate.dashboard.periods].sort((left, right) => right.month.localeCompare(left.month))[0] ?? null;
 
     return {
       dashboard: aggregate.dashboard,

@@ -64,6 +64,7 @@ export function respondWithHandledError(error, KnownHttpErrorClass) {
     );
   }
 
+  console.error('[RAF] Unhandled route error:', error?.message, error?.stack);
   return json(
     buildErrorBody({
       status: 500,

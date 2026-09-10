@@ -334,7 +334,7 @@ export function AppLayout() {
               ) : null}
             </div>
 
-            <nav className="space-y-6 py-5">
+            <nav className="min-h-0 flex-1 space-y-6 overflow-y-auto py-5">
               {desktopNavigation.map((group) => (
                 <SidebarGroup key={group.label} label={group.label} items={group.items} />
               ))}
