@@ -10,6 +10,7 @@ interface SummaryMetricCardProps {
   tone?: "neutral" | "success" | "warning" | "danger";
   badge?: string;
   icon?: ReactNode;
+  action?: ReactNode;
 }
 
 export function SummaryMetricCard({
@@ -19,6 +20,7 @@ export function SummaryMetricCard({
   tone = "neutral",
   badge,
   icon,
+  action,
 }: SummaryMetricCardProps) {
   return (
     <Card className="summary-metric-card min-h-[100px] overflow-hidden sm:min-h-[120px]">
@@ -31,6 +33,7 @@ export function SummaryMetricCard({
           <div className="min-w-0">
             <p className="financial-value text-[22px] font-bold leading-none tracking-[-0.02em] text-[var(--text-primary)] sm:text-[30px]">{value}</p>
             <p className="mt-1.5 text-[11px] font-medium text-[var(--text-secondary)] sm:mt-2 sm:text-[12px]">{subtitle}</p>
+            {action ? <div className="mt-3">{action}</div> : null}
           </div>
           {icon ? <div className="text-[var(--text-subtle)]">{icon}</div> : null}
         </div>

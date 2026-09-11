@@ -15,6 +15,7 @@ import { getIncomeAllocationsReport } from '../lib/reports/getIncomeAllocationsR
 import { getDashboardReport } from '../lib/reports/getDashboardReport.js';
 import { getMonthlyReviewReport } from '../lib/reports/getMonthlyReviewReport.js';
 import { createMonthlyReview } from '../lib/monthlyReviews/monthlyReviews.js';
+import { buildNetSurplusExplanation } from '../lib/raf/reporting.js';
 
 function createDbDouble({
   incomeEntries = [],
@@ -212,6 +213,13 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
         surplusOrDeficit: '300.00',
         savingsActual: '100.00',
         alertStatus: 'ok',
+        explanations: {
+          netSurplus: buildNetSurplusExplanation({
+            month: '2026-03-01',
+            incomeCents: 100000,
+            spendingCents: 70000,
+          }),
+        },
       },
       {
         month: '2026-04-01',
@@ -220,6 +228,13 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
         surplusOrDeficit: '-100.00',
         savingsActual: '80.00',
         alertStatus: 'risky',
+        explanations: {
+          netSurplus: buildNetSurplusExplanation({
+            month: '2026-04-01',
+            incomeCents: 80000,
+            spendingCents: 90000,
+          }),
+        },
       },
     ],
     upcoming_fixed_bills_this_month: [],
@@ -1086,6 +1101,13 @@ test('report services handle empty-state data without persisting derived results
         surplusOrDeficit: '0.00',
         savingsActual: '0.00',
         alertStatus: 'ok',
+        explanations: {
+          netSurplus: buildNetSurplusExplanation({
+            month: '2026-03-01',
+            incomeCents: 0,
+            spendingCents: 0,
+          }),
+        },
       },
     ],
     upcoming_fixed_bills_this_month: [],
@@ -1565,6 +1587,20 @@ test('dashboard and monthly review routes expose report payloads', async () => {
   assert.equal(Array.isArray(dashboardPayload.bucket_balances), true);
   assert.equal(Array.isArray(dashboardPayload.monthly_bucket_progress), true);
   assert.equal(Array.isArray(dashboardPayload.goal_progress), true);
+  assert.deepEqual(dashboardPayload.periods[0].explanations.netSurplus, {
+    label: 'Net surplus',
+    value: '500.00',
+    components: [
+      { label: 'Income', value: '1000.00', kind: 'add' },
+      { label: 'Spending', value: '-500.00', kind: 'subtract' },
+    ],
+    assumptions: [
+      'Spending includes recorded debit transactions in the selected month.',
+      'Credits are not counted as spending.',
+    ],
+    provenance: 'Dashboard report period totals',
+    asOf: '2026-03-01',
+  });
 
   const aggregateResponse = await getDashboardAggregateRoute(
     new Request('http://localhost/api/v1/reports/dashboard-aggregate?from=2026-03-01&to=2026-03-01', {
@@ -1575,6 +1611,7 @@ test('dashboard and monthly review routes expose report payloads', async () => {
   assert.equal(aggregateResponse.status, 200);
   const aggregatePayload = await aggregateResponse.json();
   assert.equal(Array.isArray(aggregatePayload.dashboard.periods), true);
+  assert.equal(aggregatePayload.dashboard.periods[0].explanations.netSurplus.value, '500.00');
   assert.equal(typeof aggregatePayload.financialHealth.healthScore, 'number');
   assert.equal(typeof aggregatePayload.surplusRecommendations.netSurplus, 'string');
 

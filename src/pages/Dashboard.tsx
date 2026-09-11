@@ -118,6 +118,7 @@ export function Dashboard() {
   const [surplusApplyError, setSurplusApplyError] = useState<string | null>(null);
   const [isQuickApplyingSurplus, setIsQuickApplyingSurplus] = useState(false);
   const [startHereDismissed, setStartHereDismissed] = useState(() => readOnboardingDismissed(activeWorkspaceId));
+  const [netSurplusExplanationOpen, setNetSurplusExplanationOpen] = useState(false);
 
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
     const [aggregate, incomeResponse, transactionsResponse] = await Promise.all([
@@ -180,6 +181,21 @@ export function Dashboard() {
     setStartHereDismissed(readOnboardingDismissed(activeWorkspaceId));
   }, [activeWorkspaceId]);
 
+  useEffect(() => {
+    if (!netSurplusExplanationOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setNetSurplusExplanationOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [netSurplusExplanationOpen]);
+
   if (isLoading || monthWorkflow.isLoading) {
     return (
       <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
@@ -203,16 +219,20 @@ export function Dashboard() {
     );
   }
 
-  const activeCategories = data.categories
+  const dashboardData = data;
+  const workflowData = monthWorkflow.data;
+
+  const activeCategories = dashboardData.categories
     .filter((category) => category.isActive !== false)
     .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug));
 
-  const activeCategoryCount = activeCategories.length || data.latestAllocationReport?.allocations.length || 0;
-  const latestPeriodIncome = data.latestPeriod?.incomeTotal ?? "0.00";
-  const latestSurplus = data.latestPeriod?.surplusOrDeficit ?? "0.00";
-  const bucketBalancesBySlug = new Map(data.dashboard.bucket_balances.map((bucket) => [bucket.slug, bucket]));
-  const monthlyProgressByBucketId = new Map(data.dashboard.monthly_bucket_progress.map((progress) => [progress.bucket_id, progress]));
-  const latestAllocationAmounts = new Map((data.latestAllocationReport?.allocations ?? []).map((allocation) => [allocation.slug, allocation.amount]));
+  const activeCategoryCount = activeCategories.length || dashboardData.latestAllocationReport?.allocations.length || 0;
+  const latestPeriodIncome = dashboardData.latestPeriod?.incomeTotal ?? "0.00";
+  const latestSurplus = dashboardData.latestPeriod?.surplusOrDeficit ?? "0.00";
+  const netSurplusExplanation = dashboardData.latestPeriod?.explanations?.netSurplus ?? null;
+  const bucketBalancesBySlug = new Map(dashboardData.dashboard.bucket_balances.map((bucket) => [bucket.slug, bucket]));
+  const monthlyProgressByBucketId = new Map(dashboardData.dashboard.monthly_bucket_progress.map((progress) => [progress.bucket_id, progress]));
+  const latestAllocationAmounts = new Map((dashboardData.latestAllocationReport?.allocations ?? []).map((allocation) => [allocation.slug, allocation.amount]));
   const allocationRows = activeCategories.length
     ? activeCategories.map((category) => ({
       bucketId: category.id,
@@ -224,9 +244,9 @@ export function Dashboard() {
     }))
     : [];
 
-  const savingsBalance = Number(data.financialHealth.savingsBalance);
-  const savingsFloor = Number(data.financialHealth.savingsFloor);
-  const savingsFloorEnabled = data.financialHealth.savingsFloorEnabled === true;
+  const savingsBalance = Number(dashboardData.financialHealth.savingsBalance);
+  const savingsFloor = Number(dashboardData.financialHealth.savingsFloor);
+  const savingsFloorEnabled = dashboardData.financialHealth.savingsFloorEnabled === true;
   const isBelowSavingsFloor = savingsFloorEnabled && savingsBalance < savingsFloor;
   const activeDestinationOptions = activeCategories.map((category) => ({
     slug: category.slug,
@@ -235,9 +255,9 @@ export function Dashboard() {
   const suggestedRows = savingsFloorEnabled && isBelowSavingsFloor
     ? [...surplusDraftRows].sort((left, right) => (left.destinationSlug === "savings" ? -1 : 0) - (right.destinationSlug === "savings" ? -1 : 0))
     : surplusDraftRows;
-  const surplusExists = Number(data.surplusRecommendations.netSurplus) > 0 && suggestedRows.length > 0;
+  const surplusExists = Number(dashboardData.surplusRecommendations.netSurplus) > 0 && suggestedRows.length > 0;
   const draftTotal = suggestedRows.reduce((sum, row) => sum + Number(normalizeMoneyInput(row.amount) ?? "0.00"), 0);
-  const netSurplus = Number(data.surplusRecommendations.netSurplus);
+  const netSurplus = Number(dashboardData.surplusRecommendations.netSurplus);
   const draftMatchesSurplus = Math.abs(draftTotal - netSurplus) < 0.005;
   const editingSurplusRow = suggestedRows.find((row) => row.id === editingSurplusRowId) ?? null;
   const movingSavingsPriorityAway = Boolean(
@@ -247,7 +267,7 @@ export function Dashboard() {
     && editingSurplusRow.destinationSlug === "savings"
     && surplusRowDraft.destinationSlug !== "savings",
   );
-  const showStartHere = data.incomeCount === 0 && data.recentTransactions.length === 0 && !startHereDismissed;
+  const showStartHere = dashboardData.incomeCount === 0 && dashboardData.recentTransactions.length === 0 && !startHereDismissed;
 
   function dismissStartHere() {
     writeOnboardingDismissed(activeWorkspaceId);
@@ -256,7 +276,7 @@ export function Dashboard() {
 
   function handleResetSurplusDraftRows() {
     setSurplusDraftRows(
-      data.surplusRecommendations.distributions
+      dashboardData.surplusRecommendations.distributions
         .filter((distribution) => Number(distribution.amount) > 0)
         .map((distribution, index) => ({
           id: `surplus_row_${index}_${distribution.slug}`,
@@ -313,7 +333,7 @@ export function Dashboard() {
   }
 
   async function handleQuickApplySurplus() {
-    if (!surplusExists || !draftMatchesSurplus || monthWorkflow.data.closeSummary.canClose === false || monthWorkflow.data.activeMonthStatus.status === "closed") {
+    if (!surplusExists || !draftMatchesSurplus || workflowData.closeSummary.canClose === false || workflowData.activeMonthStatus.status === "closed") {
       return;
     }
 
@@ -322,7 +342,7 @@ export function Dashboard() {
     setSurplusApplyError(null);
 
     try {
-      const normalizedNetSurplus = Number(data.surplusRecommendations.netSurplus || "0");
+      const normalizedNetSurplus = Number(dashboardData.surplusRecommendations.netSurplus || "0");
       const splitOverride = suggestedRows.map((row, index) => {
         const normalizedAmount = Number(normalizeMoneyInput(row.amount) ?? row.amount ?? "0");
         const splitPercent = normalizedNetSurplus > 0 ? (normalizedAmount / normalizedNetSurplus).toFixed(4) : "0.0000";
@@ -371,7 +391,7 @@ export function Dashboard() {
           </button>
         </div>
       ) : null}
-      {monthWorkflow.data.reminderMonth ? <MonthReminderBanner monthKey={monthWorkflow.data.reminderMonth.monthKey} /> : null}
+      {workflowData.reminderMonth ? <MonthReminderBanner monthKey={workflowData.reminderMonth.monthKey} /> : null}
       {showStartHere ? (
         <Card
           title="Start Here"
@@ -405,16 +425,27 @@ export function Dashboard() {
         <SummaryMetricCard
           title="Income this month"
           value={formatCurrency(latestPeriodIncome)}
-          subtitle={data.incomeCount ? `${data.incomeCount} deposit${data.incomeCount === 1 ? "" : "s"}` : "Start here each month"}
-          badge={data.latestPeriod?.alertStatus ?? "ok"}
-          tone={alertTone(data.latestPeriod?.alertStatus)}
+          subtitle={dashboardData.incomeCount ? `${dashboardData.incomeCount} deposit${dashboardData.incomeCount === 1 ? "" : "s"}` : "Start here each month"}
+          badge={dashboardData.latestPeriod?.alertStatus ?? "ok"}
+          tone={alertTone(dashboardData.latestPeriod?.alertStatus)}
         />
         <SummaryMetricCard
           title="Net surplus"
           value={formatCurrency(latestSurplus)}
-          subtitle={monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}
-          badge={monthWorkflow.data.activeMonthStatus.status}
-          tone={monthWorkflow.data.activeMonthStatus.status === "closed" ? "success" : alertTone(data.latestPeriod?.alertStatus)}
+          subtitle={workflowData.activeMonthStatus.status.replaceAll("_", " ")}
+          badge={workflowData.activeMonthStatus.status}
+          tone={workflowData.activeMonthStatus.status === "closed" ? "success" : alertTone(dashboardData.latestPeriod?.alertStatus)}
+          action={netSurplusExplanation ? (
+            <button
+              type="button"
+              aria-expanded={netSurplusExplanationOpen}
+              aria-haspopup="dialog"
+              className="text-[11px] font-semibold text-[var(--primary-color)] underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary-color)]"
+              onClick={() => setNetSurplusExplanationOpen(true)}
+            >
+              How is this calculated?
+            </button>
+          ) : null}
         />
         <div className="col-span-2 xl:col-span-1">
           <SummaryMetricCard
@@ -455,7 +486,7 @@ export function Dashboard() {
                 <div>
                   <div className="font-semibold">Savings is below your floor.</div>
                   <div className="mt-1 text-[12px] leading-5">
-                    Current savings is {formatCurrency(data.financialHealth.savingsBalance)} against a floor of {formatCurrency(data.financialHealth.savingsFloor)}.
+                    Current savings is {formatCurrency(dashboardData.financialHealth.savingsBalance)} against a floor of {formatCurrency(dashboardData.financialHealth.savingsFloor)}.
                   </div>
                 </div>
                 <Link className="text-[12px] font-semibold text-rose-700 underline-offset-2 hover:underline" to="/settings">
@@ -474,7 +505,7 @@ export function Dashboard() {
                   <Link className="text-[11px] font-medium text-[var(--primary-color)]" to="/monthly-review">
                     Default split in Monthly Review
                   </Link>
-                  <Badge tone={alertTone(data.surplusRecommendations.alertStatus)}>Surplus</Badge>
+                  <Badge tone={alertTone(dashboardData.surplusRecommendations.alertStatus)}>Surplus</Badge>
                 </div>
               )}
             >
@@ -483,7 +514,7 @@ export function Dashboard() {
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Surplus available</div>
-                      <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(data.surplusRecommendations.netSurplus)}</div>
+                      <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(dashboardData.surplusRecommendations.netSurplus)}</div>
                       <div className="mt-2 text-[12px] text-[var(--text-muted)]">
                         These are editable suggestions only. Nothing moves until you confirm it in Monthly Review.
                       </div>
@@ -492,7 +523,7 @@ export function Dashboard() {
                       <button
                         type="button"
                         className="inline-flex min-h-9 items-center rounded-full bg-[var(--primary-color)] px-3.5 py-1.5 text-xs font-semibold text-[var(--primary-contrast)] disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isQuickApplyingSurplus || !draftMatchesSurplus || monthWorkflow.data.closeSummary.canClose === false || monthWorkflow.data.activeMonthStatus.status === "closed"}
+                        disabled={isQuickApplyingSurplus || !draftMatchesSurplus || workflowData.closeSummary.canClose === false || workflowData.activeMonthStatus.status === "closed"}
                         onClick={() => void handleQuickApplySurplus()}
                       >
                         {isQuickApplyingSurplus ? "Applying..." : "Quick apply all"}
@@ -579,7 +610,7 @@ export function Dashboard() {
                         <div className="mt-1 text-[12px] text-[var(--text-muted)]">
                           {draftMatchesSurplus
                             ? "The draft matches the current surplus."
-                            : `Keep this aligned with ${formatCurrency(data.surplusRecommendations.netSurplus)} before confirming.`}
+                            : `Keep this aligned with ${formatCurrency(dashboardData.surplusRecommendations.netSurplus)} before confirming.`}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -614,9 +645,9 @@ export function Dashboard() {
               </Link>
             )}
           >
-            {data.recentTransactions.length ? (
+            {dashboardData.recentTransactions.length ? (
               <div style={{ borderColor: "var(--border-color)" }} className="divide-y">
-                {data.recentTransactions.map((transaction) => {
+                {dashboardData.recentTransactions.map((transaction) => {
                   const categoryLabel = transaction.categoryId
                     ? activeCategories.find((category) => category.id === transaction.categoryId)?.label ?? transaction.categoryId
                     : "Unassigned";
@@ -648,6 +679,67 @@ export function Dashboard() {
           </Card>
         </div>
       </section>
+
+      {netSurplusExplanationOpen && netSurplusExplanation ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 px-3 py-4 sm:items-center"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setNetSurplusExplanationOpen(false);
+            }
+          }}
+        >
+          <div
+            aria-labelledby="net-surplus-explanation-title"
+            aria-modal="true"
+            className="w-full max-w-md rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-5 shadow-2xl"
+            role="dialog"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p id="net-surplus-explanation-title" className="text-base font-semibold text-[var(--text-strong)]">
+                  {netSurplusExplanation.label}
+                </p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  Based on recorded {activeMonthLabel} activity.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close calculation explanation"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-color)] text-sm font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-plain)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary-color)]"
+                onClick={() => setNetSurplusExplanationOpen(false)}
+              >
+                X
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-3 text-sm">
+              {netSurplusExplanation.components.map((component) => (
+                <div key={`${component.label}-${component.value}`} className="flex items-center justify-between gap-4">
+                  <span className="text-[var(--text-muted)]">{component.label}</span>
+                  <span className="font-semibold text-[var(--text-strong)]">{formatCurrency(component.value)}</span>
+                </div>
+              ))}
+              <div className="border-t border-[var(--border-color)] pt-3">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-semibold text-[var(--text-strong)]">Remaining</span>
+                  <span className="font-bold text-[var(--text-strong)]">{formatCurrency(netSurplusExplanation.value)}</span>
+                </div>
+              </div>
+            </div>
+
+            {netSurplusExplanation.assumptions?.length ? (
+              <ul className="mt-5 space-y-2 text-[12px] leading-5 text-[var(--text-muted)]">
+                {netSurplusExplanation.assumptions.map((assumption) => (
+                  <li key={assumption}>{assumption}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
     </PageShell>
   );
