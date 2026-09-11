@@ -237,6 +237,103 @@ export interface Debt {
   estimatedPayoffDate?: string | null;
   monthsRemaining?: number | null;
   totalInterestRemaining?: string | null;
+  paymentPace?: DebtPaymentPace | null;
+  paymentInsight?: DebtPaymentInsight | null;
+  insightAcknowledged?: boolean;
+  paymentObligation?: PaymentObligation | null;
+  balanceTrajectory?: BalanceTrajectory | null;
+  balanceExplanation?: BalanceChangeExplanation | null;
+}
+
+export interface DebtPaymentPace {
+  pace: "no_payment" | "under_minimum" | "minimum_only" | "below_plan" | "on_plan" | "above_plan";
+  actualPayment: string;
+  plannedPayment: string;
+  minimumPayment: string;
+  amountAboveMinimum: string;
+  amountAbovePlan: string;
+  percentOfPlan: number;
+  lowerBound: string;
+  upperBound: string;
+}
+
+export interface DebtPaymentInsight {
+  type: "above_plan_payment" | "below_plan_warning" | null;
+  /** Present only when `type` is "below_plan_warning". */
+  reason?: "well_below_plan";
+  actionablePaymentPeriod: string;
+  actualPayment: string;
+  plannedPayment: string;
+  minimumPayment: string;
+  amountAbovePlan?: string;
+  amountBelowPlan?: string;
+  percentOfPlan: number;
+  suggestedRecurringPayment?: string;
+  projections?: {
+    observedBasis?: "three_month_average" | "latest_completed_month" | "this_month" | string | null;
+    planned: {
+      estimatedPayoffDate: string | null;
+      monthsRemaining: number | null;
+      totalInterestRemaining: string | null;
+    };
+    observed: {
+      estimatedPayoffDate: string | null;
+      monthsRemaining: number | null;
+      totalInterestRemaining: string | null;
+    };
+    /** Positive = observed pace pays off sooner; negative = it slips later (below-plan). */
+    acceleratedMonths?: number;
+    /** Positive = interest saved; negative = extra interest (below-plan). */
+    interestSaved?: string;
+  };
+}
+
+export interface DebtPaymentPaceAcknowledgement {
+  id: string;
+  debtId: string;
+  paymentPeriodMonth: string;
+  action: "keep_plan" | "acknowledge_onetime" | "update_plan";
+  acknowledgementDate: string;
+}
+
+export interface PaymentObligation {
+  periodStart: string;
+  periodEnd: string;
+  dueDate: string;
+  minimumDue: string;
+  plannedAmount: string;
+  payments: Array<{ paymentDate: string; amount: string }>;
+  totalPaidToDate: string;
+  minimumRemaining: string;
+  plannedRemaining: string;
+  status: "pending" | "in_progress" | "satisfied" | "under_minimum" | "missed_payment";
+  minimumSatisfied: boolean;
+  planSatisfied: boolean;
+}
+
+export interface BalanceTrajectory {
+  trajectory: "decreasing" | "stable" | "increasing";
+  absoluteChange: number;
+  percentageChange: number;
+  tolerance: number;
+  isIncreasing: boolean;
+  isDecreasing: boolean;
+  isStable: boolean;
+  /** True when the balance grew this period — surfaced independently of payment pace. */
+  warning: boolean;
+}
+
+export interface BalanceChangeExplanation {
+  openingBalance: string;
+  payments: string;
+  interest: string;
+  fees: string;
+  adjustments: string;
+  /** Balance-increasing activity that is not interest or fees (new charges / borrowing). */
+  newActivity: string;
+  unexplained: string;
+  closingBalance: string;
+  changeMessage: string;
 }
 
 export interface DebtCreateRequest {

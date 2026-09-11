@@ -1,6 +1,7 @@
 ﻿import { useState } from "react";
 
-import { createDebt, getDebts, updateDebt } from "../api/debtsApi";
+import { acknowledgePaceInsight, createDebt, getDebts, updateDebt } from "../api/debtsApi";
+import { PaymentPaceInsight } from "../components/debt/PaymentPaceInsight";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { LoadingState } from "../components/feedback/LoadingState";
@@ -14,6 +15,7 @@ import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { formatCurrency, formatIsoDate, percentPaidOff } from "../lib/format";
+import type { DebtPaymentPaceAcknowledgement } from "../lib/types";
 import { normalizeMoneyInput, validateApr, validateNonNegativeMoney, validatePositiveMoney, validateRequiredText } from "../lib/validation";
 
 function paymentStatusLabel(status?: string) {
@@ -141,6 +143,8 @@ export function Debts() {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean }>>({});
   const [showCreateDebtForm, setShowCreateDebtForm] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [paceAction, setPaceAction] = useState<{ debtId: string; action: DebtPaymentPaceAcknowledgement["action"] } | null>(null);
 
   function isSectionExpanded(debtId: string, section: "month" | "payoff") {
     return expandedSections[debtId]?.[section] ?? false;
@@ -155,6 +159,31 @@ export function Debts() {
         [section]: !(current[debtId]?.[section] ?? false),
       },
     }));
+  }
+
+  async function handlePaceAction(
+    debt: NonNullable<typeof data>["items"][number],
+    action: DebtPaymentPaceAcknowledgement["action"],
+  ) {
+    const paymentPeriodMonth = debt.paymentInsight?.actionablePaymentPeriod;
+    if (!paymentPeriodMonth) return;
+
+    setPaceAction({ debtId: debt.id, action });
+    setActionError(null);
+    try {
+      await acknowledgePaceInsight(debt.id, {
+        action,
+        paymentPeriodMonth,
+        ...(action === "update_plan" && debt.paymentInsight?.suggestedRecurringPayment
+          ? { newMonthlyPayment: debt.paymentInsight.suggestedRecurringPayment }
+          : {}),
+      });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Could not save payment pace choice.");
+    } finally {
+      setPaceAction(null);
+    }
   }
 
   function openEditModal(debt: NonNullable<typeof data>["items"][number]) {
@@ -539,6 +568,18 @@ export function Debts() {
                         </div>
                       </div>
 
+                      <PaymentPaceInsight
+                        debt={debt}
+                        acknowledged={debt.insightAcknowledged}
+                        pendingAction={paceAction?.debtId === debt.id ? paceAction.action : null}
+                        onUpdatePlan={() => void handlePaceAction(debt, "update_plan")}
+                        onKeepPlan={() => void handlePaceAction(debt, "keep_plan")}
+                        onAcknowledgeOnetime={() => void handlePaceAction(debt, "acknowledge_onetime")}
+                      />
+                      {actionError && paceAction?.debtId === debt.id ? (
+                        <p className="text-sm text-red-600">{actionError}</p>
+                      ) : null}
+
                       <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)]">
                         <button
                           type="button"
@@ -582,6 +623,13 @@ export function Debts() {
                                 <p className="mt-1 font-semibold text-[var(--text-strong)]">{debt.nextPaymentDueDate ? formatIsoDate(debt.nextPaymentDueDate) : "Set payment due day"}</p>
                               </div>
                             </div>
+                            {debt.paymentObligation ? (
+                              <p className="mt-3 text-sm text-[var(--text-muted)]">
+                                Obligation this cycle: {formatCurrency(debt.paymentObligation.totalPaidToDate)} paid of {formatCurrency(debt.paymentObligation.minimumDue)} minimum
+                                {debt.paymentObligation.dueDate ? `, due ${formatIsoDate(debt.paymentObligation.dueDate)}` : ""}
+                                {" "}({debt.paymentObligation.status.replace(/_/g, " ")}).
+                              </p>
+                            ) : null}
                             {debt.paymentStatus === "missed_payment" ? (
                               <p className="mt-3 text-sm text-[var(--text-muted)]">No payment recorded this month.</p>
                             ) : null}
