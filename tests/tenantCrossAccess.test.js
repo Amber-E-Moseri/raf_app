@@ -8,38 +8,21 @@
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { startIsolatedSqliteServer } from './helpers/isolatedSqliteServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-const port = 3103;
+// Randomized rather than fixed so a leaked/leftover server process from an interrupted
+// prior run can never be mistaken for this run's freshly spawned instance.
+const port = 20000 + Math.floor(Math.random() * 20000);
 const baseUrl = `http://127.0.0.1:${port}`;
-const dataDir = path.join(os.tmpdir(), `raf-cross-access-${process.pid}`);
 
 let serverProcess;
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForServer(url, attempts = 40) {
-  let lastError;
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return;
-      lastError = new Error(`Unexpected status ${res.status}`);
-    } catch (err) {
-      lastError = err;
-    }
-    await wait(250);
-  }
-  throw lastError;
-}
 
 async function request(pathname, { method = 'GET', token, workspaceId, body, headers = {} } = {}) {
   const res = await fetch(`${baseUrl}${pathname}`, {
@@ -69,39 +52,22 @@ let userA, userB;
 let transactionId;
 
 before(async () => {
-  serverProcess = spawn(process.execPath, ['index.js'], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      PORT: String(port),
-      RAF_PERSISTENCE_DRIVER: 'sqlite',
-      RAF_DB_PATH: dataDir,
-      RAF_AUTH_REQUIRED: 'true',
+  serverProcess = await startIsolatedSqliteServer({
+    repoRoot,
+    testName: 'raf-tenant-cross-access',
+    port,
+    authRequired: true,
+    jwtSecret: 'raf-tenant-cross-access-secret',
+    extraEnv: {
       RAF_AUTH_PROVIDER: 'local',
-      JWT_SECRET: 'cross-access-test-secret',
-      DATABASE_URL: '',
-      SUPABASE_DATABASE_URL: '',
       SUPABASE_URL: '',
       SUPABASE_ANON_KEY: '',
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
   });
-
-  let startupLog = '';
-  serverProcess.stdout.on('data', (c) => { startupLog += c.toString(); });
-  serverProcess.stderr.on('data', (c) => { startupLog += c.toString(); });
-
-  try {
-    await waitForServer(`${baseUrl}/health`);
-  } catch (error) {
-    serverProcess.kill('SIGTERM');
-    throw new Error(`Server failed to start. Output:\n${startupLog}\n${error.message}`);
-  }
 
   userA = await signup('cross-user-a@example.com', 'Workspace A');
   userB = await signup('cross-user-b@example.com', 'Workspace B');
 
-  // Create a transaction in workspace A so we can try to read it as user B
   const { status, data } = await request('/api/v1/transactions', {
     method: 'POST',
     token: userA.token,
@@ -120,13 +86,7 @@ before(async () => {
 });
 
 after(async () => {
-  if (serverProcess && !serverProcess.killed) {
-    await new Promise((resolve) => {
-      serverProcess.once('exit', resolve);
-      serverProcess.kill('SIGTERM');
-      setTimeout(resolve, 5000);
-    });
-  }
+  await serverProcess?.stop();
 });
 
 test('User B cannot list transactions from workspace A', async () => {

@@ -21,7 +21,9 @@ const connectionString = process.env.POSTGRES_CONNECTION_STRING ?? '';
 const shouldRun = Boolean(connectionString);
 const maybeTest = shouldRun ? test : test.skip;
 
-const port = 3199;
+// Randomized rather than fixed so a leaked/leftover server process from an interrupted
+// prior run can never be mistaken for this run's freshly spawned instance.
+const port = 20000 + Math.floor(Math.random() * 20000);
 const baseUrl = `http://127.0.0.1:${port}`;
 const jwtSecret = 'pg-repo-isolation-test-secret-2026';
 
