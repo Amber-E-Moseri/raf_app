@@ -36,6 +36,8 @@ export async function PATCH(request, context = {}) {
   }
 }
 
+export const PUT = PATCH;
+
 export async function DELETE(request, context = {}) {
   try {
     await deleteUpcomingExpense({

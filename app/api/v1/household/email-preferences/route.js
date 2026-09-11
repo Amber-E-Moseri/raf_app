@@ -33,3 +33,5 @@ export async function PATCH(request, context = {}) {
     return handle(error);
   }
 }
+
+export const PUT = PATCH;

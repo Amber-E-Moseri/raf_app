@@ -63,3 +63,5 @@ export async function PATCH(request, context = {}) {
     return json(buildErrorBody({ status: 500, message: 'Internal Server Error' }), 500);
   }
 }
+
+export const PUT = PATCH;
