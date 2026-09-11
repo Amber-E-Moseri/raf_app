@@ -306,6 +306,12 @@ test('listDebts derives currentBalance and returns summary totals from live paym
   assert.equal(result.items[1].paymentStatus, 'paid_off');
   assert.equal(result.items[1].monthsRemaining, 0);
   assert.equal(result.items[1].totalInterestRemaining, '0.00');
+
+  // Debt-intelligence fields are always present on the list item (nullable, additive).
+  assert.ok('paymentObligation' in result.items[0]);
+  assert.ok('balanceTrajectory' in result.items[0]);
+  assert.ok('balanceExplanation' in result.items[0]);
+  assert.equal(result.items[1].paymentInsight, null);
 });
 
 test('listDebts sorts by APR, then balance, then payoff speed instead of manual sort order', async () => {

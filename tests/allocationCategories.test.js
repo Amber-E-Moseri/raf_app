@@ -74,6 +74,9 @@ test('listHouseholdAllocationCategories returns formatted category rows', async 
   assert.equal(result.items.length, 7);
   assert.deepEqual(result.items[0], {
     id: 'cat_savings',
+    snapshotId: null,
+    effectiveFrom: null,
+    supersededAt: null,
     name: 'Savings',
     label: 'Savings',
     slug: 'savings',
@@ -100,7 +103,8 @@ test('replaceHouseholdAllocationCategories saves successfully with buffer as a n
         { slug: 'personal_spending', label: 'Daily Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
         { slug: 'investment', label: 'Investing', allocationPercent: '0.1000', sortOrder: 4, isActive: true },
         { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isActive: true },
-        { slug: 'buffer', label: 'Operating Buffer', allocationPercent: '0.2500', sortOrder: 6, isActive: true },
+        { slug: 'partnership', label: 'Partnership', allocationPercent: '0.1000', sortOrder: 6, isActive: true },
+        { slug: 'buffer', label: 'Operating Buffer', allocationPercent: '0.1500', sortOrder: 7, isActive: true },
       ],
     },
   });
@@ -118,17 +122,18 @@ test('replaceHouseholdAllocationCategories saves successfully without a buffer c
     householdId: 'household_1',
     input: {
       items: [
-        { slug: 'savings', label: 'Savings', allocationPercent: '0.2000', sortOrder: 1, isActive: true },
-        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.3500', sortOrder: 2, isActive: true },
+        { slug: 'savings', label: 'Savings', allocationPercent: '0.1500', sortOrder: 1, isActive: true },
+        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.3000', sortOrder: 2, isActive: true },
         { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
         { slug: 'investment', label: 'Investment', allocationPercent: '0.1500', sortOrder: 4, isActive: true },
         { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1500', sortOrder: 5, isActive: true },
+        { slug: 'partnership', label: 'Partnership', allocationPercent: '0.1000', sortOrder: 6, isActive: true },
       ],
     },
   });
 
   assert.equal(result.items.some((item) => item.slug === 'buffer'), false);
-  assert.equal(result.items.length, 5);
+  assert.equal(result.items.length, 6);
 });
 
 test('replaceHouseholdAllocationCategories allows adding a new non-system category', async () => {
@@ -144,8 +149,9 @@ test('replaceHouseholdAllocationCategories allows adding a new non-system catego
         { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
         { slug: 'investment', label: 'Investment', allocationPercent: '0.0500', sortOrder: 4, isActive: true },
         { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isActive: true },
-        { slug: 'travel', label: 'Travel Fund', allocationPercent: '0.0500', sortOrder: 6, isActive: true },
-        { slug: 'buffer', label: 'Buffer', allocationPercent: '0.2500', sortOrder: 9, isActive: true },
+        { slug: 'partnership', label: 'Partnership', allocationPercent: '0.1000', sortOrder: 6, isActive: true },
+        { slug: 'travel', label: 'Travel Fund', allocationPercent: '0.0500', sortOrder: 7, isActive: true },
+        { slug: 'buffer', label: 'Buffer', allocationPercent: '0.1500', sortOrder: 9, isActive: true },
       ],
     },
   });
@@ -225,7 +231,7 @@ test('household allocation category routes expose GET and PUT payloads', async (
   );
 
   assert.equal(getResponse.status, 200);
-  assert.equal((await getResponse.json()).items.length, 6);
+  assert.equal((await getResponse.json()).items.length, 7);
 
   const putResponse = await PUT(
     new Request('http://localhost/api/v1/household/allocation-categories', {
@@ -261,11 +267,12 @@ test('GET /household/allocation-categories returns the historical snapshot for a
     input: {
       items: [
         { slug: 'savings', label: 'Savings', allocationPercent: '0.2000', sortOrder: 1, isActive: true },
-        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.2500', sortOrder: 2, isActive: true },
+        { slug: 'fixed_bills', label: 'Fixed Bills', allocationPercent: '0.2000', sortOrder: 2, isActive: true },
         { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
         { slug: 'investment', label: 'Investment', allocationPercent: '0.0500', sortOrder: 4, isActive: true },
         { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1000', sortOrder: 5, isActive: true },
-        { slug: 'buffer', label: 'Buffer', allocationPercent: '0.2500', sortOrder: 9, isActive: true },
+        { slug: 'partnership', label: 'Partnership', allocationPercent: '0.1000', sortOrder: 6, isActive: true },
+        { slug: 'buffer', label: 'Buffer', allocationPercent: '0.2000', sortOrder: 9, isActive: true },
       ],
     },
   });
