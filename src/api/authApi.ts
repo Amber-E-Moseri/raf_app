@@ -8,6 +8,7 @@ interface LoginResponse {
   accessToken?: string;
   refreshToken?: string;
   expiresAt?: number | null;
+  remiTier?: "free" | "paid";
   households: Array<{ id: string; name: string; role: string }>;
   workspaces?: Array<{ id: string; name: string; type: string; role: string; status?: string }>;
 }
@@ -42,6 +43,7 @@ export async function apiLogin(email: string, password: string): Promise<AuthSes
     workspaceId: workspace.id,
     workspaceName: workspace.name,
     workspaces,
+    remiTier: res.remiTier ?? "free",
   };
 }
 

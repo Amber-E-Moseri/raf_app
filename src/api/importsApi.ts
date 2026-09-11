@@ -14,8 +14,9 @@ const importHeaders = {
   "x-household-id": DEFAULT_HOUSEHOLD_ID,
 };
 
-export function getImportedTransactions() {
-  return getJson<ImportedTransactionListResponse>("/imports", undefined, {
+export function getImportedTransactions(from?: string) {
+  const params = from ? { from } : undefined;
+  return getJson<ImportedTransactionListResponse>("/imports", params, {
     headers: importHeaders,
   });
 }
