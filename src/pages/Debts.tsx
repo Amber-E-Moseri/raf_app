@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
 
-import { acknowledgePaceInsight, createDebt, getDebts, updateDebt } from "../api/debtsApi";
+import { acknowledgePaceInsight, createDebt, createDebtAdjustment, deactivateDebt, deleteDebt, getDebtAdjustments, getDebts, updateDebt } from "../api/debtsApi";
 import { PaymentPaceInsight } from "../components/debt/PaymentPaceInsight";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
@@ -15,7 +15,7 @@ import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { formatCurrency, formatIsoDate, percentPaidOff } from "../lib/format";
-import type { DebtPaymentPaceAcknowledgement } from "../lib/types";
+import type { DebtAdjustment, DebtPaymentPaceAcknowledgement } from "../lib/types";
 import { normalizeMoneyInput, validateApr, validateNonNegativeMoney, validatePositiveMoney, validateRequiredText } from "../lib/validation";
 
 function paymentStatusLabel(status?: string) {
@@ -141,24 +141,98 @@ export function Debts() {
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string | null>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean }>>({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean; adjustments: boolean }>>({});
   const [showCreateDebtForm, setShowCreateDebtForm] = useState(false);
+  const [adjustmentsCache, setAdjustmentsCache] = useState<Record<string, DebtAdjustment[]>>({});
+  const [adjustmentsLoading, setAdjustmentsLoading] = useState<Record<string, boolean>>({});
+  const [addAdjDebtId, setAddAdjDebtId] = useState<string | null>(null);
+  const [adjForm, setAdjForm] = useState({ amount: "", adjustmentType: "manual", effectiveDate: "", note: "" });
+  const [adjSubmitting, setAdjSubmitting] = useState(false);
+  const [adjError, setAdjError] = useState<string | null>(null);
+  const [actionDebtId, setActionDebtId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [paceAction, setPaceAction] = useState<{ debtId: string; action: DebtPaymentPaceAcknowledgement["action"] } | null>(null);
 
-  function isSectionExpanded(debtId: string, section: "month" | "payoff") {
+  function isSectionExpanded(debtId: string, section: "month" | "payoff" | "adjustments") {
     return expandedSections[debtId]?.[section] ?? false;
   }
 
-  function toggleSection(debtId: string, section: "month" | "payoff") {
+  function toggleSection(debtId: string, section: "month" | "payoff" | "adjustments") {
+    const isExpanding = !(expandedSections[debtId]?.[section] ?? false);
     setExpandedSections((current) => ({
       ...current,
       [debtId]: {
         month: current[debtId]?.month ?? false,
         payoff: current[debtId]?.payoff ?? false,
-        [section]: !(current[debtId]?.[section] ?? false),
+        adjustments: current[debtId]?.adjustments ?? false,
+        [section]: isExpanding,
       },
     }));
+    if (section === "adjustments" && isExpanding && !(debtId in adjustmentsCache)) {
+      void loadAdjustments(debtId);
+    }
+  }
+
+  async function loadAdjustments(debtId: string) {
+    setAdjustmentsLoading((c) => ({ ...c, [debtId]: true }));
+    try {
+      const result = await getDebtAdjustments(debtId);
+      setAdjustmentsCache((c) => ({ ...c, [debtId]: result.items }));
+    } finally {
+      setAdjustmentsLoading((c) => ({ ...c, [debtId]: false }));
+    }
+  }
+
+  async function handleAddAdjustment(debtId: string) {
+    if (!adjForm.amount || !adjForm.effectiveDate) return;
+    setAdjSubmitting(true);
+    setAdjError(null);
+    try {
+      await createDebtAdjustment(debtId, {
+        amount: normalizeMoneyInput(adjForm.amount) ?? adjForm.amount,
+        adjustmentType: adjForm.adjustmentType,
+        effectiveDate: adjForm.effectiveDate,
+        note: adjForm.note || undefined,
+      });
+      setAdjForm({ amount: "", adjustmentType: "manual", effectiveDate: "", note: "" });
+      setAddAdjDebtId(null);
+      setAdjustmentsCache((c) => {
+        const { [debtId]: _, ...rest } = c;
+        return rest;
+      });
+      void loadAdjustments(debtId);
+      await reload();
+    } catch (err) {
+      setAdjError(err instanceof Error ? err.message : "Could not save adjustment.");
+    } finally {
+      setAdjSubmitting(false);
+    }
+  }
+
+  async function handleDeactivateDebt(debtId: string) {
+    setActionDebtId(debtId);
+    setActionError(null);
+    try {
+      await deactivateDebt(debtId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Could not deactivate debt.");
+    } finally {
+      setActionDebtId(null);
+    }
+  }
+
+  async function handleDeleteDebt(debtId: string) {
+    setActionDebtId(debtId);
+    setActionError(null);
+    try {
+      await deleteDebt(debtId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Could not remove debt. If payments are linked, deactivate instead.");
+    } finally {
+      setActionDebtId(null);
+    }
   }
 
   async function handlePaceAction(
@@ -576,9 +650,6 @@ export function Debts() {
                         onKeepPlan={() => void handlePaceAction(debt, "keep_plan")}
                         onAcknowledgeOnetime={() => void handlePaceAction(debt, "acknowledge_onetime")}
                       />
-                      {actionError && paceAction?.debtId === debt.id ? (
-                        <p className="text-sm text-red-600">{actionError}</p>
-                      ) : null}
 
                       <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)]">
                         <button
@@ -715,7 +786,135 @@ export function Debts() {
                           Based on starting balance minus current balance, capped between 0% and 100%.
                         </p>
                       </div>
-                      <div className="flex justify-end">
+                      <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)]">
+                        <button
+                          type="button"
+                          onClick={() => toggleSection(debt.id, "adjustments")}
+                          className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                        >
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Adjustments</p>
+                            <p className="mt-1 text-sm text-[var(--text-muted)]">Manual interest corrections, fees, and balance reconciliations.</p>
+                          </div>
+                          <span className="text-sm text-[var(--text-muted)]">{isSectionExpanded(debt.id, "adjustments") ? "Hide" : "Show"}</span>
+                        </button>
+                        {isSectionExpanded(debt.id, "adjustments") ? (
+                          <div className="border-t border-[var(--border-color)] px-4 py-4 space-y-3">
+                            {adjustmentsLoading[debt.id] ? (
+                              <p className="text-sm text-[var(--text-muted)]"><LoadingSpinner inline size="sm" /> Loading…</p>
+                            ) : (adjustmentsCache[debt.id] ?? []).filter((a) => !a.generated).length === 0 ? (
+                              <p className="text-sm text-[var(--text-muted)]">No manual adjustments recorded.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {(adjustmentsCache[debt.id] ?? []).filter((a) => !a.generated).map((adj) => (
+                                  <div key={adj.id} className="flex items-center justify-between gap-3 text-sm">
+                                    <div>
+                                      <span className="font-medium text-[var(--text-strong)]">{formatCurrency(adj.amount)}</span>
+                                      <span className="ml-2 text-[var(--text-muted)]">{adj.adjustmentType}</span>
+                                      <span className="ml-2 text-[var(--text-muted)]">{formatIsoDate(adj.effectiveDate)}</span>
+                                      {adj.note ? <span className="ml-2 italic text-[var(--text-muted)]">{adj.note}</span> : null}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {addAdjDebtId === debt.id ? (
+                              <div className="mt-3 space-y-3 rounded-xl border border-[var(--border-color)] bg-[var(--surface-plain)] p-3">
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                  <MoneyInput
+                                    label="Amount"
+                                    name="adjAmount"
+                                    value={adjForm.amount}
+                                    onChange={(v) => setAdjForm((c) => ({ ...c, amount: v }))}
+                                  />
+                                  <label className="block">
+                                    <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Type</span>
+                                    <select
+                                      className="ui-field"
+                                      value={adjForm.adjustmentType}
+                                      onChange={(e) => setAdjForm((c) => ({ ...c, adjustmentType: e.target.value }))}
+                                    >
+                                      <option value="manual">Manual</option>
+                                      <option value="interest">Interest correction</option>
+                                      <option value="late_fee">Late fee</option>
+                                      <option value="fee">Fee</option>
+                                    </select>
+                                  </label>
+                                  <Input
+                                    label="Effective date"
+                                    name="adjDate"
+                                    type="date"
+                                    value={adjForm.effectiveDate}
+                                    onChange={(e) => setAdjForm((c) => ({ ...c, effectiveDate: e.target.value }))}
+                                  />
+                                </div>
+                                <Input
+                                  label="Note (optional)"
+                                  name="adjNote"
+                                  value={adjForm.note}
+                                  onChange={(e) => setAdjForm((c) => ({ ...c, note: e.target.value }))}
+                                />
+                                {adjError ? <p className="text-sm text-red-600">{adjError}</p> : null}
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    disabled={adjSubmitting || !adjForm.amount || !adjForm.effectiveDate}
+                                    onClick={() => void handleAddAdjustment(debt.id)}
+                                  >
+                                    {adjSubmitting ? <LoadingSpinner inline size="sm" label="Saving…" /> : "Save adjustment"}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() => { setAddAdjDebtId(null); setAdjError(null); }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => { setAddAdjDebtId(debt.id); setAdjError(null); setAdjForm({ amount: "", adjustmentType: "manual", effectiveDate: "", note: "" }); }}
+                                className="mt-1 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-strong)]"
+                              >
+                                + Add adjustment
+                              </button>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex gap-2">
+                          {debt.status !== "paid_off" && debt.isActive !== false ? (
+                            <button
+                              type="button"
+                              disabled={actionDebtId === debt.id}
+                              onClick={() => {
+                                if (window.confirm(`Deactivate "${debt.name}"? It will be hidden but payment history is kept.`)) {
+                                  void handleDeactivateDebt(debt.id);
+                                }
+                              }}
+                              className="rounded-full border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-color)] disabled:opacity-50"
+                            >
+                              {actionDebtId === debt.id ? <LoadingSpinner inline size="sm" /> : "Deactivate"}
+                            </button>
+                          ) : null}
+                          {debt.status === "paid_off" ? (
+                            <button
+                              type="button"
+                              disabled={actionDebtId === debt.id}
+                              onClick={() => {
+                                if (window.confirm(`Remove "${debt.name}"? This is permanent.`)) {
+                                  void handleDeleteDebt(debt.id);
+                                }
+                              }}
+                              className="rounded-full border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-color)] disabled:opacity-50"
+                            >
+                              {actionDebtId === debt.id ? <LoadingSpinner inline size="sm" /> : "Remove"}
+                            </button>
+                          ) : null}
+                        </div>
                         <button
                           type="button"
                           onClick={() => openEditModal(debt)}
@@ -724,6 +923,7 @@ export function Debts() {
                           Edit debt
                         </button>
                       </div>
+                      {actionError ? <p className="text-sm text-red-600">{actionError}</p> : null}
                     </div>
                   </Card>
                 );

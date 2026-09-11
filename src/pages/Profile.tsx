@@ -9,6 +9,7 @@ import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { PageShell } from "../components/layout/PageShell";
 import { usePeriod } from "../components/layout/PeriodProvider";
+import { useAuth } from "../context/AuthContext";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -57,6 +58,7 @@ function resolveGoalCategoryLabel(goal: Goal, progress: GoalProgress | null, cat
 }
 
 export function Profile() {
+  const { session } = useAuth();
   const { activeRange } = usePeriod();
   const { data, error, isLoading, reload } = useAsyncData<ProfileViewModel>(async () => {
     const currentYear = new Date().getFullYear();
@@ -171,21 +173,18 @@ export function Profile() {
           <Card title="User Information" subtitle="Account details and household context.">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-raf-ink">Jane Doe</h2>
-                <p className="mt-1 text-sm text-stone-500">Local RAF profile placeholder</p>
+                <h2 className="text-lg font-semibold text-raf-ink">{session?.email ?? "—"}</h2>
+                <p className="mt-1 text-sm text-stone-500">{session?.workspaceName ?? session?.householdName ?? "RAF member"}</p>
               </div>
-              <Badge tone="neutral">Profile placeholder</Badge>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
                 <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Household</p>
-                <p className="mt-2 text-sm font-medium text-raf-ink">Local RAF Household</p>
-                <p className="mt-1 text-sm text-stone-500">Household and account details will appear here when available.</p>
+                <p className="mt-2 text-sm font-medium text-raf-ink">{session?.householdName ?? "—"}</p>
               </div>
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
                 <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Account</p>
-                <p className="mt-2 text-sm font-medium text-raf-ink">Google-auth account placeholder</p>
-                <p className="mt-1 text-sm text-stone-500">Connected user details are not available yet.</p>
+                <p className="mt-2 text-sm font-medium text-raf-ink">{session?.email ?? "—"}</p>
               </div>
             </div>
           </Card>

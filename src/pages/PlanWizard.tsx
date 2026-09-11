@@ -212,6 +212,8 @@ export function PlanWizard() {
 
       setSubmitSuccess("Plan setup saved. Your income, fixed bills, debts, and goals are now persisted.");
       setSubmitError(null);
+      try { localStorage.setItem("raf:setup-done", "true"); } catch {}
+      window.dispatchEvent(new CustomEvent("raf:setup-complete"));
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Wizard submission failed.");
       setSubmitSuccess(null);

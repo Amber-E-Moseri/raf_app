@@ -101,7 +101,7 @@ export function useMonthWorkflow(activeMonth: string) {
       getDashboardReport(activeRange),
       getIncome(historyRange),
       getTransactionsForHistoryRange(historyRange.from, historyRange.to),
-      getImportedTransactions(),
+      getImportedTransactions(historyRange.from),
       getMonthlyReviews(historyRange),
       getAllocationCategoriesAsOf(activeRange.to).catch((error) => {
         if (error instanceof ApiError && error.status === 404) {

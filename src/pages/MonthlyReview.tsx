@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { getDebts } from "../api/debtsApi";
 import { getGoals } from "../api/goalsApi";
@@ -38,6 +38,10 @@ interface SurplusSplitDraftRow {
 function defaultReviewMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function negativeAmountClass(value: string) {
+  return Number(value) < 0 ? "text-rose-600" : "";
 }
 
 function alertTone(status: "ok" | "elevated" | "risky") {
@@ -155,6 +159,7 @@ export function MonthlyReview() {
   const [surplusPreferenceMessage, setSurplusPreferenceMessage] = useState<string | null>(null);
   const [surplusPreferenceError, setSurplusPreferenceError] = useState<string | null>(null);
   const [result, setResult] = useState<ApplyMonthlyReviewResponse | null>(null);
+  const confirmDialogRef = useRef<HTMLDialogElement>(null);
   const [showBatchTools, setShowBatchTools] = useState(false);
   const [batchResult, setBatchResult] = useState<{
     reviewMonths: string[];
@@ -173,7 +178,7 @@ export function MonthlyReview() {
     return {
       categories: categories.filter((category) => category.isActive !== false),
       goals: goalsResponse.items.filter((goal) => goal.active !== false),
-      debts: debtsResponse.items.filter((debt) => debt.active !== false),
+      debts: debtsResponse.items.filter((debt) => debt.isActive !== false),
     };
   }, []);
 
@@ -289,6 +294,11 @@ export function MonthlyReview() {
           ?? (reviewMonthError ? null : "Resolve imported rows before closing this month."),
       );
       setResult(null);
+      return;
+    }
+
+    const isDeficit = Number(monthWorkflow.data?.closeSummary.remainingSurplusOrDeficit ?? "0") < 0;
+    if (isDeficit && !window.confirm("This month ended in deficit — spending exceeded income. Closing will record this result permanently. Continue?")) {
       return;
     }
 
@@ -457,7 +467,7 @@ export function MonthlyReview() {
             </div>
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               <p className="text-sm text-[var(--text-muted)]">Remaining surplus or deficit</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.remainingSurplusOrDeficit)}</p>
+              <p className={`mt-1 text-xl font-semibold ${negativeAmountClass(monthWorkflow.data.closeSummary.remainingSurplusOrDeficit) || "text-[var(--text-strong)]"}`}>{formatCurrency(monthWorkflow.data.closeSummary.remainingSurplusOrDeficit)}</p>
             </div>
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               <p className="text-sm text-[var(--text-muted)]">Unresolved imported transactions</p>
@@ -595,59 +605,6 @@ export function MonthlyReview() {
         </Card>
       ) : null}
       <section className="grid gap-4">
-        <Card title="Close Month" subtitle="Finalize this month when you are ready." className="hidden">
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,240px),auto] md:items-end">
-              <Input
-                label="Review month"
-                name="reviewMonth"
-                type="date"
-                value={reviewMonth}
-                error={fieldErrors.reviewMonth}
-                onBlur={() => setFieldErrors((current) => ({ ...current, reviewMonth: validateFirstDayOfMonth(reviewMonth, "Review month") }))}
-                onChange={(event) => {
-                  const nextMonth = event.target.value;
-                  setReviewMonth(nextMonth);
-                  if (/^\d{4}-\d{2}-\d{2}$/.test(nextMonth)) {
-                    setActiveMonth(nextMonth.slice(0, 7));
-                  }
-                  setFieldErrors((current) => ({ ...current, reviewMonth: null }));
-                }}
-              />
-              {monthWorkflow.data?.activeMonthStatus.status === "closed" ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={isUnclosing}
-                  onClick={() => void handleUncloseMonth()}
-                >
-                  {isUnclosing ? <LoadingSpinner inline size="sm" label="Reversing closeout..." /> : "Reverse Closeout"}
-                </Button>
-              ) : (
-                <Button
-                  disabled={
-                    isSubmitting
-                    || isPreviewLoading
-                    || monthWorkflow.data?.closeSummary.canClose === false
-                    || Boolean(splitDraftError)
-                    || Boolean(missingDestinationDraft)
-                  }
-                  onClick={() => void handleSubmit()}
-                  type="button"
-                >
-                  {isSubmitting ? <LoadingSpinner inline size="sm" label="Closing month..." /> : "Close Month"}
-                </Button>
-              )}
-            </div>
-            <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-              {monthWorkflow.data?.activeMonthStatus.status === "closed"
-                ? "Month closed."
-                : "Uses the current surplus plan."}
-            </div>
-            {uncloseMessage ? <SuccessNotice title="Month reopened" message={uncloseMessage} /> : null}
-          </div>
-        </Card>
-
         <Card title="Surplus Plan" subtitle="Adjust this month’s split, then close the month when it looks right.">
           {isPreviewLoading ? <LoadingState label="Loading surplus recommendation..." /> : null}
           {!isPreviewLoading && previewError ? <ErrorState title="Failed to load monthly review preview" message={previewError} /> : null}
@@ -657,13 +614,18 @@ export function MonthlyReview() {
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-4 rounded-2xl p-4" style={{ background: "var(--surface-plain)" }}>
                 <div>
-                  <p className="text-sm text-[var(--text-muted)]">Surplus available</p>
-                  <p className="mt-1 text-2xl font-semibold text-[var(--text-strong)]">{formatCurrency(preview.netSurplus)}</p>
-                  <p className="mt-1 text-[12px] text-[var(--text-muted)]">Edit the split if needed. Nothing applies until you close the month.</p>
+                  <p className="text-sm text-[var(--text-muted)]">{Number(preview.netSurplus) < 0 ? "Month deficit" : "Surplus available"}</p>
+                  <p className={`mt-1 text-2xl font-semibold ${Number(preview.netSurplus) < 0 ? "text-rose-600" : "text-[var(--text-strong)]"}`}>{formatCurrency(preview.netSurplus)}</p>
+                  <p className="mt-1 text-[12px] text-[var(--text-muted)]">{Number(preview.netSurplus) < 0 ? "Spending exceeded income this month. No surplus to distribute." : "Edit the split if needed. Nothing applies until you close the month."}</p>
                 </div>
                 <Badge tone={alertTone(preview.alertStatus)}>{preview.alertStatus}</Badge>
               </div>
-              <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+              {preview.splitConfigError ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {preview.splitConfigError}
+                </div>
+              ) : null}
+              {Number(preview.netSurplus) > 0 ? <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-[var(--text-strong)]">Current split</div>
@@ -704,6 +666,29 @@ export function MonthlyReview() {
                     </Button>
                   </div>
                 </div>
+                {splitDraftRows.length === 0 ? (
+                  <div className="mt-4 rounded-2xl border border-dashed p-4 text-center" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+                    <p className="text-sm text-[var(--text-muted)]">No split rules configured.</p>
+                    <p className="mt-1 text-[12px] text-[var(--text-muted)]">Add an emergency fund rule at 100% to get started, or save your saved defaults first.</p>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="mt-3 min-h-8 rounded-full px-3 py-1 text-xs"
+                      onClick={() => setSplitDraftRows([{
+                        id: null,
+                        slug: "emergency_fund",
+                        label: "Emergency Fund",
+                        splitPercent: "100.00",
+                        destinationType: "bucket",
+                        destinationBucketSlug: "emergency_fund",
+                        destinationGoalId: null,
+                        destinationDebtId: null,
+                      }])}
+                    >
+                      Add emergency fund rule
+                    </Button>
+                  </div>
+                ) : null}
                 <div className="mt-4 space-y-3">
                   {splitDraftRows.map((distribution) => (
                     <div
@@ -800,8 +785,8 @@ export function MonthlyReview() {
                     {splitDraftError || missingDestinationDraft ? "Needs attention" : "Balanced"}
                   </Badge>
                 </div>
-              </div>
-              {preview.targetDebtName ? (
+              </div> : null}
+              {Number(preview.netSurplus) > 0 && preview.targetDebtName ? (
                 <p className="text-sm text-[var(--text-muted)]">
                   Debt target: <span className="font-medium text-[var(--text-strong)]">{preview.targetDebtName}</span>
                 </p>
@@ -874,7 +859,8 @@ export function MonthlyReview() {
                 </div>
               </div>
               <div className="rounded-2xl border p-4 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-color)" }}>
-                This applies each month sequentially. If a month already has a saved review, the batch stops there for you to review it.
+                This applies each month sequentially. If a month already has a saved review, the batch stops there for you to review it.{" "}
+                <span className="font-medium text-[var(--text-strong)]">Batch close uses your saved default split rules, not any edits you have made in the form above.</span>
               </div>
               {batchResult ? (
                 <div>
@@ -929,12 +915,35 @@ export function MonthlyReview() {
                   || Boolean(splitDraftError)
                   || Boolean(missingDestinationDraft)
                 }
-                onClick={() => void handleSubmit()}
+                onClick={() => confirmDialogRef.current?.showModal()}
                 type="button"
               >
-                {isSubmitting ? <LoadingSpinner inline size="sm" label="Closing month..." /> : "Close Month"}
+                Close Month
               </Button>
             )}
+            <dialog ref={confirmDialogRef} className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-6 shadow-lg backdrop:bg-black/40 w-full max-w-sm">
+              <p className="text-[15px] font-semibold text-[var(--text-primary)]">Close {reviewMonth.slice(0, 7)}?</p>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">This will finalize the month and create allocation transactions. This action can be reversed with "Reverse Closeout".</p>
+              <div className="mt-5 flex justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => confirmDialogRef.current?.close()}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    confirmDialogRef.current?.close();
+                    void handleSubmit();
+                  }}
+                >
+                  {isSubmitting ? <LoadingSpinner inline size="sm" label="Closing month..." /> : "Confirm close"}
+                </Button>
+              </div>
+            </dialog>
           </div>
           <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
             {monthWorkflow.data?.activeMonthStatus.status === "closed"

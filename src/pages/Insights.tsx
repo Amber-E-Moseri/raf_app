@@ -1,10 +1,10 @@
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
-import { getHouseholdSettings } from "../api/householdApi";
 import { getDashboardReport, getFinancialHealthReport } from "../api/reportsApi";
 import { FinancialHealthIndicator } from "../components/dashboard/FinancialHealthIndicator";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { PageShell } from "../components/layout/PageShell";
+import { usePeriod } from "../components/layout/PeriodProvider";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useAsyncData } from "../hooks/useAsyncData";
@@ -44,14 +44,14 @@ function insightBarColor(index: number) {
 }
 
 export function Insights() {
+  const { activeMonth, activeRange } = usePeriod();
   const { data, error, isLoading, reload } = useAsyncData<InsightsViewModel>(async () => {
-    const household = await getHouseholdSettings();
-    const yearStart = `${household.activeMonth.slice(0, 4)}-01-01`;
-    const healthMonths = buildYearToDateMonths(household.activeMonth);
+    const yearStart = `${activeMonth.slice(0, 4)}-01-01`;
+    const healthMonths = buildYearToDateMonths(activeMonth);
 
     const [categories, dashboard, financialHealthHistory] = await Promise.all([
       getAllocationCategories(),
-      getDashboardReport({ from: yearStart, to: household.activeMonth }),
+      getDashboardReport({ from: yearStart, to: activeRange.to }),
       Promise.all(healthMonths.map((month) => getFinancialHealthReport(month))),
     ]);
 
@@ -59,9 +59,9 @@ export function Insights() {
       categories,
       dashboard,
       financialHealthHistory,
-      activeMonthLabel: formatMonthLabel(household.activeMonth.slice(0, 7)),
+      activeMonthLabel: formatMonthLabel(activeMonth.slice(0, 7)),
     };
-  }, []);
+  }, [activeMonth]);
 
   if (isLoading) {
     return (

@@ -152,7 +152,7 @@ export function Goals() {
       getGoals(),
       getDashboardReport({ from: activeRange.from, to: activeRange.to }),
       getTransactions({ from: activeRange.from, to: activeRange.to, limit: 100 }),
-      getImportedTransactions(),
+      getImportedTransactions(activeRange.from),
     ]);
 
     return {

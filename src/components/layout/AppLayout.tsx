@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { APP_NAME } from "../../lib/constants";
 import rafLogo from "../../assets/raf-logo.png";
 import { useAuth } from "../../context/AuthContext";
 import { buildMonthOptions } from "../../lib/period";
+import { RemiFab, RemiPanel } from "../remi/RemiPanel";
 import { usePeriod } from "./PeriodProvider";
 
 const desktopNavigation = [
@@ -249,10 +250,10 @@ function SidebarGroup({ label, items }: { label: string; items: Array<{ to: stri
       <div className="space-y-1">
         {items.map((item) => (
           <NavLink key={item.to} to={item.to} className={({ isActive }) => navClassName(isActive)}>
-            <span className="inline-flex h-4 w-4 items-center justify-center">
+            <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
               <NavIcon type={item.icon} />
             </span>
-            <span>{item.label}</span>
+            <span className="truncate" title={item.label}>{item.label}</span>
           </NavLink>
         ))}
       </div>
@@ -261,7 +262,7 @@ function SidebarGroup({ label, items }: { label: string; items: Array<{ to: stri
 }
 
 export function AppLayout() {
-  const { session, switchWorkspace } = useAuth();
+  const { session, switchWorkspace, clearSession } = useAuth();
   const {
     activeMonth,
     activeMonthLabel,
@@ -274,6 +275,18 @@ export function AppLayout() {
   const monthOptions = useMemo(() => buildMonthOptions(activeMonth), [activeMonth]);
   const workspaces = session?.workspaces ?? [];
   const activeWorkspaceId = session?.workspaceId ?? session?.householdId;
+  const location = useLocation();
+  const [remiOpen, setRemiOpen] = useState(false);
+  const showRemiFab = location.pathname !== "/remi";
+  const [setupDone, setSetupDone] = useState(() => {
+    try { return localStorage.getItem("raf:setup-done") === "true"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    function onSetupDone() { setSetupDone(true); }
+    window.addEventListener("raf:setup-complete", onSetupDone);
+    return () => window.removeEventListener("raf:setup-complete", onSetupDone);
+  }, []);
 
   return (
     <div className="theme-shell min-h-screen">
@@ -335,18 +348,38 @@ export function AppLayout() {
             </div>
 
             <nav className="min-h-0 flex-1 space-y-6 overflow-y-auto py-5">
+              {!setupDone ? (
+                <SidebarGroup
+                  label="Setup"
+                  items={[{ to: "/plan-wizard", label: "Get Started", icon: "target" }]}
+                />
+              ) : null}
               {desktopNavigation.map((group) => (
                 <SidebarGroup key={group.label} label={group.label} items={group.items} />
               ))}
             </nav>
 
-            <div className="mt-auto space-y-3 border-t border-[var(--border-subtle)] pt-4">
+            <div className="mt-auto space-y-1 border-t border-[var(--border-subtle)] pt-4">
               <NavLink to="/profile" className={({ isActive }) => navClassName(isActive)}>
-                <span className="inline-flex h-4 w-4 items-center justify-center">
+                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
                   <NavIcon type="user" />
                 </span>
-                <span>Profile</span>
+                <span className="truncate">Profile</span>
               </NavLink>
+              <button
+                type="button"
+                className="nav-link w-full text-left"
+                onClick={clearSession}
+              >
+                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                </span>
+                <span className="truncate">Sign out</span>
+              </button>
             </div>
           </div>
         </aside>
@@ -366,6 +399,14 @@ export function AppLayout() {
           </NavLink>
         ))}
       </nav>
+
+      {showRemiFab ? (
+        <>
+          <style>{`@keyframes remi-dot{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}`}</style>
+          {remiOpen ? <RemiPanel onClose={() => setRemiOpen(false)} /> : null}
+          <RemiFab onClick={() => setRemiOpen((o) => !o)} open={remiOpen} />
+        </>
+      ) : null}
     </div>
   );
 }

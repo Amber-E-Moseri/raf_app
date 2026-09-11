@@ -350,6 +350,17 @@ export interface DebtCreateRequest {
   sortOrder?: number;
 }
 
+export interface DebtAdjustment {
+  id: string;
+  debtId: string;
+  amount: string;
+  adjustmentType: string;
+  effectiveDate: string;
+  note?: string | null;
+  generated?: boolean;
+  createdAt?: string;
+}
+
 export interface DebtListResponse {
   items: Debt[];
   summary: {
@@ -570,6 +581,7 @@ export interface SurplusRecommendationsReport {
       overageAmount: string;
     }>;
   };
+  splitConfigError?: string | null;
 }
 
 export interface SurplusAllocationPreference {
