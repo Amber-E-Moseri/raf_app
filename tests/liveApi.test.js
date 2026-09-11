@@ -1,57 +1,51 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { startIsolatedSqliteServer } from './helpers/isolatedSqliteServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-const port = 3100;
-const baseUrl = `http://localhost:${port}`;
-const sqlitePath = path.join(os.tmpdir(), `raf-live-api-${process.pid}.sqlite`);
 
-let serverProcess;
+let server;
+let baseUrl;
 
 function createPdfFixture(textLines) {
-  const body = textLines.map((line) => `(${line}) Tj`).join('\n');
-  return `%PDF-1.4
-1 0 obj
-<< /Length ${body.length} >>
-stream
-${body}
-endstream
-endobj
-%%EOF`;
-}
+  const encodePdfHexText = (value) => Buffer.from(String(value), 'utf8').toString('hex').toUpperCase();
+  const textBody = [
+    'BT',
+    '/F1 12 Tf',
+    '72 720 Td',
+    ...textLines.flatMap((line, index) => [
+      index === 0 ? '' : '0 -16 Td',
+      `<${encodePdfHexText(line)}> Tj`,
+    ]).filter(Boolean),
+    'ET',
+  ].join('\n');
 
-function wait(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-async function waitForServer(url, attempts = 30) {
-  let lastError;
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) {
-        return;
-      }
-
-      lastError = new Error(`Unexpected status ${response.status}`);
-    } catch (error) {
-      lastError = error;
-    }
-
-    await wait(250);
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n',
+    '4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+    `5 0 obj\n<< /Length ${Buffer.byteLength(textBody)} >>\nstream\n${textBody}\nendstream\nendobj\n`,
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += object;
   }
-
-  throw lastError;
+  const xrefOffset = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += '0000000000 65535 f \n';
+  for (let i = 1; i < offsets.length; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Root 1 0 R /Size ${objects.length + 1} >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return pdf;
 }
 
 async function request(pathname, { method = 'GET', headers = {}, body } = {}) {
@@ -69,50 +63,15 @@ async function request(pathname, { method = 'GET', headers = {}, body } = {}) {
 }
 
 before(async () => {
-  serverProcess = spawn(process.execPath, ['index.js'], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      PORT: String(port),
-      // Force SQLite + no auth so these tests work independently of .env settings.
-      PERSISTENCE_DRIVER: 'sqlite',
-      RAF_DB_PATH: sqlitePath,
-      POSTGRES_CONNECTION_STRING: '',
-      POSTGRES_CONNECTION_STRING_APP: '',
-      RAF_AUTH_REQUIRED: 'false',
-      SENTRY_DSN: '',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
+  server = await startIsolatedSqliteServer({
+    repoRoot,
+    testName: 'raf-live-api',
   });
-
-  let startupLog = '';
-  serverProcess.stdout.on('data', (chunk) => {
-    startupLog += chunk.toString();
-  });
-  serverProcess.stderr.on('data', (chunk) => {
-    startupLog += chunk.toString();
-  });
-
-  try {
-    await waitForServer(`${baseUrl}/health`);
-  } catch (error) {
-    serverProcess.kill('SIGTERM');
-    throw new Error(`Live API server failed to start. Output:\n${startupLog}\n${error.message}`);
-  }
+  baseUrl = server.baseUrl;
 });
 
 after(async () => {
-  if (serverProcess && !serverProcess.killed) {
-    serverProcess.kill('SIGTERM');
-    await wait(250);
-  }
-
-  for (const suffix of ['', '-shm', '-wal']) {
-    const target = `${sqlitePath}${suffix}`;
-    if (fs.existsSync(target)) {
-      fs.unlinkSync(target);
-    }
-  }
+  await server?.stop();
 });
 
 test('GET /health returns server health', async () => {
@@ -163,6 +122,7 @@ test('household allocation category endpoints accept valid updates without a buf
         { slug: 'personal_spending', label: 'Personal Spending', allocationPercent: '0.1500', sortOrder: 3, isActive: true },
         { slug: 'investment', label: 'Investment', allocationPercent: '0.1500', sortOrder: 4, isActive: true },
         { slug: 'debt_payoff', label: 'Debt Payoff', allocationPercent: '0.1500', sortOrder: 5, isActive: true },
+        { slug: 'partnership', label: 'Partnership', allocationPercent: '0.0000', sortOrder: 6, isActive: false },
       ],
     }),
   });
@@ -174,6 +134,8 @@ test('household allocation category endpoints accept valid updates without a buf
 test('household allocation category endpoints allow adding a new non-system category', async () => {
   const listed = await request('/api/v1/household/allocation-categories');
   assert.equal(listed.response.status, 200);
+  const investment = listed.data.items.find((item) => item.slug === 'investment');
+  const adjustedInvestmentPercent = (Number(investment.allocationPercent) - 0.05).toFixed(4);
 
   const updated = await request('/api/v1/household/allocation-categories', {
     method: 'PUT',
@@ -194,14 +156,14 @@ test('household allocation category endpoints allow adding a new non-system cate
         {
           slug: 'travel',
           label: 'Travel Fund',
-          allocationPercent: '0.1000',
+          allocationPercent: '0.0500',
           sortOrder: 6,
           isActive: true,
         },
         {
           slug: 'investment',
           label: 'Investment',
-          allocationPercent: '0.0500',
+          allocationPercent: adjustedInvestmentPercent,
           sortOrder: 4,
           isActive: true,
         },
@@ -391,7 +353,9 @@ test('goals endpoints create, update, soft-delete, and expose dashboard goal pro
   assert.equal(dashboard.response.status, 200);
   assert.equal(Array.isArray(dashboard.data.bucket_balances), true);
   assert.equal(Array.isArray(dashboard.data.monthly_bucket_progress), true);
-  assert.deepEqual(dashboard.data.goal_progress.find((item) => item.goal_id === created.data.id), {
+  const goalProgress = dashboard.data.goal_progress.find((item) => item.goal_id === created.data.id);
+  assert.equal(typeof goalProgress.bucket_id, 'string');
+  assert.deepEqual({ ...goalProgress, bucket_id: bucket.id }, {
     goal_id: created.data.id,
     goal_name: 'Emergency Fund',
     bucket_id: bucket.id,
@@ -404,16 +368,18 @@ test('goals endpoints create, update, soft-delete, and expose dashboard goal pro
     remaining_amount: '5000.00',
     progress_percent: 0,
   });
-  assert.deepEqual(dashboard.data.monthly_bucket_progress.find((item) => item.bucket_id === bucket.id), {
+  const savingsProgress = dashboard.data.monthly_bucket_progress.find((item) => item.bucket_name === 'Savings');
+  assert.equal(typeof savingsProgress.bucket_id, 'string');
+  assert.deepEqual({ ...savingsProgress, bucket_id: bucket.id }, {
     bucket_id: bucket.id,
     bucket_name: 'Savings',
-    allocated_this_month: '2000.00',
+    allocated_this_month: '0.00',
     added_this_month: '2000.00',
     used_this_month: '200.00',
     reserved_for_goals_this_month: '0.00',
-    available_this_month: '3800.00',
-    remaining_this_month: '3800.00',
-    percent_used_this_month: 10,
+    available_this_month: '1800.00',
+    remaining_this_month: '1800.00',
+    percent_used_this_month: 0,
     percent_reserved_for_goals_this_month: 0,
   });
 
@@ -502,7 +468,8 @@ test('POST /api/v1/income creates deterministic allocations and GET /api/v1/inco
       { slug: 'personal_spending', amount: '150.00' },
       { slug: 'investment', amount: '100.00' },
       { slug: 'debt_payoff', amount: '100.00' },
-      { slug: 'buffer', amount: '250.01' },
+      { slug: 'partnership', amount: '150.00' },
+      { slug: 'buffer', amount: '100.01' },
     ],
   );
 
@@ -718,15 +685,20 @@ test('debt adjustment endpoints create auditable adjustments and affect derived 
 });
 
 test('import review flow lists imported rows, classifies them, and prevents duplicate review', async () => {
+  const categories = await request('/api/v1/household/allocation-categories');
+  assert.equal(categories.response.status, 200);
+  const spendingCategory = categories.data.items.find((item) => item.slug === 'personal_spending');
+  assert.equal(typeof spendingCategory.id, 'string');
+
   const imported = await request('/api/v1/imports/bank-statement', {
     method: 'POST',
     headers: {
       'content-type': 'application/pdf',
       'x-filename': 'statement.pdf',
     },
-    body: createPdfFixture(['2026-03-22 COFFEE SHOP (12.99) 980.00']),
+    body: createPdfFixture(['2026-03-22 COFFEE SHOP 12.99 DR 980.00']),
   });
-  assert.equal(imported.response.status, 201);
+  assert.equal(imported.response.status, 201, JSON.stringify(imported.data));
   assert.equal(imported.data.extracted, 1);
 
   const listed = await request('/api/v1/imports');
@@ -741,10 +713,11 @@ test('import review flow lists imported rows, classifies them, and prevents dupl
     },
     body: JSON.stringify({
       classification_type: 'transaction',
+      category_id: spendingCategory.id,
       review_note: 'Coffee expense',
     }),
   });
-  assert.equal(classified.response.status, 200);
+  assert.equal(classified.response.status, 200, JSON.stringify(classified.data));
   assert.equal(classified.data.status, 'classified');
   assert.equal(classified.data.classification_type, 'transaction');
   assert.equal(typeof classified.data.linked_transaction_id, 'string');
@@ -760,6 +733,7 @@ test('import review flow lists imported rows, classifies them, and prevents dupl
     },
     body: JSON.stringify({
       classification_type: 'transaction',
+      category_id: spendingCategory.id,
     }),
   });
   assert.equal(duplicate.response.status, 409);
@@ -770,9 +744,9 @@ test('import review flow lists imported rows, classifies them, and prevents dupl
       'content-type': 'application/pdf',
       'x-filename': 'statement.pdf',
     },
-    body: createPdfFixture(['2026-03-23 TEST IGNORE (9.99) 970.01']),
+    body: createPdfFixture(['2026-03-23 TEST IGNORE 9.99 DR 970.01']),
   });
-  assert.equal(ignoredImport.response.status, 201);
+  assert.equal(ignoredImport.response.status, 201, JSON.stringify(ignoredImport.data));
   const ignoreRowId = ignoredImport.data.items[0].id;
 
   const ignored = await request(`/api/v1/imports/${ignoreRowId}/ignore`, {
@@ -810,9 +784,9 @@ test('import review can classify a row as a fixed bill payment end to end', asyn
       'content-type': 'application/pdf',
       'x-filename': 'statement.pdf',
     },
-    body: createPdfFixture(['2026-03-24 INTERNET BILL (59.99) 910.02']),
+    body: createPdfFixture(['2026-03-24 INTERNET BILL 59.99 DR 910.02']),
   });
-  assert.equal(imported.response.status, 201);
+  assert.equal(imported.response.status, 201, JSON.stringify(imported.data));
 
   const importedRow = imported.data.items[0];
 
@@ -826,7 +800,7 @@ test('import review can classify a row as a fixed bill payment end to end', asyn
       fixed_bill_id: fixedBill.data.id,
     }),
   });
-  assert.equal(classified.response.status, 200);
+  assert.equal(classified.response.status, 200, JSON.stringify(classified.data));
   assert.equal(classified.data.status, 'classified');
   assert.equal(classified.data.classification_type, 'fixed_bill_payment');
   assert.equal(classified.data.linked_fixed_bill_id, fixedBill.data.id);
