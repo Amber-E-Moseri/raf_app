@@ -1,9 +1,10 @@
-# RAF Implementation Contract v8.0
+# RAF Implementation Contract v9.0
 **Document Type:** Full Engineering Implementation Contract  
 **Status:** Authoritative Build Reference  
-**Currency:** CAD · **Timezone default:** America/Toronto
+**Currency:** CAD · **Timezone default:** America/Toronto  
+**Updated:** 2026-09-10
 
-This document is the single source of truth for building the RAF platform. It consolidates all prior versions, resolves every open question, and restores every section that was lost across drafts.
+This document is the single source of truth for building and extending the RAF platform. It supersedes v8.0 and all prior drafts. The product has been implemented; this revision reflects the actual stack, schema, and domain logic as built.
 
 ---
 
@@ -17,10 +18,11 @@ The system provides:
 
 - Allocation engine — splits every deposit deterministically
 - Spending ledger — tracks actuals against budgeted buckets
-- Debt tracker — derives live balances from payment history
+- Debt tracker — derives live balances from payment history with three-dimensional payment intelligence
 - Surplus router — distributes month-end excess by configured rules
 - Financial health analyzer — computes key ratios and risk status
-- Bank import pipeline — ingests CSV/XLSX statements
+- Bank import pipeline — ingests CSV/XLSX/PDF statements with regex + AI fallback parsing
+- Remi AI assistant — explains calculations, surfaces patterns, proposes actions (never a financial source of truth)
 
 **Core user guarantee:** users always know where money came from, where it went, what is protected, what is flexible, and what action to take next.
 
@@ -30,292 +32,184 @@ The system provides:
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14 (App Router), TypeScript strict |
-| Backend | Supabase (Edge Functions + RLS) |
-| Database | PostgreSQL via Supabase |
-| Auth | Supabase Auth — Google OAuth |
+| Frontend | React 18 + Vite, TypeScript strict |
+| Backend | Node.js HTTP server (custom router via `lib/server/routerLoader.js`) |
+| Database | PostgreSQL via Neon (production); SQLite (local dev); in-memory adapter (tests) |
+| Auth | Custom JWT — email + password; token blacklist for logout |
 | Validation | Zod on every write path |
-| Hosting | Vercel |
-| Error tracking | Sentry |
-| Logging | Structured JSON (Pino-compatible); no secrets in logs |
+| Hosting | Render |
+| AI | Anthropic Claude API (Remi assistant + PDF fallback parsing) |
 
-**Financial write pipeline (enforced order):**
+**Request flow:**
 
 ```
-Client → Zod Validation → RLS Authorization → DB Transaction → RAF Engine → Write → Response
+React/Vite
+  → RAF Node HTTP API
+  → JWT authentication (identity)
+  → workspace membership check (authorization)
+  → domain service (lib/)
+  → persistence adapter (inMemoryDb / sqliteDb / postgresDb)
+  → Postgres / SQLite
+  → workspace-scoped RLS (defense in depth)
 ```
 
-All financial mutations must occur inside database transactions. Reports are always computed from live DB rows — no cached derived values in MVP.
+**Persistence adapters:** all three adapters implement the same interface. The Postgres adapter is a compatibility shim — it hydrates an in-memory state object, runs domain logic, then flushes diffs. This is transitional; hot paths will migrate to direct repository SQL.
 
-**Multi-tenancy:** each user owns one household. All financial entities are scoped by `household_id`. Cross-household queries are forbidden at the RLS layer.
+**Multi-tenancy:** every financial entity is scoped to a `workspace_id` (consumer-facing alias: `household_id`). Cross-workspace access is forbidden at both the authorization middleware layer and the RLS layer.
 
-**Money precision:** `Decimal(12,2)` throughout. API always returns money as string decimals (e.g. `"1250.00"`).
+**Money precision:** `Decimal(12,2)` throughout. API always returns money as string decimals (e.g. `"1250.00"`). Internal cents arithmetic uses integers.
+
+**Financial write invariant:** no financial calculations inside route handlers or UI components. All domain logic lives in `lib/raf/` and `lib/*/`.
 
 ---
 
 # 3. Database Schema
 
-All domain tables contain `household_id`, `created_at`, `updated_at` unless noted.
+All domain tables contain `workspace_id` (or `household_id` for legacy tables), `created_at`, `updated_at` unless noted. Authoritative schema lives in `db/migrations/`. The summary below documents current shape; refer to migrations for full column-level detail.
 
 ---
 
-## profiles
+## users
+Email + password credentials, JWT refresh, workspace membership. Identified by `id` (UUID).
 
-```sql
-id                  uuid        PK default gen_random_uuid()
-email               text        NOT NULL UNIQUE
-full_name           text
-currency            text        NOT NULL DEFAULT 'CAD'
-theme_preference    text
-onboarding_status   text        NOT NULL DEFAULT 'NOT_STARTED'
-created_at          timestamptz NOT NULL DEFAULT now()
-updated_at          timestamptz NOT NULL DEFAULT now()
-```
+---
 
-`onboarding_status` valid values: `NOT_STARTED`, `HOUSEHOLD_CREATED`, `ALLOCATIONS_CONFIGURED`, `BASELINE_SET`, `ONBOARDING_COMPLETE`
+## workspace_members / workspace_invitations / workspace_activity
+Multi-member workspace support. `workspace_members` links users to workspaces with a role. `workspace_invitations` tracks pending invites. `workspace_activity` is the audit log — every significant mutation writes a row here.
+
+---
+
+## token_blacklist
+Revoked JWT tokens. Checked on every authenticated request. Cleared by scheduled cleanup.
 
 ---
 
 ## households
+Primary workspace configuration record.
 
-```sql
-id                          uuid        PK
-owner_user_id               uuid        NOT NULL UNIQUE REFERENCES profiles(id) ON DELETE CASCADE
-name                        text
-timezone                    text        NOT NULL DEFAULT 'America/Toronto'
-active_month                date        NOT NULL  -- anchor date; always day=1 e.g. 2026-03-01
-period_start_day            int         NOT NULL DEFAULT 1 CHECK (period_start_day BETWEEN 1 AND 28)
-savings_floor               numeric(12,2) NOT NULL DEFAULT 0
-monthly_essentials_baseline numeric(12,2) NOT NULL DEFAULT 0
-created_at                  timestamptz NOT NULL DEFAULT now()
-updated_at                  timestamptz NOT NULL DEFAULT now()
-```
+Key fields: `owner_user_id`, `name`, `timezone` (default `America/Toronto`), `active_month` (day=1 anchor, e.g. `2026-09-01`), `period_start_day` (1–28), `savings_floor`, `monthly_essentials_baseline`.
 
-**Fiscal period derivation:**
-Given `active_month = 2026-03-01` and `period_start_day = 5`, the active fiscal period is `Mar 5 → Apr 4`. Reports accept either calendar-month or fiscal-period mode.
+**Fiscal period derivation:** given `active_month = 2026-09-01` and `period_start_day = 5`, the active period is Sep 5 → Oct 4.
 
 ---
 
 ## allocation_categories
 
-```sql
-id                  uuid        PK
-household_id        uuid        NOT NULL REFERENCES households(id) ON DELETE CASCADE
-slug                text        NOT NULL  -- immutable system identifier
-label               text        NOT NULL  -- user-editable display name
-sort_order          int         NOT NULL DEFAULT 0
-allocation_percent  numeric(6,4) NOT NULL  -- stored as fraction: 0.1000 = 10%
-is_system           boolean     NOT NULL DEFAULT false
-is_active           boolean     NOT NULL DEFAULT true
-created_at          timestamptz NOT NULL DEFAULT now()
-updated_at          timestamptz NOT NULL DEFAULT now()
-
-UNIQUE (household_id, slug)
-```
+| Field | Type | Notes |
+|---|---|---|
+| slug | text | Immutable system identifier |
+| label | text | User-editable |
+| allocation_percent | numeric(6,4) | Stored as fraction: `0.1000` = 10% |
+| is_system | boolean | System slugs cannot be deleted |
+| is_active | boolean | Excluded from future allocations when false |
 
 **Constraint:** `SUM(allocation_percent) WHERE is_active = true` must equal `1.0000 ± 0.0001`. Enforced on every write.
-
-**`is_system`:** system categories (`savings`, `fixed_bills`, `personal_spending`, `buffer`) cannot be deleted. Labels may be renamed; slugs are immutable.
-
-**`is_active`:** inactive categories are excluded from future allocations but retained in historical records.
 
 ---
 
 ## surplus_split_rules
 
-```sql
-id            uuid        PK
-household_id  uuid        NOT NULL REFERENCES households(id) ON DELETE CASCADE
-slug          text        NOT NULL
-label         text        NOT NULL
-split_percent numeric(6,4) NOT NULL
-sort_order    int         NOT NULL DEFAULT 0
-is_active     boolean     NOT NULL DEFAULT true
-created_at    timestamptz NOT NULL DEFAULT now()
-updated_at    timestamptz NOT NULL DEFAULT now()
-
-UNIQUE (household_id, slug)
-```
-
-**Constraint:** `SUM(split_percent) WHERE is_active = true` must equal `1.0000 ± 0.0001`.
+`SUM(split_percent) WHERE is_active = true` must equal `1.0000 ± 0.0001`.
 
 ---
 
-## income_entries
+## income_entries / income_allocations
 
-```sql
-id            uuid        PK
-household_id  uuid        NOT NULL REFERENCES households(id) ON DELETE CASCADE
-source_name   text        NOT NULL
-amount        numeric(12,2) NOT NULL CHECK (amount > 0)
-received_date date        NOT NULL
-notes         text
-idempotency_key text      UNIQUE  -- optional; prevents duplicate deposits
-created_at    timestamptz NOT NULL DEFAULT now()
-updated_at    timestamptz NOT NULL DEFAULT now()
-```
-
-INDEX: `(household_id, received_date)`
-
----
-
-## income_allocations
-
-```sql
-id                      uuid        PK
-income_entry_id         uuid        NOT NULL REFERENCES income_entries(id) ON DELETE CASCADE
-household_id            uuid        NOT NULL
-allocation_category_id  uuid        NOT NULL REFERENCES allocation_categories(id)
-allocated_amount        numeric(12,2) NOT NULL
-allocation_percent      numeric(6,4) NOT NULL  -- snapshot of percent at time of deposit
-created_at              timestamptz NOT NULL DEFAULT now()
-```
-
-Allocations are immutable after creation. Editing an income entry deletes and recreates its allocations inside a transaction.
+`income_entries`: one row per deposit. `income_allocations`: one row per category per deposit (immutable snapshot of percents at deposit time). PATCH on amount or date deletes + recreates allocations in a transaction.
 
 ---
 
 ## transactions
 
-```sql
-id                uuid        PK
-household_id      uuid        NOT NULL REFERENCES households(id) ON DELETE CASCADE
-transaction_date  date        NOT NULL
-description       text        NOT NULL
-merchant          text
-amount            numeric(12,2) NOT NULL CHECK (amount != 0)
-direction         text        NOT NULL CHECK (direction IN ('debit','credit'))
-category_id       uuid        REFERENCES allocation_categories(id)
-linked_debt_id    uuid        REFERENCES debts(id)
-source            text        NOT NULL DEFAULT 'manual'  -- 'manual' | 'import'
-import_batch_id   uuid        REFERENCES import_batches(id)
-created_at        timestamptz NOT NULL DEFAULT now()
-updated_at        timestamptz NOT NULL DEFAULT now()
-```
+`direction`: `debit` = money out; `credit` = money in (transfers, refunds). Credits excluded from surplus outflow. `linked_debt_id` + `debt_payments` row created atomically when a debt payment transaction is posted.
 
-INDEX: `(household_id, transaction_date)`
+---
 
-**`direction`:** `debit` = money out; `credit` = money in (transfers, refunds). Credits are excluded from surplus outflow calculations.
+## financial_accounts / account_reconciliations
 
-**Debt linkage:** when `linked_debt_id` is set, a `debt_payments` row must be created in the same transaction (enforced at the application layer).
+`financial_accounts`: bank/credit accounts linked to a workspace (name, type, institution, current balance). `account_reconciliations`: reconciliation sessions recording opening balance, closing balance, and reconciled transaction IDs. Unreconciled difference surfaced in UI.
 
 ---
 
 ## debts
 
-```sql
-id                uuid        PK
-household_id      uuid        NOT NULL REFERENCES households(id) ON DELETE CASCADE
-name              text        NOT NULL
-starting_balance  numeric(12,2) NOT NULL CHECK (starting_balance > 0)
-apr               numeric(5,2) NOT NULL DEFAULT 0
-minimum_payment   numeric(12,2) NOT NULL DEFAULT 0  -- floor; used for debt ratio
-monthly_payment   numeric(12,2) NOT NULL DEFAULT 0  -- planned actual payment; used for trajectory
-sort_order        int         NOT NULL DEFAULT 0
-is_active         boolean     NOT NULL DEFAULT true
-created_at        timestamptz NOT NULL DEFAULT now()
-updated_at        timestamptz NOT NULL DEFAULT now()
-```
+Key fields: `name`, `starting_balance`, `apr`, `minimum_payment` (floor; used for obligation tracking), `monthly_payment` (planned; used for trajectory and pace), `statement_day`, `payment_due_day`, `late_fee_amount`, `auto_post_interest`, `auto_post_late_fee`, `is_active`.
 
-INDEX: `(household_id, is_active)`
+**Balance derivation:** `current_balance = starting_balance - SUM(debt_payments.amount)`. Never stored; always derived on read.
 
-**Delete rule:** DELETE is blocked if any `debt_payments` rows exist for this debt. Update `is_active = false` instead.
+**Delete rule:** blocked (422) if any `debt_payments` rows exist. Use `is_active = false` instead.
 
 ---
 
 ## debt_payments
 
-```sql
-id              uuid        PK
-household_id    uuid        NOT NULL
-debt_id         uuid        NOT NULL REFERENCES debts(id)  -- no cascade; blocked above
-transaction_id  uuid        REFERENCES transactions(id) ON DELETE SET NULL
-payment_date    date        NOT NULL
-amount          numeric(12,2) NOT NULL CHECK (amount > 0)
-created_at      timestamptz NOT NULL DEFAULT now()
-```
-
-INDEX: `(debt_id)`, `(household_id, payment_date)`
+One row per payment. Linked to a transaction via `transaction_id` (nullable — payments can exist without a linked transaction for historical data entry).
 
 ---
 
-## import_batches
+## debt_adjustments
 
-```sql
-id            uuid        PK
-household_id  uuid        NOT NULL REFERENCES households(id) ON DELETE CASCADE
-filename      text        NOT NULL
-status        text        NOT NULL DEFAULT 'uploaded'  -- uploaded | parsing | review | approved | failed
-row_count     int
-created_at    timestamptz NOT NULL DEFAULT now()
-updated_at    timestamptz NOT NULL DEFAULT now()
-```
+Manual interest corrections, fees, balance adjustments, and generated (auto-posted) entries. Fields: `amount`, `adjustment_type` (`interest` | `late_fee` | `fee` | `manual`), `effective_date`, `note`, `generated` (boolean — generated rows are auto-posted, not user-created).
 
 ---
 
-## imported_transaction_rows
+## debt_payment_pace_acknowledgements
 
-```sql
-id                    uuid        PK
-batch_id              uuid        NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE
-household_id          uuid        NOT NULL
-raw_date              text
-raw_description       text
-raw_merchant          text
-raw_amount            text
-parsed_date           date
-parsed_description    text
-parsed_merchant       text
-parsed_amount         numeric(12,2)
-parsed_direction      text
-suggested_category_id uuid        REFERENCES allocation_categories(id)
-suggested_debt_id     uuid        REFERENCES debts(id)
-status                text        NOT NULL DEFAULT 'pending'  -- pending | approved | duplicate | skipped
-duplicate_of_id       uuid        REFERENCES transactions(id)
-created_at            timestamptz NOT NULL DEFAULT now()
-```
+Records user decisions in response to payment pace insights.
 
-INDEX: `(batch_id, status)`
+| Field | Notes |
+|---|---|
+| `action` | `update_plan` \| `keep_plan` \| `acknowledge_onetime` |
+| `payment_period_month` | YYYY-MM of the observation period |
+| `acknowledgement_date` | timestamp |
+| `new_monthly_payment` | populated only for `update_plan` action |
+
+Composite unique index: `(workspace_id, debt_id, payment_period_month, action)` — upserts on conflict.
+
+---
+
+## import_batches / imported_transaction_rows / import_review_rules
+
+`import_batches`: one per uploaded file (CSV, XLSX, PDF). `imported_transaction_rows`: parsed rows pending review. `import_review_rules`: workspace-level auto-classification rules applied during review.
+
+**Duplicate detection:** flagged when `amount + date + normalized_merchant` matches an existing transaction.
 
 ---
 
 ## merchant_rules
+Pattern-based auto-categorization rules. Match types: `exact` | `contains` | `starts_with` | `regex`. Higher `priority` wins on conflict.
 
-```sql
-id            uuid        PK
-household_id  uuid        NOT NULL REFERENCES households(id) ON DELETE CASCADE
-match_type    text        NOT NULL CHECK (match_type IN ('exact','contains','starts_with','regex'))
-match_value   text        NOT NULL
-category_id   uuid        REFERENCES allocation_categories(id)
-priority      int         NOT NULL DEFAULT 0  -- higher wins on conflict
-created_at    timestamptz NOT NULL DEFAULT now()
-updated_at    timestamptz NOT NULL DEFAULT now()
-```
+---
+
+## fixed_bills
+Recurring fixed expenses with amount, due day, and category linkage.
+
+---
+
+## goals
+Savings/spending goals with target amount, deadline, and monthly contribution tracking.
+
+---
+
+## upcoming_expenses
+Planned future expenses not yet recurring — one-off purchases, irregular bills.
+
+---
+
+## email_preferences
+Per-workspace notification preferences (weekly summary, payment reminders, etc.).
 
 ---
 
 ## monthly_reviews
 
-```sql
-id                uuid        PK
-household_id      uuid        NOT NULL REFERENCES households(id) ON DELETE CASCADE
-review_month      date        NOT NULL  -- always day=1; e.g. 2026-03-01
-net_surplus       numeric(12,2) NOT NULL
-split_applied     jsonb       NOT NULL  -- snapshot of split percents applied
-distributions     jsonb       NOT NULL  -- { emergency_fund: "300.00", debt_payoff: "200.00", ... }
-alert_status      text        NOT NULL  -- ok | elevated | risky
-notes             text
-created_at        timestamptz NOT NULL DEFAULT now()
-updated_at        timestamptz NOT NULL DEFAULT now()
-
-UNIQUE (household_id, review_month)
-```
+`UNIQUE (workspace_id, review_month)`. Stores computed `net_surplus`, applied `split_applied` snapshot, `distributions` (JSON), and `alert_status`.
 
 ---
 
 # 4. Seed Data
 
-Seeded automatically on household creation.
+Seeded automatically on workspace creation.
 
 ## Default Allocation Categories
 
@@ -348,13 +242,9 @@ Total: **1.0000**
 
 # 5. Core Financial Logic
 
-## 5.1 RAF Allocation Engine
+All deterministic logic lives in `lib/raf/` and `lib/*/`. No financial calculations in route handlers or components.
 
-```
-computeDepositAllocations(amount, activeCategories)
-```
-
-Algorithm:
+## 5.1 RAF Allocation Engine (`lib/raf/reporting.js`)
 
 ```
 allocations = []
@@ -369,43 +259,127 @@ remainder = amount - total_assigned
 buffer_allocation += remainder   -- remainder always goes to buffer slug
 ```
 
-Remainder handling: rounding always directs surplus cents to the `buffer` category. The sum of all allocations must equal the deposit amount exactly.
+Sum of all allocations must equal deposit amount exactly.
 
 ---
 
-## 5.2 Debt Balance Derivation
+## 5.2 Debt Balance Derivation (`lib/raf/debts.js`)
 
-Balances are **never stored** — always derived:
-
-```sql
-current_balance = debts.starting_balance - COALESCE(SUM(debt_payments.amount), 0)
+```
+current_balance = starting_balance - SUM(debt_payments.amount) + SUM(debt_adjustments.amount)
 ```
 
-Balances cannot be manually edited. Any attempt to PATCH a balance field returns `422`.
+Balances are never stored. Direct PATCH of balance fields returns 422.
 
-**Derived status:**
+---
+
+## 5.3 Debt Payment Intelligence (Three Dimensions)
+
+Three independent signals derived per debt per snapshot. Each has its own field; none drives the others.
+
+### 5.3.1 Payment Pace (`classifyPaymentPace`)
+
+Classifies actual vs planned payment pace over observed periods:
+
+| Pace | Condition |
+|---|---|
+| `above_plan` | actual ≥ plan × 1.05 OR actual ≥ plan + $5 |
+| `at_plan` | within tolerance (5% or $5) |
+| `below_plan` | actual < plan − tolerance |
+| `minimum_only` | actual ≈ minimum_payment (within tolerance) |
+| `no_data` | fewer than 1 completed period |
+
+Tolerance: 5% of planned amount or $5, whichever is larger.
+
+**Projection suppression:** pace insight projections are suppressed when the observed month is the current month (incomplete period). The most recent completed month is used as the observed basis, not the current-month mean.
+
+**D2 fix:** when only 1–2 completed periods exist, use the most recent single period rather than a mean that would underweight early data.
+
+**Savings gate:** `acceleratedMonths` and interest savings are only shown when `monthDifference > 1 OR interestSavingsCents > SAVINGS_MIN_CENTS ($50)`.
+
+### 5.3.2 Below-Plan Warning (`buildDebtPaymentInsight`)
+
+Emits `below_plan_warning: true` (with `amountBelowPlan` and `acceleratedMonths`) only when:
+- pace ∈ `{below_plan, minimum_only}`
+- `percentOfPlan < WELL_BELOW_PLAN_PCT (60%)`
+- **current obligation window is not open** (invariant: an open obligation before its due date is never a negative signal)
+
+`acceleratedMonths` may be negative (paying below minimum means payoff gets longer, not shorter).
+
+### 5.3.3 Payment Obligation (`derivePaymentObligation`)
+
+Aggregates all payments in the current obligation window (statement cycle) before judging:
 
 | Status | Condition |
 |---|---|
-| `current` | current_balance > 0 |
-| `paid_off` | current_balance ≤ 0 |
+| `satisfied` | totalPaid ≥ planned OR totalPaid ≥ minimum |
+| `in_progress` | window open (not yet past due date), partial payment recorded |
+| `pending` | window open, no payment yet |
+| `missed_payment` | window closed, no payment |
+| `under_minimum` | window closed, paid > 0 but < minimum |
+
+**Invariant:** open obligations (before due date) never surface as `missed_payment` or `under_minimum`. Partial funding before the due date reads as `in_progress`.
+
+### 5.3.4 Balance Trajectory (`deriveBalanceTrajectory`)
+
+Computed from opening vs closing balance only — never from payment pace:
+
+| Trajectory | Condition |
+|---|---|
+| `decreasing` | closing < opening |
+| `flat` | closing ≈ opening (within $1) |
+| `increasing` | closing > opening |
+
+`warning: true` is set when trajectory is `increasing`.
+
+**Invariant:** `above_plan` pace + `increasing` trajectory is valid — the trajectory warning surfaces with visual precedence over the above-plan block.
+
+### 5.3.5 Balance Change Explanation (`explainBalanceChange`)
+
+Breaks the opening→closing delta into:
+- `paymentsCents` — payments recorded in period
+- `interestCents` — interest adjustments
+- `feesCents` — late fee and other fee adjustments
+- `newActivityCents` — `max(0, adjustmentsCents) + max(0, unexplainedCents)` — new charges or borrowing
+- `adjustmentsCents` — manual adjustments (can be negative)
+
+`newActivityCents` is always non-negative. It represents new charges or borrowing that increased the balance beyond what payments + interest + fees explain.
+
+### 5.3.6 Snapshot Independence (Invariant 1)
+
+`deriveDebtSnapshot` calls all three derivations independently:
+```js
+snapshot.paymentObligation = derivePaymentObligation(...)
+snapshot.balanceTrajectory = deriveBalanceTrajectory(...)
+snapshot.balanceExplanation = explainBalanceChange(...)
+```
+None of these fields influences any other.
+
+### 5.3.7 Acknowledgement Flow
+
+Users respond to pace insights via one of three actions:
+
+| Action | Effect |
+|---|---|
+| `update_plan` | Sets `monthlyPayment` to `newMonthlyPayment` on the debt; writes audit event `debt.updated` |
+| `keep_plan` | Records acknowledgement; no plan mutation |
+| `acknowledge_onetime` | Records acknowledgement for this period; no plan mutation |
+
+**Invariant 7:** `update_plan` is the only path that changes `monthlyPayment`. No automatic plan mutations.
 
 ---
 
-## 5.3 Monthly Surplus Calculation
+## 5.4 Monthly Surplus Calculation
 
 ```
 net_surplus = total_income_for_period - eligible_outflows
 ```
 
-Eligible outflows: all transactions where `direction = 'debit'` within the period.  
-**Excluded:** transactions where `direction = 'credit'` (transfers, refunds).
+Eligible outflows: all transactions where `direction = 'debit'` within the period. Credits excluded.
 
 ---
 
-## 5.4 Surplus Distribution
-
-Applied during monthly review:
+## 5.5 Surplus Distribution
 
 ```
 for each active surplus_split_rule:
@@ -416,7 +390,7 @@ remainder → emergency_fund slug
 
 ---
 
-## 5.5 Financial Health Metrics
+## 5.6 Financial Health Metrics
 
 ```
 debt_ratio              = SUM(monthly_debt_payments) / monthly_income
@@ -424,9 +398,7 @@ emergency_coverage      = emergency_fund_balance / monthly_essentials_baseline
 available_savings       = savings_balance - savings_floor
 ```
 
----
-
-## 5.6 Financial Risk Status
+**Risk status:**
 
 | Status | Condition |
 |---|---|
@@ -434,303 +406,364 @@ available_savings       = savings_balance - savings_floor
 | `elevated` | debt_ratio 0.26–0.35 OR net_surplus < 0 |
 | `risky` | debt_ratio > 0.35 OR emergency_coverage < 1 |
 
-When multiple conditions apply, the higher-severity status wins.
+Higher severity wins when multiple conditions apply.
 
 ---
 
-## 5.7 Trajectory Engine
+## 5.7 PDF Import Intelligence
 
-```
-for each future month:
-    estimate_income = avg(last 3 months income)
-    apply allocation % → bucket projections
-    subtract spending averages (last 3 months actuals by category)
-    apply surplus split rules
-    update projected balances
-```
+Bank statement PDF → regex parser → (fallback) Claude AI parser.
 
-Outputs: debt payoff timeline per debt (using `monthly_payment`), emergency fund completion date, net balance projection by month.
+**Quota:** free workspaces get 3 AI parses/month; paid workspaces unlimited. Regex parsing is always free. AI is only triggered when regex finds 0 rows.
 
 ---
 
-# 6. Onboarding State Machine
+# 6. Authentication
 
-Tracked in `profiles.onboarding_status`.
+Custom JWT — email + password. No OAuth in current build.
 
-| State | Trigger to advance |
-|---|---|
-| `NOT_STARTED` | user account created |
-| `HOUSEHOLD_CREATED` | household row inserted |
-| `ALLOCATIONS_CONFIGURED` | PUT allocation-categories succeeds with sum = 1 |
-| `BASELINE_SET` | PATCH household sets `savings_floor` and `monthly_essentials_baseline` |
-| `ONBOARDING_COMPLETE` | user confirms setup or first income entry posted |
+| Route | Method | Notes |
+|---|---|---|
+| `/api/v1/auth/login` | POST | Returns `{ token, user }` |
+| `/api/v1/auth/logout` | POST | Blacklists token |
+| `/api/v1/auth/me` | GET | Returns authenticated user + workspace |
+| `/api/v1/auth/signup` | POST | Creates user + workspace atomically |
 
-Users may skip `BASELINE_SET` via explicit `{ skip: true }` PATCH — status advances to `ONBOARDING_COMPLETE` with zero baseline values.
+Token blacklist checked on every authenticated request. Refresh is client-managed with token expiry.
 
 ---
 
 # 7. API Surface
 
 **Base URL:** `/api/v1`  
-**Auth header:** `Authorization: Bearer <supabase-access-token>`  
-**Pagination:** all list endpoints support `?cursor=&limit=50` (default 50)  
+**Auth header:** `Authorization: Bearer <token>`  
 **Money:** always returned as string decimal: `"1250.00"`
 
 **Standard error envelope:**
-
 ```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Human-readable description"
-  }
-}
+{ "error": { "code": "VALIDATION_ERROR", "message": "Human-readable description" } }
 ```
-
-**Error codes:**
 
 | HTTP | code | Meaning |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | Zod field failure |
 | 401 | `UNAUTHORIZED` | Missing or invalid token |
-| 404 | `NOT_FOUND` | Resource doesn't exist or wrong household |
-| 409 | `CONFLICT` | Duplicate (email, idempotency key) |
+| 403 | `FORBIDDEN` | Workspace membership required |
+| 404 | `NOT_FOUND` | Resource doesn't exist or wrong workspace |
+| 409 | `CONFLICT` | Duplicate |
 | 422 | `BUSINESS_RULE` | e.g. allocation sum ≠ 1, editing derived field |
 
 ---
 
-## 7.1 Auth
+## 7.1 Household
 
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| GET | `/auth/me` | JWT | — | `{ userId, email, householdId, onboardingStatus }` | 401 |
-
-Auth (sign-in, sign-up, token refresh) is handled entirely by Supabase Auth client SDK. No custom auth routes needed.
-
----
-
-## 7.2 Household
-
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| GET | `/household` | JWT | — | Full household object | 404 |
-| PATCH | `/household` | JWT | `{ timezone?, periodStartDay?, activeMonth?, savingsFloor?, monthlyEssentialsBaseline?, skip? }` | Updated household | 400 if day outside 1–28; 422 on invalid skip state |
-
----
-
-## 7.3 Allocation Categories
-
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| GET | `/household/allocation-categories` | JWT | — | `{ items: [{ id, slug, label, sortOrder, allocationPercent, isSystem, isActive }] }` | — |
-| PUT | `/household/allocation-categories` | JWT | `{ items: [{ slug, label, sortOrder, allocationPercent, isActive }] }` — full replace of non-system categories | `{ items }` | 400 sum ≠ 1; 422 attempt to delete system slug |
-
-Concurrency: last-write-wins. PUT is wrapped in a transaction (delete non-system + insert).
-
----
-
-## 7.4 Surplus Split Rules
-
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| GET | `/household/surplus-splits` | JWT | — | `{ items: [{ id, slug, label, splitPercent, sortOrder, isActive }] }` | — |
-| PUT | `/household/surplus-splits` | JWT | `{ items: [{ slug, label, splitPercent, sortOrder, isActive }] }` full replace | `{ items }` | 400 sum ≠ 1 |
-
----
-
-## 7.5 Income Entries
-
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| GET | `/income?from=&to=` | JWT | date range query | `{ items: [...], total }` | 400 invalid date |
-| POST | `/income` | JWT | `{ sourceName, amount, receivedDate, notes? }` + optional `Idempotency-Key` header | `{ incomeId, allocations: [{ category, slug, amount }] }` | 400; 409 duplicate idempotency key |
-| PATCH | `/income/:id` | JWT | `{ sourceName?, amount?, receivedDate?, notes? }` | Updated entry + recalculated allocations | 404 |
-| DELETE | `/income/:id` | JWT | — | 204 | 404 |
-
-**Idempotency:** if `Idempotency-Key` header is present and a matching key+body exists, returns the original created record (no duplicate insert).
-
-PATCH on `amount` or `receivedDate` deletes and recreates `income_allocations` inside a transaction.
-
----
-
-## 7.6 Transactions
-
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| GET | `/transactions?from=&to=&categoryId=&direction=&cursor=&limit=` | JWT | — | `{ items: [...], nextCursor }` | 400 |
-| POST | `/transactions` | JWT | `{ transactionDate, description, merchant?, amount, direction, categoryId?, linkedDebtId? }` | Created transaction (+ debt_payment row if linkedDebtId set) | 400; 404 if debt not found |
-| PATCH | `/transactions/:id` | JWT | Partial (any field except derived) | Updated | 404 |
-| DELETE | `/transactions/:id` | JWT | — | 204; cascades linked debt_payment | 404 |
-
----
-
-## 7.7 Debts
-
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| GET | `/debts` | JWT | — | `{ items: [{ id, name, startingBalance, currentBalance, apr, minimumPayment, monthlyPayment, status, sortOrder }], summary: { totalStarting, totalRemaining, totalPaidAllTime } }` | — |
-| POST | `/debts` | JWT | `{ name, startingBalance, apr, minimumPayment, monthlyPayment, sortOrder? }` | Created debt | 400 |
-| PATCH | `/debts/:id` | JWT | `{ name?, apr?, minimumPayment?, monthlyPayment?, sortOrder?, isActive? }` | Updated | 404; 422 attempt to set balance directly |
-| DELETE | `/debts/:id` | JWT | — | 204 | 404; 422 if payments exist (use isActive=false instead) |
-
-`currentBalance` is always derived on read — never stored.
-
----
-
-## 7.8 Import Pipeline
-
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| POST | `/imports/upload` | JWT | multipart `file` (CSV or XLSX) | `{ batchId, filename, rowCount }` | 400 unsupported format |
-| POST | `/imports/parse/:batchId` | JWT | `{ columnMap: { date, description, merchant?, amount, direction? } }` | `{ batchId, rows: [{ id, parsedDate, parsedDescription, parsedMerchant, parsedAmount, parsedDirection, suggestedCategoryId, status }] }` | 404; 422 parse failure |
-| PATCH | `/imports/rows/:rowId` | JWT | `{ categoryId?, debtId?, status? }` | Updated row | 404 |
-| POST | `/imports/approve/:batchId` | JWT | — | `{ inserted, skipped, duplicates }` | 404; 422 if batch not in review status |
-
-**Column mapping** (`columnMap`) maps the uploaded file's header names to RAF fields. Required fields: `date`, `description`, `amount`. Optional: `merchant`, `direction`. If `direction` is absent, all rows default to `debit`.
-
-**Duplicate detection:** a row is flagged as a potential duplicate when an existing transaction matches on `parsed_amount + parsed_date + normalized_merchant` (after applying merchant_rules normalization). Flagged rows have `status = 'duplicate'` and are skipped on approve unless user manually sets `status = 'approved'`.
-
----
-
-## 7.9 Merchant Rules
-
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| GET | `/merchant-rules` | JWT | — | `{ items: [...] }` | — |
-| POST | `/merchant-rules` | JWT | `{ matchType, matchValue, categoryId, priority? }` | Created rule | 400 |
-| PATCH | `/merchant-rules/:id` | JWT | Partial | Updated | 404 |
-| DELETE | `/merchant-rules/:id` | JWT | — | 204 | 404 |
-
-**Conflict resolution:** when multiple rules match the same merchant, the rule with the highest `priority` wins. Ties broken by `created_at` descending.
-
----
-
-## 7.10 Reports
-
-All report endpoints are read-only, computed from live DB rows, never cached in MVP.
-
-| Method | Path | Auth | Response |
+| Method | Path | Request | Response |
 |---|---|---|---|
-| GET | `/reports/income-allocations?incomeId=` | JWT | `{ sourceName, amount, receivedDate, allocations: [{ slug, label, amount }] }` |
-| GET | `/reports/dashboard?from=&to=` | JWT | `{ periods: [{ month, incomeTotal, spendingTotal, surplusOrDeficit, savingsActual, alertStatus }] }` |
-| GET | `/reports/financial-health` | JWT | `{ activeMonthIncome, monthlyDebtPayments, debtRatio, savingsBalance, savingsFloor, availableSavings, emergencyFundBalance, monthlyEssentials, emergencyCoverageMonths, alertStatus }` |
-| GET | `/reports/surplus-recommendations?month=` | JWT | `{ netSurplus, distributions: [{ slug, label, amount }], targetDebtName?, alertStatus }` |
-| GET | `/reports/trajectory?months=12` | JWT | `{ projections: [{ month, projectedIncome, projectedSurplus, debtBalances: [{ debtId, projectedBalance }], emergencyFundBalance }] }` |
+| GET | `/household` | — | Full household object |
+| PATCH | `/household` | `{ timezone?, periodStartDay?, activeMonth?, savingsFloor?, monthlyEssentialsBaseline? }` | Updated household |
 
 ---
 
-## 7.11 Monthly Reviews
+## 7.2 Allocation Categories
 
-| Method | Path | Auth | Request | Response | Errors |
-|---|---|---|---|---|---|
-| GET | `/monthly-reviews?from=&to=` | JWT | — | `{ items: [...] }` | — |
-| POST | `/monthly-reviews` | JWT | `{ reviewMonth, notes? }` — system computes surplus + distributions | Created review with computed fields | 400; 409 review for that month already exists |
-| PATCH | `/monthly-reviews/:id` | JWT | `{ notes? }` | Updated | 404 |
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/household/allocation-categories` | Returns `{ items }` |
+| PUT | `/household/allocation-categories` | Full replace of non-system categories; rejects if sum ≠ 1 |
 
 ---
 
-# 8. Edge Cases and Concurrency
+## 7.3 Surplus Split Rules
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/household/surplus-splits` | Returns `{ items }` |
+| PUT | `/household/surplus-splits` | Full replace; rejects if sum ≠ 1 |
+
+---
+
+## 7.4 Income
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/income?from=&to=` | `{ items, total }` |
+| POST | `/income` | Creates entry + allocations atomically |
+| PATCH | `/income/:id` | Deletes + recreates allocations on amount/date change |
+| DELETE | `/income/:id` | 204 |
+
+---
+
+## 7.5 Transactions
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/transactions?from=&to=&categoryId=&direction=` | `{ items, nextCursor }` |
+| POST | `/transactions` | Creates transaction; creates `debt_payments` row when `linkedDebtId` set |
+| PATCH | `/transactions/:id` | Partial update |
+| DELETE | `/transactions/:id` | Cascades linked debt_payment |
+
+---
+
+## 7.6 Debts
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/debts` | Returns `{ items, summary }` — each item includes `paymentPace`, `paymentInsight`, `paymentObligation`, `balanceTrajectory`, `balanceExplanation`, `insightAcknowledged` |
+| POST | `/debts` | Creates debt |
+| PATCH | `/debts/:id` | Editable fields; 422 on balance/currentBalance |
+| DELETE | `/debts/:id` | 422 if payments exist |
+
+---
+
+## 7.7 Debt Payments
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/debts/:id/payments` | Payment history |
+| POST | `/debts/:id/payments` | Direct payment entry (not linked to transaction) |
+
+---
+
+## 7.8 Debt Adjustments
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/debts/:id/adjustments` | `{ items }` — excludes generated rows by default |
+| POST | `/debts/:id/adjustments` | `{ amount, adjustmentType, effectiveDate, note? }` |
+
+---
+
+## 7.9 Debt Pace Acknowledgement
+
+| Method | Path | Request | Notes |
+|---|---|---|---|
+| POST | `/debts/:id/pace-acknowledgement` | `{ action, paymentPeriodMonth, newMonthlyPayment? }` | Records acknowledgement; `update_plan` sets `monthlyPayment` + audit log |
+
+---
+
+## 7.10 Financial Accounts
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/financial-accounts` | Lists workspace accounts |
+| POST | `/financial-accounts` | Creates account |
+| PATCH | `/financial-accounts/:id` | Updates name/type/institution |
+| DELETE | `/financial-accounts/:id` | Soft delete or hard delete if no reconciliations |
+
+---
+
+## 7.11 Reconciliations
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/financial-accounts/:id/reconciliations` | `{ items }` |
+| POST | `/financial-accounts/:id/reconciliations` | Opens reconciliation session |
+| PATCH | `/financial-accounts/:id/reconciliations/:rid` | Updates reconciliation (mark rows, set closing balance) |
+
+---
+
+## 7.12 Import Pipeline
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/imports/upload` | Multipart `file` (CSV/XLSX/PDF) → `{ batchId, filename, rowCount }` |
+| POST | `/imports/parse/:batchId` | `{ columnMap }` → `{ rows }` |
+| PATCH | `/imports/rows/:rowId` | `{ categoryId?, debtId?, status? }` |
+| POST | `/imports/approve/:batchId` | `{ inserted, skipped, duplicates }` |
+
+---
+
+## 7.13 Merchant Rules
+
+GET / POST / PATCH / DELETE `/merchant-rules`. Higher `priority` wins on conflict.
+
+---
+
+## 7.14 Reports
+
+All reports are read-only, computed from live rows, never cached.
+
+| Path | Response |
+|---|---|
+| GET `/reports/dashboard?from=&to=` | `{ periods: [{ month, incomeTotal, spendingTotal, surplusOrDeficit, alertStatus }] }` |
+| GET `/reports/financial-health` | `{ debtRatio, emergencyCoverageMonths, availableSavings, alertStatus, ... }` |
+| GET `/reports/surplus-recommendations?month=` | `{ netSurplus, distributions, alertStatus }` |
+| GET `/reports/trajectory?months=12` | `{ projections: [{ month, projectedIncome, projectedSurplus, debtBalances }] }` |
+
+---
+
+## 7.15 Monthly Reviews
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/monthly-reviews?from=&to=` | `{ items }` |
+| POST | `/monthly-reviews` | `{ reviewMonth, notes? }` — system computes surplus + distributions |
+| PATCH | `/monthly-reviews/:id` | `{ notes? }` |
+
+---
+
+## 7.16 Upcoming Expenses
+
+GET / POST / PATCH / DELETE `/upcoming-expenses`.
+
+---
+
+## 7.17 Insights (Remi)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/insights` | `{ prompt, context? }` → AI response with RAF data context |
+
+Remi may explain calculations, surface patterns, answer questions using calculated RAF data, and propose actions. Remi never mutates financial records directly.
+
+---
+
+# 8. Edge Cases
 
 | Scenario | Behavior |
 |---|---|
-| Concurrent PUT allocation-categories | Last-write-wins; no optimistic lock in MVP |
-| Allocation sum drift | PUT rejects with 400; GET never returns invalid sum |
+| Concurrent PUT allocation-categories | Last-write-wins (transitional — adapter not yet optimistically locked) |
+| Allocation sum drift | PUT rejects with 400 |
 | Income edit after allocations exist | PATCH deletes + recreates allocations in one transaction |
-| Debt deleted with payments | Blocked with 422; use `isActive = false` |
-| Transaction linked to non-existent debt | 404 returned; transaction not created |
-| Import row with unmatched merchant | Stored with `suggested_category_id = null`; requires manual categorization before approve |
+| Debt deleted with payments | 422; use `isActive = false` |
+| Transaction linked to non-existent debt | 404; transaction not created |
+| Import row with unmatched merchant | Stored with `suggested_category_id = null` |
 | Duplicate import row | `status = 'duplicate'`; skipped on approve unless manually overridden |
-| Surplus split remainder | Remainder cents always go to `emergency_fund` slug |
-| Allocation remainder | Remainder cents always go to `buffer` slug |
-| Missing merchant on duplicate check | Match on `amount + date` only (merchant treated as empty string) |
-| Negative amounts | Rejected on all write paths except `direction = 'credit'` transactions |
-| `period_start_day` 29–31 | Rejected with 400 (supports Feb in all years) |
+| Surplus split remainder | Remainder cents → `emergency_fund` slug |
+| Allocation remainder | Remainder cents → `buffer` slug |
+| Obligation window open before due date | Never surfaces as missed_payment or under_minimum |
+| `above_plan` pace + `increasing` balance | Both signals shown; trajectory warning has visual precedence |
+| `update_plan` without newMonthlyPayment | 422 |
+| PDF import — AI fallback quota exceeded | 402 with quota explanation; regex result returned if any rows found |
+| `period_start_day` 29–31 | 400 (supports Feb in all years) |
 
 ---
 
 # 9. Security
 
-Supabase Row Level Security applied to all household tables:
+**Authentication:** JWT checked on every authenticated route. Token blacklist prevents reuse after logout.
 
-```sql
-household.owner_user_id = auth.uid()
-```
+**Authorization:** workspace membership verified after authentication. `x-workspace-id` headers are never trusted from the client — the workspace context is derived from the authenticated user's membership.
 
-Additional rules:
-- `income_allocations` readable only via parent `income_entry` ownership
-- `debt_payments` readable only via parent `debt` ownership
-- `imported_transaction_rows` readable only via parent `import_batch` ownership
+**RLS (defense in depth):** PostgreSQL workspace-scoped RLS policies applied via `FORCE ROW LEVEL SECURITY`. RLS reads `current_setting('app.workspace_id')` set per transaction.
 
-No cross-household joins permitted at any layer.
+**Audit log:** all financial mutations write a `workspace_activity` row with `event_type`, `actor_id`, `entity_id`, and `snapshot`.
 
 ---
 
 # 10. Integration Demo Scenario
 
-A passing end-to-end test sequence:
+A passing end-to-end sequence:
 
-1. User signs in with Google → profile created with `onboarding_status = NOT_STARTED`
-2. Household created → status → `HOUSEHOLD_CREATED`; seed categories + surplus rules inserted
-3. PUT allocation-categories with default percents → status → `ALLOCATIONS_CONFIGURED`
-4. PATCH household `savingsFloor = 500`, `monthlyEssentialsBaseline = 2000` → status → `BASELINE_SET`
-5. User confirms → status → `ONBOARDING_COMPLETE`
-6. POST income `{ sourceName: "Salary", amount: "10000.00", receivedDate: "2026-03-10" }` → allocations created: Savings $1000, Tithe $1000, Partnership $500, Offerings $500, Fixed Bills $3000, Personal $1500, Investment $1000, Debt Payoff $1000, Buffer $500
-7. POST transaction `{ description: "Rogers Bill", amount: "120.00", direction: "debit", categoryId: fixed_bills_id }`
-8. POST debt `{ name: "Credit Card", startingBalance: "5000.00", apr: 19, minimumPayment: "100.00", monthlyPayment: "200.00" }`
-9. POST transaction `{ description: "CC Payment", amount: "200.00", direction: "debit", categoryId: debt_payoff_id, linkedDebtId: credit_card_id }` → debt_payment row created; GET /debts returns `currentBalance = "4800.00"`
-10. GET /reports/financial-health → `debtRatio = 200/10000 = 0.02`, `alertStatus = "ok"`
-11. POST /monthly-reviews `{ reviewMonth: "2026-03-01" }` → surplus distributed per split rules
+1. POST `/auth/signup` → user + workspace + seed categories created
+2. PUT `/household/allocation-categories` with default percents
+3. POST `/income` `{ sourceName: "Salary", amount: "10000.00", receivedDate: "2026-09-10" }` → allocations: Savings $1000, Fixed Bills $3000, etc.
+4. POST `/transactions` `{ description: "CC Payment", amount: "200.00", direction: "debit", linkedDebtId: "<id>" }` → debt_payment row created; GET `/debts` returns `currentBalance = "4800.00"`
+5. GET `/reports/financial-health` → `debtRatio = 0.02, alertStatus = "ok"`
+6. GET `/debts` → each debt includes `paymentPace`, `paymentObligation`, `balanceTrajectory`
+7. POST `/debts/:id/pace-acknowledgement` `{ action: "keep_plan", paymentPeriodMonth: "2026-09" }` → acknowledged
+8. POST `/monthly-reviews` `{ reviewMonth: "2026-09-01" }` → surplus distributed
 
-**System verified when:**
-- Step 6 allocations sum exactly to $10,000.00
-- Step 9 debt balance derives to $4,800.00 without any manual update
-- Step 10 health metrics reflect live transaction data
-- Step 11 review distributions sum to net surplus
+**Verified when:**
+- Step 3 allocations sum exactly to $10,000.00
+- Step 4 debt balance derives to $4,800.00 without any stored update
+- Step 6 pace/obligation/trajectory are independent of each other
+- Step 7 does not mutate `monthlyPayment` (keep_plan)
+- Step 8 distributions sum to net surplus
 
 ---
 
 # 11. Application File Structure
 
 ```
-raf-app/
+raf_app/
 ├── app/
-│   ├── (marketing)/          # landing, pricing
-│   ├── (auth)/               # sign-in, onboarding
-│   ├── (app)/                # dashboard, income, transactions,
-│   │                         # imports, debts, health, trajectory, reports, settings
-│   └── api/v1/               # route handlers
-├── components/
+│   └── api/v1/
+│       ├── auth/             login, logout, me, signup
+│       ├── debts/
+│       │   └── [id]/
+│       │       ├── adjustments/
+│       │       ├── pace-acknowledgement/
+│       │       └── payments/
+│       ├── financial-accounts/
+│       │   └── [accountId]/reconciliations/
+│       ├── household/
+│       │   ├── allocation-categories/
+│       │   ├── email-preferences/
+│       │   ├── subscription/
+│       │   └── surplus-splits/
+│       ├── imports/
+│       ├── income/
+│       ├── insights/
+│       ├── merchant-rules/
+│       ├── monthly-reviews/
+│       ├── reports/
+│       ├── transactions/
+│       └── upcoming-expenses/
+├── db/
+│   └── migrations/           SQL migration files (RAF_MIGRATIONS array in scripts/migrate.js)
+├── docs/
+│   ├── DECISIONS/            Architecture decision records
+│   ├── api/                  OpenAPI spec
+│   ├── archive/              Stale docs (not authoritative)
+│   ├── architecture/         Architecture notes, closure plans
+│   ├── product/              Product constitution, limitations, quota docs
+│   └── security/             RLS and tenant security notes
 ├── lib/
-│   ├── raf/                  # allocation engine, surplus engine, health metrics, trajectory
-│   ├── imports/              # CSV/XLSX parser, column mapper, duplicate detector
-│   ├── merchant-rules/       # rule matcher
-│   └── utils/
-├── hooks/
-├── types/
-└── supabase/
-    └── migrations/
+│   ├── accounts/             Financial accounts domain
+│   ├── audit/                auditLog.js — logAuditEvent
+│   ├── auth/                 JWT helpers, workspace context
+│   ├── debts/                debts.js — route handlers (listDebts, createDebt, acknowledgeDebtPaymentPace, ...)
+│   ├── imports/              Bank statement import pipeline, PDF/CSV/XLSX parsers
+│   ├── raf/
+│   │   ├── debts.js          Domain logic — classifyPaymentPace, derivePaymentObligation,
+│   │   │                     deriveBalanceTrajectory, explainBalanceChange, buildDebtPaymentInsight,
+│   │   │                     deriveDebtSnapshot, estimateDebtPayoff, compareDebtPriority
+│   │   └── reporting.js      Allocation engine, surplus, health metrics, dashboard
+│   ├── reports/              getCashFlowForecastReport, getFinancialHealthReport
+│   ├── repositories/
+│   │   └── postgres/         Direct SQL repositories (debtsRepository, importedTransactionsRepository, ...)
+│   └── server/
+│       ├── inMemoryDb.js     In-memory adapter (tests, local)
+│       ├── postgresDb.js     Postgres compatibility adapter
+│       ├── routerLoader.js   HTTP router
+│       └── sqliteDb.js       SQLite adapter (local persistence)
+├── scripts/
+│   └── migrate.js            RAF_MIGRATIONS array; runs migrations against Postgres
+├── specs/
+│   └── raf_multi_income_debt_spec.md   ← this document
+├── src/
+│   ├── api/                  Client-side API wrappers (debtsApi.ts, etc.)
+│   ├── components/
+│   │   ├── debt/             PaymentPaceInsight.tsx
+│   │   ├── feedback/         ErrorState, LoadingSpinner, SuccessNotice
+│   │   ├── layout/           AppLayout, PageShell
+│   │   └── ui/               Badge, Button, Card, Input, MoneyInput, ...
+│   ├── hooks/                useAsyncData
+│   ├── lib/
+│   │   ├── format.ts         formatCurrency, formatIsoDate, percentPaidOff
+│   │   ├── types.ts          Shared TypeScript interfaces (Debt, PaymentObligation, BalanceTrajectory, ...)
+│   │   └── validation.ts     validateApr, validatePositiveMoney, ...
+│   └── pages/                Debts.tsx, Insights.tsx, MonthlyReview.tsx, Profile.tsx, ...
+└── tests/
+    ├── debts.test.js
+    ├── debtObligation.test.js
+    ├── debtPaymentPace.test.js
+    └── ...
 ```
 
-All deterministic financial logic lives in `lib/raf/`. No financial calculations in route handlers or components.
+All deterministic financial logic lives in `lib/raf/`. No financial calculations in route handlers or UI.
 
 ---
 
-# 12. Build Order
+# 12. Current Limitations
 
-1. Supabase schema + seed migrations
-2. Auth (Supabase OAuth) + onboarding state machine
-3. Household settings API
-4. Allocation categories + surplus splits API
-5. RAF allocation engine (`lib/raf/`)
-6. Income entries API
-7. Transactions API + debt payment linkage
-8. Debt tracker API
-9. Reports: dashboard, financial health, surplus recommendations
-10. Import pipeline (upload → parse → column map → review → approve)
-11. Merchant rules engine
-12. Monthly reviews
-13. Trajectory engine
-14. Billing (post-MVP)
+See [`docs/product/LIMITATIONS.md`](../docs/product/LIMITATIONS.md) for the current maintained list. As of v9.0:
+
+1. Debt balances are current-cumulative only — not period-aware for historical views.
+2. Financial health report falls back to household active month; not fully parameterized.
+3. Import uses statement transaction dates, not the currently viewed period.
+4. Allocation history is read-only (cannot restore a prior snapshot as current config).
 
 ---
 
@@ -738,25 +771,23 @@ All deterministic financial logic lives in `lib/raf/`. No financial calculations
 
 - Bank feed / Plaid integration
 - Multi-household per user
-- Excel / PDF export
 - Mobile native apps
-- Collaborative household editing
 - Tax reporting
 - Multi-currency within one household
 
 ---
 
-# 14. Definition of Done
+# 14. Key Engineering Invariants
 
-- [ ] All migrations run cleanly; seed script produces correct default categories
-- [ ] All §7 routes implemented with Zod validation + Supabase RLS
-- [ ] PUT allocation-categories and surplus-splits reject when sum ≠ 1.0000 ± 0.0001
-- [ ] Allocation engine: deposit $10,000 with default percents produces exact $10,000 sum with remainder to buffer
-- [ ] Debt balance derives correctly from payments; direct edit returns 422
-- [ ] DELETE debt with payments returns 422
-- [ ] Import pipeline handles column mapping and flags duplicates correctly
-- [ ] Dashboard totals match manual calculation for demo scenario (§10)
-- [ ] Financial health endpoint returns correct ratios for seeded data
-- [ ] Monthly review distributes surplus by split rules with remainder to emergency_fund
-- [ ] Structured logging on all 4xx/5xx; no secrets in logs
-- [ ] README: env vars, migration commands, demo account credentials, seed script usage
+These must be preserved across all future changes:
+
+1. **Three-dimensional debt intelligence:** payment obligation, payment pace, and balance trajectory are independent dimensions. Each has its own derivation, snapshot field, and UI signal. None drives another.
+2. **Obligation aggregation:** obligation compliance aggregates all payments in the obligation window before judging. Never single-payment.
+3. **Open-before-due guard:** an open obligation before its due date is never a negative signal. Partial funding reads as `in_progress`.
+4. **Trajectory source:** balance trajectory is computed only from opening vs closing balance. Never from payment pace.
+5. **above_plan + increasing precedence:** trajectory warning has visual precedence over the above-plan pace block.
+6. **newActivity non-negative:** `newActivityCents = max(0, adjustments) + max(0, unexplained)`. Always ≥ 0.
+7. **No automatic plan mutation:** `update_plan` is the only path that changes `monthlyPayment`. No automatic mutations by the engine.
+8. **AI never source of truth:** Remi and AI parsing explain and assist. All financial records are written by deterministic RAF domain logic.
+9. **Workspace isolation:** every query is scoped to a single workspace. Cross-workspace joins are forbidden at every layer.
+10. **Financial logic placement:** no financial calculations in route handlers or UI components. All domain logic in `lib/`.
