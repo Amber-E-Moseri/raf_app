@@ -58,13 +58,15 @@ export async function POST(request, context) {
     }
 
     return tx.listHouseholdsForUser({ userId: user.id });
-  });
+  }, { userId: user.id });
   const token = createToken({ userId: user.id, email: user.email });
 
   return json({
     userId: user.id,
     email: user.email,
     token,
+    workspaceId: workspaces[0]?.id ?? null,
+    remiTier: user.remiTier ?? 'free',
     households: workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, role: workspace.role })),
     workspaces: workspaces.map((workspace) => ({
       id: workspace.id,
