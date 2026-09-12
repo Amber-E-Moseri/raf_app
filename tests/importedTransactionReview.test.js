@@ -343,7 +343,9 @@ test('classifying an imported row into a debt payment creates a linked debt paym
   assert.equal(db.state.debtPayments.length, 1);
   assert.equal(db.state.debtPayments[0].debtId, 'debt_1');
   assert.equal(db.state.transactions[0].categoryId, 'bucket_debt_payoff');
-  assert.equal(db.state.importReviewRules.length, 0);
+  // Auto-learning creates a rule for every classification, including debt payments.
+  assert.equal(db.state.importReviewRules.length, 1);
+  assert.equal(db.state.importReviewRules[0].classificationType, 'debt_payment');
 });
 
 test('goal funding classification converts a savings transfer into a goal contribution credit', async () => {
