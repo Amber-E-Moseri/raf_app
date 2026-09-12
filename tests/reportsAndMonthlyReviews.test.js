@@ -259,6 +259,7 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
       {
         bucket_id: 'cat_fixed_bills',
         bucket_name: 'fixed_bills',
+        slug: 'fixed_bills',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -271,6 +272,7 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
       {
         bucket_id: 'cat_personal_spending',
         bucket_name: 'personal_spending',
+        slug: 'personal_spending',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -285,6 +287,7 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
       {
         bucket_id: 'cat_fixed_bills',
         bucket_name: 'fixed_bills',
+        slug: 'fixed_bills',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -297,6 +300,7 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
       {
         bucket_id: 'cat_personal_spending',
         bucket_name: 'personal_spending',
+        slug: 'personal_spending',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -311,6 +315,7 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
       {
         bucket_id: 'cat_fixed_bills',
         bucket_name: 'fixed_bills',
+        slug: 'fixed_bills',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -323,6 +328,7 @@ test('getDashboardReport aggregates period income, spending, savings, and alert 
       {
         bucket_id: 'cat_personal_spending',
         bucket_name: 'personal_spending',
+        slug: 'personal_spending',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -497,6 +503,7 @@ test('dashboard reporting includes monthly bucket progress and goal progress', a
     {
       bucket_id: 'bucket_savings',
       bucket_name: 'Savings',
+      slug: 'savings',
       allocated_this_month: '2000.00',
       added_this_month: '0.00',
       used_this_month: '200.00',
@@ -509,6 +516,7 @@ test('dashboard reporting includes monthly bucket progress and goal progress', a
     {
       bucket_id: 'bucket_giving',
       bucket_name: 'Giving',
+      slug: 'giving',
       allocated_this_month: '500.00',
       added_this_month: '100.00',
       used_this_month: '0.00',
@@ -583,6 +591,7 @@ test('dashboard monthly bucket progress separates current-month goal reservation
     {
       bucket_id: 'bucket_savings',
       bucket_name: 'Savings',
+      slug: 'savings',
       allocated_this_month: '500.00',
       added_this_month: '325.00',
       used_this_month: '0.00',
@@ -595,6 +604,7 @@ test('dashboard monthly bucket progress separates current-month goal reservation
     {
       bucket_id: 'bucket_giving',
       bucket_name: 'Giving',
+      slug: 'giving',
       allocated_this_month: '250.00',
       added_this_month: '40.00',
       used_this_month: '0.00',
@@ -1132,6 +1142,7 @@ test('report services handle empty-state data without persisting derived results
       {
         bucket_id: 'cat_fixed_bills',
         bucket_name: 'fixed_bills',
+        slug: 'fixed_bills',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -1144,6 +1155,7 @@ test('report services handle empty-state data without persisting derived results
       {
         bucket_id: 'cat_personal_spending',
         bucket_name: 'personal_spending',
+        slug: 'personal_spending',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -1158,6 +1170,7 @@ test('report services handle empty-state data without persisting derived results
       {
         bucket_id: 'cat_fixed_bills',
         bucket_name: 'fixed_bills',
+        slug: 'fixed_bills',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -1170,6 +1183,7 @@ test('report services handle empty-state data without persisting derived results
       {
         bucket_id: 'cat_personal_spending',
         bucket_name: 'personal_spending',
+        slug: 'personal_spending',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -1184,6 +1198,7 @@ test('report services handle empty-state data without persisting derived results
       {
         bucket_id: 'cat_fixed_bills',
         bucket_name: 'fixed_bills',
+        slug: 'fixed_bills',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
@@ -1196,6 +1211,7 @@ test('report services handle empty-state data without persisting derived results
       {
         bucket_id: 'cat_personal_spending',
         bucket_name: 'personal_spending',
+        slug: 'personal_spending',
         allocated_this_month: '0.00',
         added_this_month: '0.00',
         used_this_month: '0.00',
