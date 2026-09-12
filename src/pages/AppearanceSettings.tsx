@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { getDebts } from "../api/debtsApi";
@@ -41,8 +41,7 @@ import type {
   Goal,
   HouseholdSettings,
   ImportReviewRule,
-} from "../lib/types";
-import { formatCurrency } from "../lib/format";
+} from "../lib/types";
 import { normalizeMoneyInput } from "../lib/validation";
 
 interface ProfileSettingsViewModel {
@@ -127,7 +126,7 @@ function selectedCardStyle(selected: boolean) {
 }
 
 export function AppearanceSettings() {
-  const { preferences, saveAppearance } = useAppearance();
+  const { preferences, saveAppearance, togglePrivacyMode } = useAppearance();
   const [activeTab, setActiveTab] = useState<SettingsTab>("preferences");
   const [draft, setDraft] = useState<AppearancePreferences>(preferences);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -553,6 +552,32 @@ export function AppearanceSettings() {
                 </div>
               </Card>
 
+
+              <Card title="Privacy Mode">
+                <div className="space-y-5">
+                  <div className="border-b border-[var(--border-color)] pb-5">
+                    <div className="text-[17px] font-semibold text-[var(--text-strong)]">Privacy Mode</div>
+                    <p className="mt-2 max-w-2xl text-[13px] italic leading-6 text-[var(--text-muted)]">
+                      Hide all financial amounts when sharing your screen, presenting, or working in public. No data changes — amounts are masked on this device only and restore automatically when toggled off.
+                    </p>
+                  </div>
+                  <div className="rounded-[1.5rem] border border-[var(--border-color)] px-4 py-4" style={{ background: "var(--surface-plain)" }}>
+                    <label className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--text-strong)]">Hide financial amounts</div>
+                        <div className="mt-1 text-[12px] italic text-[var(--text-muted)]">Masks all dollar values shown in RAF. Stored locally — not synced to other devices.</div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
+                        checked={preferences.privacy_mode}
+                        aria-label="Hide financial amounts"
+                        onChange={togglePrivacyMode}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </Card>
               <div className="pt-1">
                 <Card title="Apply Appearance Changes">
                   <div className="space-y-4">
@@ -911,4 +936,6 @@ export function AppearanceSettings() {
     </PageShell>
   );
 }
+
+
 

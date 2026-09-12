@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+﻿import { type FormEvent, useState } from "react";
 
 import {
   type CashFlowForecast,
@@ -14,9 +14,11 @@ import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { PageShell } from "../components/layout/PageShell";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatCurrency, formatIsoDate } from "../lib/format";
+import { formatIsoDate } from "../lib/format";
+import { Money } from "../components/ui/Money";
+import { useMoneyFormat } from "../hooks/useMoneyFormat";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const DAYS_OPTIONS: { label: string; value: ForecastDays }[] = [
   { label: "30 days", value: 30 },
@@ -46,11 +48,6 @@ function parseMoney(value: string | null | undefined): number {
   return Number(value ?? "0") || 0;
 }
 
-function signedAmount(value: string): string {
-  const n = parseMoney(value);
-  if (n > 0) return `+${formatCurrency(n)}`;
-  return formatCurrency(n);
-}
 
 function confidenceBadge(level: string) {
   return (
@@ -60,7 +57,7 @@ function confidenceBadge(level: string) {
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function SummaryCard({
   label,
@@ -94,7 +91,7 @@ function SummaryCard({
 function DeficitBanner({ date }: { date: string }) {
   return (
     <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800/40 dark:bg-red-900/10">
-      <span className="mt-0.5 text-[16px] text-red-500">⚠</span>
+      <span className="mt-0.5 text-[16px] text-red-500">âš </span>
       <div>
         <p className="text-[13px] font-semibold text-red-800 dark:text-red-300">Projected deficit detected</p>
         <p className="text-[12px] text-red-700 dark:text-red-400">
@@ -115,7 +112,7 @@ function ConfidenceTotals({ forecast }: { forecast: CashFlowForecast }) {
           Confirmed obligations
         </p>
         <p className="mt-1 text-[18px] font-bold tabular-nums text-[var(--text-primary)]">
-          {formatCurrency(summaryMetrics.obligations.totalConfirmedObligations)}
+          <Money value={summaryMetrics.obligations.totalConfirmedObligations} />
         </p>
         <p className="text-[11px] text-[var(--text-subtle)]">Fixed bills ({forecast.days}-day window)</p>
       </div>
@@ -124,7 +121,7 @@ function ConfidenceTotals({ forecast }: { forecast: CashFlowForecast }) {
           Expected obligations
         </p>
         <p className="mt-1 text-[18px] font-bold tabular-nums text-[var(--text-primary)]">
-          {formatCurrency(summaryMetrics.obligations.totalExpectedObligations)}
+          <Money value={summaryMetrics.obligations.totalExpectedObligations} />
         </p>
         <p className="text-[11px] text-[var(--text-subtle)]">Debt payments ({forecast.days}-day window)</p>
       </div>
@@ -133,7 +130,7 @@ function ConfidenceTotals({ forecast }: { forecast: CashFlowForecast }) {
           Estimated variable spending
         </p>
         <p className="mt-1 text-[18px] font-bold tabular-nums text-[var(--text-primary)]">
-          {formatCurrency(summaryMetrics.totalEstimatedVariableSpending)}
+          <Money value={summaryMetrics.totalEstimatedVariableSpending} />
         </p>
         <p className="text-[11px] text-[var(--text-subtle)]">Trailing 3-month avg (excl. bills)</p>
       </div>
@@ -153,14 +150,14 @@ function AssumptionsPanel({ forecast }: { forecast: CashFlowForecast }) {
         <div className="flex justify-between gap-2 text-[13px]">
           <dt className="text-[var(--text-secondary)]">Liquid cash balance</dt>
           <dd className="font-medium tabular-nums text-[var(--text-primary)]">
-            {formatCurrency(assumptions.liquidCashBalance ?? assumptions.startingBalance)}
+            <Money value={assumptions.liquidCashBalance ?? assumptions.startingBalance} />
           </dd>
         </div>
         {parseMoney(assumptions.savingsAccountBalance) > 0 && (
           <div className="flex justify-between gap-2 text-[13px]">
             <dt className="text-[var(--text-secondary)]">Savings accounts</dt>
             <dd className="font-medium tabular-nums text-[var(--text-primary)]">
-              {formatCurrency(assumptions.savingsAccountBalance)}
+              <Money value={assumptions.savingsAccountBalance} />
             </dd>
           </div>
         )}
@@ -168,14 +165,14 @@ function AssumptionsPanel({ forecast }: { forecast: CashFlowForecast }) {
           <div className="flex justify-between gap-2 text-[13px]">
             <dt className="text-[var(--text-secondary)]">Investment (excluded from forecast)</dt>
             <dd className="font-medium tabular-nums text-[var(--text-subtle)]">
-              {formatCurrency(assumptions.investmentAccountsExcluded)}
+              <Money value={assumptions.investmentAccountsExcluded} />
             </dd>
           </div>
         )}
         <div className="flex justify-between gap-2 text-[13px]">
           <dt className="text-[var(--text-secondary)]">Avg monthly income</dt>
           <dd className="flex items-center gap-1 font-medium tabular-nums text-[var(--text-primary)]">
-            {formatCurrency(assumptions.avgMonthlyIncome)}
+            <Money value={assumptions.avgMonthlyIncome} />
             {confidenceBadge(assumptions.incomeConfidence)}
           </dd>
         </div>
@@ -183,7 +180,7 @@ function AssumptionsPanel({ forecast }: { forecast: CashFlowForecast }) {
           <div className="flex justify-between gap-2 text-[13px]">
             <dt className="text-[var(--text-secondary)]">Savings floor</dt>
             <dd className="font-medium tabular-nums text-[var(--text-primary)]">
-              {formatCurrency(assumptions.savingsFloor)}
+              <Money value={assumptions.savingsFloor} />
             </dd>
           </div>
         )}
@@ -225,7 +222,7 @@ function AssumptionsPanel({ forecast }: { forecast: CashFlowForecast }) {
                   key={b.categoryId}
                   className="rounded-full bg-[var(--surface)] px-2.5 py-0.5 text-[12px] text-[var(--text-secondary)]"
                 >
-                  {b.label}: {formatCurrency(b.monthlyAverage)}
+                  {b.label}: <Money value={b.monthlyAverage} />
                 </span>
               ))}
           </div>
@@ -284,7 +281,7 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
               <div className="flex flex-1 flex-wrap items-center gap-2">
                 {parseMoney(p.projectedIncome.amount) > 0 && (
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                    +{formatCurrency(p.projectedIncome.amount)} income
+                    <Money value={p.projectedIncome.amount} signed /> income
                   </span>
                 )}
                 {p.projectedFixedBills.bills.map((b) => (
@@ -292,7 +289,7 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
                     key={b.billId}
                     className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]"
                   >
-                    {b.description} {formatCurrency(b.amount)}
+                    {b.description} <Money value={b.amount} />
                   </span>
                 ))}
                 {p.projectedDebtPayments.byDebt.map((d) => (
@@ -300,7 +297,7 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
                     key={d.debtId}
                     className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]"
                   >
-                    {d.description} {formatCurrency(d.amount)}
+                    {d.description} <Money value={d.amount} />
                   </span>
                 ))}
                 {(p.projectedUpcomingExpenses?.expenses ?? []).map((e) => (
@@ -308,12 +305,12 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
                     key={e.expenseId}
                     className="rounded-full bg-purple-100 px-2 py-0.5 text-[11px] font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
                   >
-                    {e.description} {formatCurrency(e.amount)}
+                    {e.description} <Money value={e.amount} />
                   </span>
                 ))}
                 {p.pressureIndicators.riskLevel !== "healthy" && (
                   <span className={`text-[11px] font-medium ${riskColor}`}>
-                    ⚠ {p.pressureIndicators.riskLevel}
+                    âš  {p.pressureIndicators.riskLevel}
                   </span>
                 )}
               </div>
@@ -321,10 +318,10 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
               <div
                 className={`min-w-[6rem] text-right text-[13px] font-semibold tabular-nums ${riskColor || "text-[var(--text-primary)]"}`}
               >
-                {formatCurrency(balance)}
+                <Money value={balance} />
               </div>
 
-              <span className="text-[var(--text-subtle)]">{isOpen ? "▲" : "▼"}</span>
+              <span className="text-[var(--text-subtle)]">{isOpen ? "â–²" : "â–¼"}</span>
             </button>
 
             {isOpen && (
@@ -334,13 +331,13 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
                   <span
                     className={`font-medium tabular-nums ${parseMoney(p.netCashFlow) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
                   >
-                    {signedAmount(p.netCashFlow)}
+                    <Money value={p.netCashFlow} signed />
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--text-subtle)]">Projected balance</span>
                   <span className="font-medium tabular-nums text-[var(--text-primary)]">
-                    {formatCurrency(p.projectedBalance)}
+                    <Money value={p.projectedBalance} />
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -348,14 +345,14 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
                   <span
                     className={`font-medium tabular-nums ${margin >= 0 ? "text-[var(--text-primary)]" : "text-red-600 dark:text-red-400"}`}
                   >
-                    {formatCurrency(p.projectedAvailableMargin ?? "0")}
+                    <Money value={p.projectedAvailableMargin ?? "0"} />
                   </span>
                 </div>
                 {parseMoney(p.projectedCategorySpending.total) > 0 && (
                   <div className="flex justify-between">
                     <span className="text-[var(--text-subtle)]">Est. spending (all categories)</span>
                     <span className="font-medium tabular-nums text-[var(--text-secondary)]">
-                      {formatCurrency(p.projectedCategorySpending.total)}
+                      <Money value={p.projectedCategorySpending.total} />
                       <span className="ml-1 text-[10px] font-normal text-[var(--text-subtle)]">estimated</span>
                     </span>
                   </div>
@@ -367,7 +364,7 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
                       <div key={e.expenseId} className="flex justify-between pl-2">
                         <span className="text-purple-600 dark:text-purple-400">{e.description}</span>
                         <span className="font-medium tabular-nums text-purple-600 dark:text-purple-400">
-                          -{formatCurrency(e.amount)}
+                          -<Money value={e.amount} />
                         </span>
                       </div>
                     ))}
@@ -375,7 +372,7 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
                 )}
                 {p.constraints.belowSavingsFloor && (
                   <p className="mt-1 text-red-600 dark:text-red-400">
-                    Balance falls below savings floor ({formatCurrency(p.constraints.savingsFloorAmount)})
+                    Balance falls below savings floor (<Money value={p.constraints.savingsFloorAmount} />)
                   </p>
                 )}
               </div>
@@ -388,6 +385,7 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
 }
 
 function BalanceChart({ forecast }: { forecast: CashFlowForecast }) {
+  const format = useMoneyFormat();
   const balances = forecast.projections.map((p) => parseMoney(p.projectedBalance));
   const max = Math.max(...balances);
   const min = Math.min(...balances, 0);
@@ -408,7 +406,7 @@ function BalanceChart({ forecast }: { forecast: CashFlowForecast }) {
           <div
             className="absolute inset-x-0 border-t border-dashed border-amber-400/70"
             style={{ bottom: `${floorPct}%` }}
-            title={`Savings floor: ${formatCurrency(forecast.assumptions.savingsFloor)}`}
+            title={`Savings floor: ${format(forecast.assumptions.savingsFloor)}`}
           />
         )}
         <div className="flex h-full items-end gap-px">
@@ -422,7 +420,7 @@ function BalanceChart({ forecast }: { forecast: CashFlowForecast }) {
                 key={forecast.projections[i].date}
                 className={`flex-1 rounded-sm ${barColor} opacity-80`}
                 style={{ height: `${heightPct}%` }}
-                title={`${forecast.projections[i].date}: ${formatCurrency(bal)}`}
+                title={`${forecast.projections[i].date}: ${format(bal)}`}
               />
             );
           })}
@@ -609,7 +607,7 @@ function UpcomingExpensesSection({ onForecastInvalidated }: { onForecastInvalida
                 </p>
               </div>
               <span className="font-semibold tabular-nums text-[var(--text-primary)]">
-                {formatCurrency(exp.amount)}
+                <Money value={exp.amount} />
               </span>
               <button
                 type="button"
@@ -617,7 +615,7 @@ function UpcomingExpensesSection({ onForecastInvalidated }: { onForecastInvalida
                 className="ml-1 text-[12px] text-[var(--text-subtle)] transition-colors hover:text-red-500"
                 title="Remove"
               >
-                ✕
+                âœ•
               </button>
             </li>
           ))}
@@ -627,9 +625,10 @@ function UpcomingExpensesSection({ onForecastInvalidated }: { onForecastInvalida
   );
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function CashFlowForecast() {
+  const format = useMoneyFormat();
   const [selectedDays, setSelectedDays] = useState<ForecastDays>(30);
 
   const { data: forecast, isLoading, error, reload } = useAsyncData<CashFlowForecast>(
@@ -677,12 +676,12 @@ export function CashFlowForecast() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <SummaryCard
               label="Liquid cash"
-              value={formatCurrency(forecast.assumptions.liquidCashBalance ?? forecast.assumptions.startingBalance)}
+              value={format(forecast.assumptions.liquidCashBalance ?? forecast.assumptions.startingBalance)}
               sub="Checking + cash accounts"
             />
             <SummaryCard
               label="Lowest available margin"
-              value={formatCurrency(forecast.summaryMetrics.lowestProjectedAvailableMargin?.amount ?? "0")}
+              value={format(forecast.summaryMetrics.lowestProjectedAvailableMargin?.amount ?? "0")}
               sub={
                 forecast.summaryMetrics.lowestProjectedAvailableMargin?.date
                   ? `on ${formatIsoDate(forecast.summaryMetrics.lowestProjectedAvailableMargin.date)}`
@@ -699,7 +698,7 @@ export function CashFlowForecast() {
             />
             <SummaryCard
               label="Lowest projected balance"
-              value={formatCurrency(forecast.summaryMetrics.lowestProjectedBalance.amount)}
+              value={format(forecast.summaryMetrics.lowestProjectedBalance.amount)}
               sub={`on ${formatIsoDate(forecast.summaryMetrics.lowestProjectedBalance.date)}`}
               highlight={
                 parseMoney(forecast.summaryMetrics.lowestBalanceMargin.amount) < 0
@@ -712,7 +711,7 @@ export function CashFlowForecast() {
             />
             <SummaryCard
               label="Avg daily net flow"
-              value={signedAmount(forecast.summaryMetrics.averageDailyNetFlow)}
+              value={parseMoney(forecast.summaryMetrics.averageDailyNetFlow) > 0 ? `+${format(forecast.summaryMetrics.averageDailyNetFlow)}` : format(forecast.summaryMetrics.averageDailyNetFlow)}
               highlight={parseMoney(forecast.summaryMetrics.averageDailyNetFlow) >= 0 ? "ok" : "danger"}
             />
           </div>
@@ -772,3 +771,4 @@ export function CashFlowForecast() {
     </PageShell>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
@@ -17,7 +17,7 @@ import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatCurrency } from "../lib/format";
+import { Money } from "../components/ui/Money";
 import {
   getGoalMilestones,
   markGoalCelebrationSeen,
@@ -510,7 +510,7 @@ export function Goals() {
                               Linked category: {goalBucketLabel(goal, progress, categoryLookup)}
                             </p>
                             {progress?.bucket_balance ? (
-                              <p className="mt-1 text-sm text-[var(--text-muted)]">Category balance: {formatCurrency(progress.bucket_balance)}</p>
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">Category balance: {<Money value={progress.bucket_balance} />}</p>
                             ) : null}
                             {goal.target_date ? (
                               <p className="mt-1 text-sm text-[var(--text-muted)]">Target date: {goal.target_date}</p>
@@ -543,12 +543,12 @@ export function Goals() {
                         <div className="mt-5 grid gap-3 sm:grid-cols-2">
                           <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                             <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Target amount</div>
-                            <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(goal.target_amount)}</div>
+                            <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">{<Money value={goal.target_amount} />}</div>
                           </div>
                           <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                             <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Paid so far</div>
                             <div className="mt-2 text-xl font-semibold text-[var(--text-strong)]">
-                              {formatCurrency(progress?.current_amount ?? "0.00")}
+                              {<Money value={progress?.current_amount ?? "0.00"} />}
                             </div>
                           </div>
                         </div>
@@ -600,7 +600,7 @@ export function Goals() {
                                     </div>
                                     <div className={`shrink-0 text-sm font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
                                       {transaction.direction === "credit" ? "+" : "-"}
-                                      {formatCurrency(transaction.amount)}
+                                      {<Money value={transaction.amount} />}
                                     </div>
                                   </div>
                                 ))}
@@ -641,7 +641,7 @@ export function Goals() {
                         <div>
                           <div className="font-medium text-[var(--text-strong)]">{goal.name}</div>
                           <div className="mt-1 text-sm text-[var(--text-muted)]">
-                            Linked category: {goalBucketLabel(goal, progress, categoryLookup)} - Target {formatCurrency(goal.target_amount)}
+                            Linked category: {goalBucketLabel(goal, progress, categoryLookup)} - Target {<Money value={goal.target_amount} />}
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -795,12 +795,12 @@ export function Goals() {
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                 <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Target amount</div>
-                <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(selectedGoal.target_amount)}</div>
+                <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{<Money value={selectedGoal.target_amount} />}</div>
               </div>
               <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                 <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Paid so far</div>
                 <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">
-                  {formatCurrency(selectedGoalProgress.current_amount)}
+                  {<Money value={selectedGoalProgress.current_amount} />}
                 </div>
               </div>
             </div>
@@ -840,7 +840,7 @@ export function Goals() {
                       {milestone.label}
                     </div>
                     <div className={`text-sm font-semibold ${milestone.completed ? "text-[var(--badge-success-text)]" : "text-[var(--text-muted)]"}`}>
-                      {milestone.completed ? "✓" : "○"}
+                      {milestone.completed ? "âœ“" : "â—‹"}
                     </div>
                   </div>
                 ))}
@@ -878,7 +878,7 @@ export function Goals() {
                         </div>
                         <div className={`shrink-0 text-sm font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
                           {transaction.direction === "credit" ? "+" : "-"}
-                          {formatCurrency(transaction.amount)}
+                          {<Money value={transaction.amount} />}
                         </div>
                       </div>
                     ))}
@@ -898,3 +898,4 @@ export function Goals() {
     </PageShell>
   );
 }
+

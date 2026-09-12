@@ -14,7 +14,8 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatCurrency, formatIsoDate, percentPaidOff } from "../lib/format";
+import { formatIsoDate, percentPaidOff } from "../lib/format";
+import { Money } from "../components/ui/Money";
 import type { DebtPaymentPaceAcknowledgement } from "../lib/types";
 import { normalizeMoneyInput, validateApr, validateNonNegativeMoney, validatePositiveMoney, validateRequiredText } from "../lib/validation";
 
@@ -522,13 +523,13 @@ export function Debts() {
         <>
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Card title="Total starting" subtitle="Original starting balances">
-              <p className="text-3xl font-semibold text-[var(--text-strong)]">{formatCurrency(data.summary.totalStarting)}</p>
+              <p className="text-3xl font-semibold text-[var(--text-strong)]">{<Money value={data.summary.totalStarting} />}</p>
             </Card>
             <Card title="Remaining balance" subtitle="Current balance after recorded activity">
-              <p className="text-3xl font-semibold text-[var(--text-strong)]">{formatCurrency(data.summary.totalRemaining)}</p>
+              <p className="text-3xl font-semibold text-[var(--text-strong)]">{<Money value={data.summary.totalRemaining} />}</p>
             </Card>
             <Card title="Paid all time" subtitle="Historical payoff recorded in RAF">
-              <p className="text-3xl font-semibold text-[var(--text-strong)]">{formatCurrency(data.summary.totalPaidAllTime)}</p>
+              <p className="text-3xl font-semibold text-[var(--text-strong)]">{<Money value={data.summary.totalPaidAllTime} />}</p>
             </Card>
           </section>
 
@@ -548,23 +549,23 @@ export function Debts() {
                       <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
                         <div>
                           <p className="text-[var(--text-muted)]">Starting balance</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.startingBalance)}</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.startingBalance} />}</p>
                         </div>
                         <div>
                           <p className="text-[var(--text-muted)]">Current balance</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.currentBalance)}</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.currentBalance} />}</p>
                         </div>
                         <div>
                           <p className="text-[var(--text-muted)]">Opening this month</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.openingBalance ?? debt.currentBalance)}</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.openingBalance ?? debt.currentBalance} />}</p>
                         </div>
                         <div>
                           <p className="text-[var(--text-muted)]">Minimum payment</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.minimumPayment)}</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.minimumPayment} />}</p>
                         </div>
                         <div>
                           <p className="text-[var(--text-muted)]">Planned payment</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.monthlyPayment)}</p>
+                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.monthlyPayment} />}</p>
                         </div>
                       </div>
 
@@ -600,19 +601,19 @@ export function Debts() {
                             <div className="grid grid-cols-2 gap-4 text-sm">
                               <div>
                                 <p className="text-[var(--text-muted)]">Payments this month</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.paymentsThisMonth ?? "0.00")}</p>
+                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.paymentsThisMonth ?? "0.00"} />}</p>
                               </div>
                               <div>
                                 <p className="text-[var(--text-muted)]">Interest charged</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.interestChargedThisMonth ?? "0.00")}</p>
+                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.interestChargedThisMonth ?? "0.00"} />}</p>
                               </div>
                               <div>
                                 <p className="text-[var(--text-muted)]">Fees this month</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.feesThisMonth ?? "0.00")}</p>
+                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.feesThisMonth ?? "0.00"} />}</p>
                               </div>
                               <div>
                                 <p className="text-[var(--text-muted)]">Principal reduction</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.principalReductionThisMonth ?? "0.00")}</p>
+                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.principalReductionThisMonth ?? "0.00"} />}</p>
                               </div>
                               <div>
                                 <p className="text-[var(--text-muted)]">Next statement</p>
@@ -625,7 +626,7 @@ export function Debts() {
                             </div>
                             {debt.paymentObligation ? (
                               <p className="mt-3 text-sm text-[var(--text-muted)]">
-                                Obligation this cycle: {formatCurrency(debt.paymentObligation.totalPaidToDate)} paid of {formatCurrency(debt.paymentObligation.minimumDue)} minimum
+                                Obligation this cycle: {<Money value={debt.paymentObligation.totalPaidToDate} />} paid of {<Money value={debt.paymentObligation.minimumDue} />} minimum
                                 {debt.paymentObligation.dueDate ? `, due ${formatIsoDate(debt.paymentObligation.dueDate)}` : ""}
                                 {" "}({debt.paymentObligation.status.replace(/_/g, " ")}).
                               </p>
@@ -669,7 +670,7 @@ export function Debts() {
                             <div className="grid grid-cols-2 gap-4 text-sm">
                               <div>
                                 <p className="text-[var(--text-muted)]">Current balance</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.currentBalance)}</p>
+                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.currentBalance} />}</p>
                               </div>
                               <div>
                                 <p className="text-[var(--text-muted)]">Estimated payoff</p>
@@ -686,19 +687,19 @@ export function Debts() {
                               <div>
                                 <p className="text-[var(--text-muted)]">Interest remaining</p>
                                 <p className="mt-1 font-semibold text-[var(--text-strong)]">
-                                  {debt.totalInterestRemaining == null ? "—" : formatCurrency(debt.totalInterestRemaining)}
+                                  {debt.totalInterestRemaining == null ? "—" : <Money value={debt.totalInterestRemaining} />}
                                 </p>
                               </div>
                               <div>
                                 <p className="text-[var(--text-muted)]">Starting balance</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{formatCurrency(debt.startingBalance)}</p>
+                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.startingBalance} />}</p>
                               </div>
                             </div>
                             {estimateMessage ? (
                               <p className="mt-3 text-sm text-[var(--text-muted)]">{estimateMessage}</p>
                             ) : null}
                             {Number(debt.monthlyPayment ?? "0") > 0 && debt.estimatedPayoffDate ? (
-                              <p className="mt-3 text-sm italic text-[var(--text-muted)]">Forecast assumes {formatCurrency(debt.monthlyPayment)}/month.</p>
+                              <p className="mt-3 text-sm italic text-[var(--text-muted)]">Forecast assumes {<Money value={debt.monthlyPayment} />}/month.</p>
                             ) : null}
                           </div>
                         ) : null}
@@ -774,7 +775,7 @@ export function Debts() {
                     />
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">Current balance</span>
-                      <div className="ui-field flex items-center bg-[var(--surface-elevated)] text-[var(--text-strong)]">{editingDebt ? formatCurrency(editingDebt.currentBalance) : "—"}</div>
+                      <div className="ui-field flex items-center bg-[var(--surface-elevated)] text-[var(--text-strong)]">{editingDebt ? <Money value={editingDebt.currentBalance} /> : "—"}</div>
                     </label>
                     <div>
                       <Input
@@ -956,5 +957,6 @@ export function Debts() {
     </PageShell>
   );
 }
+
 
 

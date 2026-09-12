@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { z } from "zod";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
@@ -13,7 +13,7 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatCurrency } from "../lib/format";
+import { Money } from "../components/ui/Money";
 import type { AllocationCategory } from "../lib/types";
 
 const stepOrder = ["income", "expenses", "debts", "goals", "review"] as const;
@@ -388,24 +388,24 @@ export function PlanWizard() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-plain)] p-3">
                 <div className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">Income</div>
-                <div className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(totals.incomeTotal.toFixed(2))}</div>
+                <div className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{<Money value={totals.incomeTotal.toFixed(2)} />}</div>
               </div>
               <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-plain)] p-3">
                 <div className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">Fixed bills</div>
-                <div className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(totals.fixedTotal.toFixed(2))}</div>
+                <div className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{<Money value={totals.fixedTotal.toFixed(2)} />}</div>
               </div>
               <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-plain)] p-3">
                 <div className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">Debt payments</div>
-                <div className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(totals.debtsTotal.toFixed(2))}</div>
+                <div className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{<Money value={totals.debtsTotal.toFixed(2)} />}</div>
               </div>
               <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-plain)] p-3">
                 <div className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">Goals target total</div>
-                <div className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(totals.goalsTotal.toFixed(2))}</div>
+                <div className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{<Money value={totals.goalsTotal.toFixed(2)} />}</div>
               </div>
             </div>
             <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-plain)] p-3">
               <div className="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)]">Net after fixed commitments</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-strong)]">{formatCurrency(totals.netAfterCommitments.toFixed(2))}</div>
+              <div className="mt-1 text-2xl font-semibold text-[var(--text-strong)]">{<Money value={totals.netAfterCommitments.toFixed(2)} />}</div>
             </div>
 
             {submitError ? <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{submitError}</p> : null}
@@ -426,3 +426,4 @@ export function PlanWizard() {
     </PageShell>
   );
 }
+

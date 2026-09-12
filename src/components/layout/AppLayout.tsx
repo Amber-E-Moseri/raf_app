@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { APP_NAME } from "../../lib/constants";
@@ -6,6 +6,7 @@ import rafLogo from "../../assets/raf-logo.png";
 import { useAuth } from "../../context/AuthContext";
 import { buildMonthOptions } from "../../lib/period";
 import { usePeriod } from "./PeriodProvider";
+import { useAppearance } from "./AppearanceProvider";
 
 const desktopNavigation = [
   {
@@ -272,6 +273,7 @@ export function AppLayout() {
     setActiveMonth,
   } = usePeriod();
   const monthOptions = useMemo(() => buildMonthOptions(activeMonth), [activeMonth]);
+  const { preferences, togglePrivacyMode } = useAppearance();
   const workspaces = session?.workspaces ?? [];
   const activeWorkspaceId = session?.workspaceId ?? session?.householdId;
 
@@ -347,6 +349,22 @@ export function AppLayout() {
                 </span>
                 <span>Profile</span>
               </NavLink>
+              <button
+                type="button"
+                aria-pressed={preferences.privacy_mode}
+                onClick={togglePrivacyMode}
+                className={["nav-link w-full motion-safe:transition-opacity motion-safe:duration-150", preferences.privacy_mode ? "opacity-60" : ""].filter(Boolean).join(" ")}
+                title={preferences.privacy_mode ? "Privacy mode on" : "Privacy mode off"}
+              >
+                <span className="inline-flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                  {preferences.privacy_mode ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" /><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" /><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" /><line x1="2" x2="22" y1="2" y2="22" /></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
+                  )}
+                </span>
+                <span>{preferences.privacy_mode ? "Privacy on" : "Privacy off"}</span>
+              </button>
             </div>
           </div>
         </aside>
@@ -369,3 +387,4 @@ export function AppLayout() {
     </div>
   );
 }
+

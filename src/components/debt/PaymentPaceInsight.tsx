@@ -1,6 +1,8 @@
-import { Badge } from "../ui/Badge";
+﻿import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
-import { formatCurrency, formatIsoDate } from "../../lib/format";
+import { formatIsoDate } from "../../lib/format";
+import { Money } from "../ui/Money";
+import { useMoneyFormat } from "../../hooks/useMoneyFormat";
 import type { Debt, DebtPaymentPaceAcknowledgement } from "../../lib/types";
 
 interface PaymentPaceInsightProps {
@@ -62,7 +64,7 @@ export function PaymentPaceInsight({
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="warning">Balance is growing</Badge>
             <span className="text-sm font-semibold text-[var(--text-strong)]">
-              {formatCurrency(debt.openingBalance)} &rarr; {formatCurrency(debt.closingBalance)} this period
+              <Money value={debt.openingBalance} /> &rarr; <Money value={debt.closingBalance} /> this period
             </span>
           </div>
           {explanation ? (
@@ -71,29 +73,29 @@ export function PaymentPaceInsight({
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
                 <div>
                   <dt className="text-[var(--text-muted)]">Payments</dt>
-                  <dd className="text-[var(--text-strong)]">{formatCurrency(explanation.payments)}</dd>
+                  <dd className="text-[var(--text-strong)]"><Money value={explanation.payments} /></dd>
                 </div>
                 <div>
                   <dt className="text-[var(--text-muted)]">Interest</dt>
-                  <dd className="text-[var(--text-strong)]">{formatCurrency(explanation.interest)}</dd>
+                  <dd className="text-[var(--text-strong)]"><Money value={explanation.interest} /></dd>
                 </div>
                 <div>
                   <dt className="text-[var(--text-muted)]">Fees</dt>
-                  <dd className="text-[var(--text-strong)]">{formatCurrency(explanation.fees)}</dd>
+                  <dd className="text-[var(--text-strong)]"><Money value={explanation.fees} /></dd>
                 </div>
                 <div>
                   <dt className="text-[var(--text-muted)]">New charges or borrowing</dt>
-                  <dd className="text-[var(--text-strong)]">{formatCurrency(explanation.newActivity)}</dd>
+                  <dd className="text-[var(--text-strong)]"><Money value={explanation.newActivity} /></dd>
                 </div>
                 <div>
                   <dt className="text-[var(--text-muted)]">Adjustments</dt>
-                  <dd className="text-[var(--text-strong)]">{formatCurrency(explanation.adjustments)}</dd>
+                  <dd className="text-[var(--text-strong)]"><Money value={explanation.adjustments} /></dd>
                 </div>
               </dl>
             </>
           ) : (
             <p className="text-sm text-[var(--text-muted)]">
-              The balance rose by about {formatCurrency(String((trajectory!.absoluteChange / 100).toFixed(2)))} this period.
+              The balance rose by about <Money value={String((trajectory!.absoluteChange / 100).toFixed(2))} /> this period.
             </p>
           )}
         </div>
@@ -143,6 +145,7 @@ function AbovePlanBlock({
   onKeepPlan,
   onAcknowledgeOnetime,
 }: AbovePlanBlockProps) {
+  const format = useMoneyFormat();
   const acceleratedMonths = insight.projections?.acceleratedMonths ?? 0;
   const interestSaved = Number(insight.projections?.interestSaved ?? "0");
   const showSavings = !balanceGrowing && (acceleratedMonths > 1 || interestSaved > 50);
@@ -158,8 +161,8 @@ function AbovePlanBlock({
           </div>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
             {balanceGrowing
-              ? `You paid ${formatCurrency(insight.actualPayment)} against a ${formatCurrency(insight.plannedPayment)} plan for ${insight.actionablePaymentPeriod}, but the balance still rose — see above.`
-              : `Recorded payments for ${insight.actionablePaymentPeriod} are ${formatCurrency(insight.actualPayment)} against a ${formatCurrency(insight.plannedPayment)} plan.`}
+              ? `You paid ${format(insight.actualPayment)} against a ${format(insight.plannedPayment)} plan for ${insight.actionablePaymentPeriod}, but the balance still rose — see above.`
+              : `Recorded payments for ${insight.actionablePaymentPeriod} are ${format(insight.actualPayment)} against a ${format(insight.plannedPayment)} plan.`}
           </p>
         </div>
         <div className="text-right text-sm">
@@ -175,14 +178,14 @@ function AbovePlanBlock({
             <p className="mt-1 font-semibold text-[var(--text-strong)]">
               {insight.projections.planned.estimatedPayoffDate ? formatIsoDate(insight.projections.planned.estimatedPayoffDate) : "Unavailable"}
             </p>
-            <p className="mt-1 text-[var(--text-muted)]">{formatCurrency(insight.plannedPayment)}/month</p>
+            <p className="mt-1 text-[var(--text-muted)]"><Money value={insight.plannedPayment} />/month</p>
           </div>
           <div>
             <p className="text-[var(--text-muted)]">{observedBasisLabel(insight.projections.observedBasis)}</p>
             <p className="mt-1 font-semibold text-[var(--text-strong)]">
               {insight.projections.observed.estimatedPayoffDate ? formatIsoDate(insight.projections.observed.estimatedPayoffDate) : "Unavailable"}
             </p>
-            <p className="mt-1 text-[var(--text-muted)]">{formatCurrency(suggestedPayment)}/month</p>
+            <p className="mt-1 text-[var(--text-muted)]"><Money value={suggestedPayment} />/month</p>
           </div>
         </div>
       ) : null}
@@ -190,7 +193,7 @@ function AbovePlanBlock({
       {showSavings ? (
         <p className="text-sm text-[var(--text-muted)]">
           At this pace, the projection shows {acceleratedMonths > 1 ? `${acceleratedMonths} months earlier` : "a faster payoff"}
-          {interestSaved > 50 ? ` and about ${formatCurrency(String(interestSaved.toFixed(2)))} less interest` : ""}.
+          {interestSaved > 50 ? ` and about ${format(String(interestSaved.toFixed(2)))} less interest` : ""}.
         </p>
       ) : null}
 
@@ -199,7 +202,7 @@ function AbovePlanBlock({
           {pendingAction === "keep_plan" ? "Saving..." : "Keep current plan"}
         </Button>
         <Button type="button" variant="secondary" onClick={onUpdatePlan} disabled={disabled}>
-          {pendingAction === "update_plan" ? "Updating..." : `Update plan to ${formatCurrency(suggestedPayment)}`}
+          {pendingAction === "update_plan" ? "Updating..." : `Update plan to ${format(suggestedPayment)}`}
         </Button>
         <Button type="button" variant="ghost" onClick={onAcknowledgeOnetime} disabled={disabled}>
           {pendingAction === "acknowledge_onetime" ? "Saving..." : "This was one-time"}
@@ -224,6 +227,7 @@ function BelowPlanBlock({
   onKeepPlan,
   onAcknowledgeOnetime,
 }: BelowPlanBlockProps) {
+  const format = useMoneyFormat();
   const delayedMonths = insight.projections?.acceleratedMonths ?? 0;
   const interestDelta = Number(insight.projections?.interestSaved ?? "0");
   const monthsLater = delayedMonths < 0 ? Math.abs(delayedMonths) : 0;
@@ -238,8 +242,8 @@ function BelowPlanBlock({
             <span className="text-sm font-semibold text-[var(--text-strong)]">Payment pace has slowed</span>
           </div>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Recorded payments for {insight.actionablePaymentPeriod} are {formatCurrency(insight.actualPayment)} against a {formatCurrency(insight.plannedPayment)} plan
-            {insight.amountBelowPlan ? ` — ${formatCurrency(insight.amountBelowPlan)} short` : ""}.
+            Recorded payments for {insight.actionablePaymentPeriod} are <Money value={insight.actualPayment} /> against a <Money value={insight.plannedPayment} /> plan
+            {insight.amountBelowPlan ? ` — ${format(insight.amountBelowPlan)} short` : ""}.
           </p>
         </div>
         <div className="text-right text-sm">
@@ -255,14 +259,14 @@ function BelowPlanBlock({
             <p className="mt-1 font-semibold text-[var(--text-strong)]">
               {insight.projections.planned.estimatedPayoffDate ? formatIsoDate(insight.projections.planned.estimatedPayoffDate) : "Unavailable"}
             </p>
-            <p className="mt-1 text-[var(--text-muted)]">{formatCurrency(insight.plannedPayment)}/month</p>
+            <p className="mt-1 text-[var(--text-muted)]"><Money value={insight.plannedPayment} />/month</p>
           </div>
           <div>
             <p className="text-[var(--text-muted)]">{observedBasisLabel(insight.projections.observedBasis)}</p>
             <p className="mt-1 font-semibold text-[var(--text-strong)]">
               {insight.projections.observed.estimatedPayoffDate ? formatIsoDate(insight.projections.observed.estimatedPayoffDate) : "Unavailable"}
             </p>
-            <p className="mt-1 text-[var(--text-muted)]">{formatCurrency(insight.actualPayment)}/month</p>
+            <p className="mt-1 text-[var(--text-muted)]"><Money value={insight.actualPayment} />/month</p>
           </div>
         </div>
       ) : null}
@@ -270,7 +274,7 @@ function BelowPlanBlock({
       {monthsLater > 0 || extraInterest > 0 ? (
         <p className="text-sm text-[var(--text-muted)]">
           At this pace, the projection shows {monthsLater > 0 ? `about ${monthsLater} months later` : "a slower payoff"}
-          {extraInterest > 0 ? ` and about ${formatCurrency(String(extraInterest.toFixed(2)))} more interest` : ""}.
+          {extraInterest > 0 ? ` and about ${format(String(extraInterest.toFixed(2)))} more interest` : ""}.
         </p>
       ) : null}
 
@@ -285,3 +289,5 @@ function BelowPlanBlock({
     </div>
   );
 }
+
+

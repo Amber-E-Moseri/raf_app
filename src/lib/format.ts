@@ -1,4 +1,4 @@
-const currencyFormatter = new Intl.NumberFormat("en-US", {
+﻿const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   minimumFractionDigits: 2,
@@ -10,6 +10,8 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   year: "numeric",
 });
+
+export const PRIVACY_MASK = "••••";
 
 export function formatCurrency(value: string | number | null | undefined): string {
   if (value == null || value === "") {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
@@ -23,7 +23,9 @@ import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useMonthWorkflow } from "../hooks/useMonthWorkflow";
 import { useAuth } from "../context/AuthContext";
-import { formatCurrency, formatIsoDate } from "../lib/format";
+import { formatIsoDate } from "../lib/format";
+import { Money } from "../components/ui/Money";
+import { useMoneyFormat } from "../hooks/useMoneyFormat";
 import { normalizeMoneyInput } from "../lib/validation";
 import type {
   AllocationCategory,
@@ -190,6 +192,7 @@ function deriveDashboardNextStepState({
 
 export function Dashboard() {
   const { activeMonthLabel, activeRange, isCurrentMonth, jumpToCurrentMonth } = usePeriod();
+  const format = useMoneyFormat();
   const { session } = useAuth();
   const activeWorkspaceId = session?.workspaceId ?? session?.householdId ?? "local";
   const { from, to } = activeRange;
@@ -555,7 +558,7 @@ export function Dashboard() {
       {nextStepState?.kind === "closed-current-month" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">{activeMonthName} is closed. Your month is complete.</span>{" "}
               RAF will guide the next cycle when new activity begins.
@@ -566,42 +569,42 @@ export function Dashboard() {
       {nextStepState?.kind === "income-no-transactions" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>→</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>â†’</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Income logged.</span>{" "}
               Next: record transactions to track where it goes.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/transactions">
-            Track spending →
+            Track spending â†’
           </Link>
         </div>
       ) : null}
       {nextStepState?.kind === "income-transactions-open" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Looking good.</span>{" "}
               When you are done spending, close {activeMonthLabel} in Monthly Review.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/monthly-review">
-            Monthly Review →
+            Monthly Review â†’
           </Link>
         </div>
       ) : null}
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-3">
         <SummaryMetricCard
           title="Income this month"
-          value={formatCurrency(latestPeriodIncome)}
+          value={format(latestPeriodIncome)}
           subtitle={data.incomeCount ? `${data.incomeCount} deposit${data.incomeCount === 1 ? "" : "s"}` : "Start here each month"}
           badge={data.latestPeriod?.alertStatus ?? "ok"}
           tone={alertTone(data.latestPeriod?.alertStatus)}
         />
         <SummaryMetricCard
           title="Net surplus"
-          value={formatCurrency(latestSurplus)}
+          value={format(latestSurplus)}
           subtitle={`Remaining after this month's spending - ${monthStatusSubtitle(activeMonthStatus)}`}
           badge={activeMonthStatus}
           tone={activeMonthStatus === "closed" ? "success" : alertTone(data.latestPeriod?.alertStatus)}
@@ -670,7 +673,7 @@ export function Dashboard() {
                 <div>
                   <div className="font-semibold">Savings is below your floor.</div>
                   <div className="mt-1 text-[12px] leading-5">
-                    Current savings is {formatCurrency(data.financialHealth.savingsBalance)} against a floor of {formatCurrency(data.financialHealth.savingsFloor)}.
+                    Current savings is <Money value={data.financialHealth.savingsBalance} /> against a floor of <Money value={data.financialHealth.savingsFloor} />.
                   </div>
                 </div>
                 <Link className="text-[12px] font-semibold text-rose-700 underline-offset-2 hover:underline" to="/settings">
@@ -698,7 +701,7 @@ export function Dashboard() {
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Surplus available</div>
-                      <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(data.surplusRecommendations.netSurplus)}</div>
+                      <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]"><Money value={data.surplusRecommendations.netSurplus} /></div>
                       <div className="mt-2 text-[12px] text-[var(--text-muted)]">
                         These are editable suggestions only. Nothing moves until you confirm it in Monthly Review.
                       </div>
@@ -729,7 +732,7 @@ export function Dashboard() {
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="text-base font-semibold text-[var(--text-strong)]">{formatCurrency(row.amount)}</div>
+                            <div className="text-base font-semibold text-[var(--text-strong)]"><Money value={row.amount} /></div>
                             <div className="mt-1 text-sm font-medium text-[var(--text-strong)]">To {row.destinationLabel}</div>
                             <div className="mt-1 text-[12px] text-[var(--text-muted)]">Included in the current quick-apply draft.</div>
                             {savingsFloorEnabled && isBelowSavingsFloor && row.destinationSlug === "savings" ? (
@@ -790,11 +793,11 @@ export function Dashboard() {
                     ) : null}
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] px-3 py-3 text-sm" style={{ background: "var(--surface-color)" }}>
                       <div>
-                        <div className="font-semibold text-[var(--text-strong)]">Draft total {formatCurrency(draftTotal.toFixed(2))}</div>
+                        <div className="font-semibold text-[var(--text-strong)]">Draft total <Money value={draftTotal.toFixed(2)} /></div>
                         <div className="mt-1 text-[12px] text-[var(--text-muted)]">
                           {draftMatchesSurplus
                             ? "The draft matches the current surplus."
-                            : `Keep this aligned with ${formatCurrency(data.surplusRecommendations.netSurplus)} before confirming.`}
+                            : `Keep this aligned with ${format(data.surplusRecommendations.netSurplus)} before confirming.`}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -857,7 +860,7 @@ export function Dashboard() {
                       </div>
                       <Badge tone={transactionTone(transaction)}>{categoryLabel}</Badge>
                       <div className={`w-20 text-right text-[13px] font-semibold ${transaction.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
-                        {transaction.direction === "credit" ? "+" : ""}{formatCurrency(transaction.amount)}
+                        <Money value={transaction.amount} signed={transaction.direction === "credit"} />
                       </div>
                     </Link>
                   );
@@ -912,13 +915,13 @@ export function Dashboard() {
               {netSurplusExplanation.components.map((component) => (
                 <div key={`${component.label}-${component.value}`} className="flex items-center justify-between gap-4">
                   <span className="text-[var(--text-muted)]">{component.label}</span>
-                  <span className="font-semibold text-[var(--text-strong)]">{formatCurrency(component.value)}</span>
+                  <span className="font-semibold text-[var(--text-strong)]"><Money value={component.value} /></span>
                 </div>
               ))}
               <div className="border-t border-[var(--border-color)] pt-3">
                 <div className="flex items-center justify-between gap-4">
                   <span className="font-semibold text-[var(--text-strong)]">Remaining</span>
-                  <span className="font-bold text-[var(--text-strong)]">{formatCurrency(netSurplusExplanation.value)}</span>
+                  <span className="font-bold text-[var(--text-strong)]"><Money value={netSurplusExplanation.value} /></span>
                 </div>
               </div>
             </div>
@@ -937,3 +940,4 @@ export function Dashboard() {
     </PageShell>
   );
 }
+

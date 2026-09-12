@@ -1,4 +1,4 @@
-export type ThemeColor = "emerald" | "blush" | "violet" | "minimal";
+﻿export type ThemeColor = "emerald" | "blush" | "violet" | "minimal";
 export type FontFamilyOption = "inter" | "barlow" | "playfair-display" | "libre-franklin";
 export type AppearanceMode = "light" | "dark";
 export type InterfaceScale = "small" | "medium" | "large";
@@ -8,6 +8,7 @@ export interface AppearancePreferences {
   font_family: FontFamilyOption;
   appearance_mode: AppearanceMode;
   interface_scale: InterfaceScale;
+  privacy_mode: boolean;
 }
 
 export const APPEARANCE_STORAGE_KEY = "raf_appearance_preferences";
@@ -17,6 +18,7 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   font_family: "inter",
   appearance_mode: "light",
   interface_scale: "medium",
+  privacy_mode: false,
 };
 
 export const THEME_OPTIONS: Array<{
@@ -91,13 +93,9 @@ export function parseAppearancePreferences(rawValue: string | null): AppearanceP
     const interface_scale = INTERFACE_SCALE_OPTIONS.some((option) => option.value === parsed.interface_scale)
       ? parsed.interface_scale as InterfaceScale
       : DEFAULT_APPEARANCE.interface_scale;
+    const privacy_mode = parsed.privacy_mode === true;
 
-    return {
-      theme_color,
-      font_family,
-      appearance_mode,
-      interface_scale,
-    };
+    return { theme_color, font_family, appearance_mode, interface_scale, privacy_mode };
   } catch {
     return DEFAULT_APPEARANCE;
   }
