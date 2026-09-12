@@ -55,6 +55,16 @@ interface SurplusSuggestionDraftRow {
   amount: string;
 }
 
+type DashboardNextStepState =
+  | { kind: "historical" }
+  | { kind: "month-reminder"; monthKey: string }
+  | { kind: "setup-incomplete" }
+  | { kind: "closed-current-month" }
+  | { kind: "setup-complete-no-income" }
+  | { kind: "income-no-transactions" }
+  | { kind: "income-transactions-open" }
+  | null;
+
 type DashboardAggregateReport = Awaited<ReturnType<typeof getDashboardAggregateReport>>;
 type DashboardViewModelReport = DashboardAggregateReport["dashboard"];
 type DashboardHealthReport = DashboardAggregateReport["financialHealth"];
@@ -105,6 +115,79 @@ function writeOnboardingDismissed(workspaceId: string) {
   } catch {}
 }
 
+function readSetupDone() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return localStorage.getItem("raf:setup-done") === "true";
+  } catch {
+    return false;
+  }
+}
+
+function monthStatusSubtitle(status: string) {
+  const labels: Record<string, string> = {
+    closed: "Month closed",
+    in_progress: "Month in progress",
+    needs_review: "Month needs review",
+    open: "Awaiting monthly close",
+    pending: "Awaiting monthly close",
+    ready_to_close: "Ready for monthly close",
+  };
+
+  return labels[status] ?? status.replaceAll("_", " ");
+}
+
+function deriveDashboardNextStepState({
+  isCurrentMonth,
+  setupDone,
+  incomeCount,
+  recentTransactionCount,
+  startHereDismissed,
+  activeMonthStatus,
+  reminderMonthKey,
+}: {
+  isCurrentMonth: boolean;
+  setupDone: boolean;
+  incomeCount: number;
+  recentTransactionCount: number;
+  startHereDismissed: boolean;
+  activeMonthStatus: string;
+  reminderMonthKey: string | null;
+}): DashboardNextStepState {
+  if (!isCurrentMonth) {
+    return { kind: "historical" };
+  }
+
+  if (reminderMonthKey) {
+    return { kind: "month-reminder", monthKey: reminderMonthKey };
+  }
+
+  if (!setupDone && incomeCount === 0 && recentTransactionCount === 0 && !startHereDismissed) {
+    return { kind: "setup-incomplete" };
+  }
+
+  if (activeMonthStatus === "closed") {
+    return { kind: "closed-current-month" };
+  }
+
+  if (setupDone && incomeCount === 0) {
+    return { kind: "setup-complete-no-income" };
+  }
+
+  if (incomeCount > 0 && recentTransactionCount === 0) {
+    return { kind: "income-no-transactions" };
+  }
+
+  if (incomeCount > 0 && recentTransactionCount > 0) {
+    return { kind: "income-transactions-open" };
+  }
+
+  return null;
+}
+
 export function Dashboard() {
   const { activeMonthLabel, activeRange, isCurrentMonth, jumpToCurrentMonth } = usePeriod();
   const { session } = useAuth();
@@ -118,6 +201,8 @@ export function Dashboard() {
   const [surplusApplyError, setSurplusApplyError] = useState<string | null>(null);
   const [isQuickApplyingSurplus, setIsQuickApplyingSurplus] = useState(false);
   const [startHereDismissed, setStartHereDismissed] = useState(() => readOnboardingDismissed(activeWorkspaceId));
+  const [setupDone, setSetupDone] = useState(readSetupDone);
+  const [howRafWorksOpen, setHowRafWorksOpen] = useState(false);
   const [netSurplusExplanationOpen, setNetSurplusExplanationOpen] = useState(false);
 
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
@@ -179,6 +264,7 @@ export function Dashboard() {
 
   useEffect(() => {
     setStartHereDismissed(readOnboardingDismissed(activeWorkspaceId));
+    setSetupDone(readSetupDone());
   }, [activeWorkspaceId]);
 
   useEffect(() => {
@@ -230,6 +316,7 @@ export function Dashboard() {
   const latestPeriodIncome = dashboardData.latestPeriod?.incomeTotal ?? "0.00";
   const latestSurplus = dashboardData.latestPeriod?.surplusOrDeficit ?? "0.00";
   const netSurplusExplanation = dashboardData.latestPeriod?.explanations?.netSurplus ?? null;
+  const activeMonthName = activeMonthLabel.replace(/\s+\d{4}$/, "");
   const bucketBalancesBySlug = new Map(dashboardData.dashboard.bucket_balances.map((bucket) => [bucket.slug, bucket]));
   const monthlyProgressByBucketId = new Map(dashboardData.dashboard.monthly_bucket_progress.map((progress) => [progress.bucket_id, progress]));
   const latestAllocationAmounts = new Map((dashboardData.latestAllocationReport?.allocations ?? []).map((allocation) => [allocation.slug, allocation.amount]));
@@ -267,7 +354,16 @@ export function Dashboard() {
     && editingSurplusRow.destinationSlug === "savings"
     && surplusRowDraft.destinationSlug !== "savings",
   );
-  const showStartHere = dashboardData.incomeCount === 0 && dashboardData.recentTransactions.length === 0 && !startHereDismissed;
+  const activeMonthStatus = workflowData.activeMonthStatus.status;
+  const nextStepState = deriveDashboardNextStepState({
+    isCurrentMonth,
+    setupDone,
+    incomeCount: dashboardData.incomeCount,
+    recentTransactionCount: dashboardData.recentTransactions.length,
+    startHereDismissed,
+    activeMonthStatus,
+    reminderMonthKey: workflowData.reminderMonth?.monthKey ?? null,
+  });
 
   function dismissStartHere() {
     writeOnboardingDismissed(activeWorkspaceId);
@@ -376,7 +472,7 @@ export function Dashboard() {
 
   return (
     <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
-      {!isCurrentMonth ? (
+      {nextStepState?.kind === "historical" ? (
         <div
           className="rounded-2xl border px-4 py-3 text-sm"
           style={{
@@ -391,8 +487,8 @@ export function Dashboard() {
           </button>
         </div>
       ) : null}
-      {workflowData.reminderMonth ? <MonthReminderBanner monthKey={workflowData.reminderMonth.monthKey} /> : null}
-      {showStartHere ? (
+      {nextStepState?.kind === "month-reminder" ? <MonthReminderBanner monthKey={nextStepState.monthKey} /> : null}
+      {nextStepState?.kind === "setup-incomplete" ? (
         <Card
           title="Start Here"
           subtitle="A simple monthly setup path from RAF's allocation template."
@@ -404,10 +500,10 @@ export function Dashboard() {
         >
           <div className="grid gap-3 md:grid-cols-4">
             {[
-              { step: "1", label: "Pick your active month", to: "/dashboard" },
+              { step: "1", label: "Run the setup wizard", to: "/plan-wizard" },
               { step: "2", label: "Log income", to: "/income/new" },
               { step: "3", label: "Track spending", to: "/transactions" },
-              { step: "4", label: "Review surplus", to: "/monthly-review" },
+              { step: "4", label: "Review surplus", description: "Close the month and confirm where any remaining money goes", to: "/monthly-review" },
             ].map((item) => (
               <Link
                 key={item.step}
@@ -416,25 +512,99 @@ export function Dashboard() {
               >
                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Step {item.step}</span>
                 <span className="mt-1 block text-sm font-semibold text-[var(--text-strong)]">{item.label}</span>
+                {"description" in item ? <span className="mt-1 block text-[12px] leading-5 text-[var(--text-muted)]">{item.description}</span> : null}
               </Link>
             ))}
           </div>
+          <div className="mt-4 rounded-2xl border border-[var(--border-color)]" style={{ background: "var(--surface-plain)" }}>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text-strong)]"
+              onClick={() => setHowRafWorksOpen((current) => !current)}
+              aria-expanded={howRafWorksOpen}
+            >
+              <span>How RAF works</span>
+              <span className="text-[var(--text-muted)]">{howRafWorksOpen ? "^" : "v"}</span>
+            </button>
+            {howRafWorksOpen ? (
+              <ol className="space-y-3 border-t border-[var(--border-color)] px-4 py-4 text-sm text-[var(--text-muted)]">
+                <li><span className="font-semibold text-[var(--text-strong)]">Log income</span> - record each paycheck or deposit. RAF splits it across your categories by the percentages you configured.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Track spending</span> - record transactions against your categories. RAF tracks how much of each category's allocation has been used.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Monthly Review</span> - at month end, close the month. RAF calculates any surplus (income exceeded spending) or deficit.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Distribute surplus</span> - tell RAF where surplus goes: debt paydown, savings goals, or other categories.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Repeat</span> - next month starts fresh with your same plan.</li>
+              </ol>
+            ) : null}
+          </div>
         </Card>
+      ) : null}
+      {nextStepState?.kind === "setup-complete-no-income" ? (
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>1</span>
+            <span className="text-[var(--text-muted)]">
+              <span className="font-semibold text-[var(--text-strong)]">Setup complete.</span>{" "}
+              Log this month's income to begin.
+            </span>
+          </div>
+          <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/income/new">
+            Add income -&gt;
+          </Link>
+        </div>
+      ) : null}
+      {nextStepState?.kind === "closed-current-month" ? (
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
+            <span className="text-[var(--text-muted)]">
+              <span className="font-semibold text-[var(--text-strong)]">{activeMonthName} is closed. Your month is complete.</span>{" "}
+              RAF will guide the next cycle when new activity begins.
+            </span>
+          </div>
+        </div>
+      ) : null}
+      {nextStepState?.kind === "income-no-transactions" ? (
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>→</span>
+            <span className="text-[var(--text-muted)]">
+              <span className="font-semibold text-[var(--text-strong)]">Income logged.</span>{" "}
+              Next: record transactions to track where it goes.
+            </span>
+          </div>
+          <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/transactions">
+            Track spending →
+          </Link>
+        </div>
+      ) : null}
+      {nextStepState?.kind === "income-transactions-open" ? (
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
+            <span className="text-[var(--text-muted)]">
+              <span className="font-semibold text-[var(--text-strong)]">Looking good.</span>{" "}
+              When you are done spending, close {activeMonthLabel} in Monthly Review.
+            </span>
+          </div>
+          <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/monthly-review">
+            Monthly Review →
+          </Link>
+        </div>
       ) : null}
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-3">
         <SummaryMetricCard
           title="Income this month"
           value={formatCurrency(latestPeriodIncome)}
-          subtitle={dashboardData.incomeCount ? `${dashboardData.incomeCount} deposit${dashboardData.incomeCount === 1 ? "" : "s"}` : "Start here each month"}
-          badge={dashboardData.latestPeriod?.alertStatus ?? "ok"}
-          tone={alertTone(dashboardData.latestPeriod?.alertStatus)}
+          subtitle={data.incomeCount ? `${data.incomeCount} deposit${data.incomeCount === 1 ? "" : "s"}` : "Start here each month"}
+          badge={data.latestPeriod?.alertStatus ?? "ok"}
+          tone={alertTone(data.latestPeriod?.alertStatus)}
         />
         <SummaryMetricCard
           title="Net surplus"
           value={formatCurrency(latestSurplus)}
-          subtitle={workflowData.activeMonthStatus.status.replaceAll("_", " ")}
-          badge={workflowData.activeMonthStatus.status}
-          tone={workflowData.activeMonthStatus.status === "closed" ? "success" : alertTone(dashboardData.latestPeriod?.alertStatus)}
+          subtitle={`Remaining after this month's spending - ${monthStatusSubtitle(activeMonthStatus)}`}
+          badge={activeMonthStatus}
+          tone={activeMonthStatus === "closed" ? "success" : alertTone(data.latestPeriod?.alertStatus)}
           action={netSurplusExplanation ? (
             <button
               type="button"
@@ -460,23 +630,37 @@ export function Dashboard() {
 
       <section className="grid gap-4 lg:grid-cols-[1.6fr,1fr]">
         <div className="space-y-4">
-          <AllocationBarChart
-            activeMonthLabel={activeMonthLabel}
-            items={allocationRows.map((row) => ({
-              bucketId: row.bucketId,
-              slug: row.slug,
-              label: row.label,
-              allocationPercent: row.percent,
-              thisMonth: {
-                allocated: row.monthlyProgress?.allocated_this_month ?? row.allocatedAmount ?? null,
-                added: row.monthlyProgress?.added_this_month ?? "0.00",
-                reservedForGoals: row.monthlyProgress?.reserved_for_goals_this_month ?? "0.00",
-                available: row.monthlyProgress?.available_this_month ?? null,
-                used: row.monthlyProgress?.used_this_month ?? null,
-                remaining: row.monthlyProgress?.remaining_this_month ?? null,
-              },
-            }))}
-          />
+          {allocationRows.length === 0 ? (
+            <Card title="Categories">
+              <EmptyState
+                title="No categories configured"
+                message="Run the setup wizard to define your spending categories."
+              />
+              <div className="mt-4 text-center">
+                <Link className="text-sm font-semibold text-[var(--primary-color)]" to="/plan-wizard">
+                  Open setup wizard -&gt;
+                </Link>
+              </div>
+            </Card>
+          ) : (
+            <AllocationBarChart
+              activeMonthLabel={activeMonthLabel}
+              items={allocationRows.map((row) => ({
+                bucketId: row.bucketId,
+                slug: row.slug,
+                label: row.label,
+                allocationPercent: row.percent,
+                thisMonth: {
+                  allocated: row.monthlyProgress?.allocated_this_month ?? row.allocatedAmount ?? null,
+                  added: row.monthlyProgress?.added_this_month ?? "0.00",
+                  reservedForGoals: row.monthlyProgress?.reserved_for_goals_this_month ?? "0.00",
+                  available: row.monthlyProgress?.available_this_month ?? null,
+                  used: row.monthlyProgress?.used_this_month ?? null,
+                  remaining: row.monthlyProgress?.remaining_this_month ?? null,
+                },
+              }))}
+            />
+          )}
         </div>
 
         <div className="space-y-4">
@@ -486,7 +670,7 @@ export function Dashboard() {
                 <div>
                   <div className="font-semibold">Savings is below your floor.</div>
                   <div className="mt-1 text-[12px] leading-5">
-                    Current savings is {formatCurrency(dashboardData.financialHealth.savingsBalance)} against a floor of {formatCurrency(dashboardData.financialHealth.savingsFloor)}.
+                    Current savings is {formatCurrency(data.financialHealth.savingsBalance)} against a floor of {formatCurrency(data.financialHealth.savingsFloor)}.
                   </div>
                 </div>
                 <Link className="text-[12px] font-semibold text-rose-700 underline-offset-2 hover:underline" to="/settings">
@@ -499,13 +683,13 @@ export function Dashboard() {
           {surplusExists ? (
             <Card
               title="Surplus Allocation"
-              subtitle="Editable recommendations for extra funds this month."
+              subtitle="Where surplus goes when you close the month."
               actions={(
                 <div className="flex flex-wrap items-center gap-2">
                   <Link className="text-[11px] font-medium text-[var(--primary-color)]" to="/monthly-review">
                     Default split in Monthly Review
                   </Link>
-                  <Badge tone={alertTone(dashboardData.surplusRecommendations.alertStatus)}>Surplus</Badge>
+                  <Badge tone={alertTone(data.surplusRecommendations.alertStatus)}>Surplus</Badge>
                 </div>
               )}
             >
@@ -514,7 +698,7 @@ export function Dashboard() {
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Surplus available</div>
-                      <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(dashboardData.surplusRecommendations.netSurplus)}</div>
+                      <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(data.surplusRecommendations.netSurplus)}</div>
                       <div className="mt-2 text-[12px] text-[var(--text-muted)]">
                         These are editable suggestions only. Nothing moves until you confirm it in Monthly Review.
                       </div>
@@ -523,7 +707,7 @@ export function Dashboard() {
                       <button
                         type="button"
                         className="inline-flex min-h-9 items-center rounded-full bg-[var(--primary-color)] px-3.5 py-1.5 text-xs font-semibold text-[var(--primary-contrast)] disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isQuickApplyingSurplus || !draftMatchesSurplus || workflowData.closeSummary.canClose === false || workflowData.activeMonthStatus.status === "closed"}
+                        disabled={isQuickApplyingSurplus || !draftMatchesSurplus || monthWorkflow.data.closeSummary.canClose === false || monthWorkflow.data.activeMonthStatus.status === "closed"}
                         onClick={() => void handleQuickApplySurplus()}
                       >
                         {isQuickApplyingSurplus ? "Applying..." : "Quick apply all"}
@@ -610,7 +794,7 @@ export function Dashboard() {
                         <div className="mt-1 text-[12px] text-[var(--text-muted)]">
                           {draftMatchesSurplus
                             ? "The draft matches the current surplus."
-                            : `Keep this aligned with ${formatCurrency(dashboardData.surplusRecommendations.netSurplus)} before confirming.`}
+                            : `Keep this aligned with ${formatCurrency(data.surplusRecommendations.netSurplus)} before confirming.`}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -635,6 +819,15 @@ export function Dashboard() {
                 {!editingSurplusRow && surplusMessage ? <SuccessNotice title="Surplus updated" message={surplusMessage} /> : null}
               </div>
             </Card>
+          ) : data.incomeCount > 0 ? (
+            <Card
+              title="Surplus Allocation"
+              subtitle="Where surplus goes when you close the month."
+            >
+              <div className="rounded-2xl border border-[var(--border-color)] px-4 py-4 text-sm text-[var(--text-muted)]" style={{ background: "var(--surface-plain)" }}>
+                No surplus to distribute yet. Close the month in Monthly Review to see whether there's a surplus.
+              </div>
+            </Card>
           ) : null}
 
           <Card
@@ -645,9 +838,9 @@ export function Dashboard() {
               </Link>
             )}
           >
-            {dashboardData.recentTransactions.length ? (
+            {data.recentTransactions.length ? (
               <div style={{ borderColor: "var(--border-color)" }} className="divide-y">
-                {dashboardData.recentTransactions.map((transaction) => {
+                {data.recentTransactions.map((transaction) => {
                   const categoryLabel = transaction.categoryId
                     ? activeCategories.find((category) => category.id === transaction.categoryId)?.label ?? transaction.categoryId
                     : "Unassigned";

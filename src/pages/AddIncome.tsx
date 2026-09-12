@@ -94,7 +94,7 @@ export function AddIncome() {
     <PageShell
       eyebrow="Income"
       title="Add Income"
-      description="Start the month by recording the income that RAF can allocate intentionally."
+      description="Start the month by recording income. RAF applies your active category percentages, then sends any rounding cent to Buffer when it is active."
       actions={<Link className="text-sm font-semibold text-raf-moss" to="/dashboard">Back to Dashboard</Link>}
     >
       <section className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
@@ -172,7 +172,7 @@ export function AddIncome() {
         <div className="space-y-6">
           <Card
             title={success ? "Current Allocation Preferences + Deposit Allocation" : "Current Allocation Preferences"}
-            subtitle={success ? "This deposit was split using your saved category percentages." : "Your current category percentages."}
+            subtitle={success ? "This deposit was split using the active percentages saved for its received date." : "Your current active percentages."}
           >
             {success ? (
               <div className="mb-4">
@@ -211,16 +211,42 @@ export function AddIncome() {
             ) : null}
           </Card>
           {error ? <ErrorState title="Failed to record income" message={error} /> : null}
-          {!success ? (
+          {success ? (
+            <Card title="Next step" subtitle="Income is recorded — now track where it goes.">
+              <div className="space-y-3">
+                <Link
+                  to="/transactions"
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] px-4 py-3 transition hover:bg-[var(--surface-elevated)]"
+                >
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--text-strong)]">Record transactions</div>
+                    <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Log spending so your allocations stay accurate.</div>
+                  </div>
+                  <span className="shrink-0 text-[var(--primary-color)]">→</span>
+                </Link>
+                <Link
+                  to="/monthly-review"
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] px-4 py-3 transition hover:bg-[var(--surface-elevated)]"
+                >
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--text-strong)]">Monthly Review</div>
+                    <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Close the month and distribute surplus when ready.</div>
+                  </div>
+                  <span className="shrink-0 text-[var(--primary-color)]">→</span>
+                </Link>
+              </div>
+            </Card>
+          ) : (
             <Card title="What happens next" subtitle="RAF allocates each deposit from your saved category plan.">
               <ul className="space-y-3 text-sm text-[var(--text-muted)]">
                 <li>RAF records the deposit for the selected date.</li>
-                <li>Your saved category percentages split the deposit automatically.</li>
+                <li>RAF creates a saved allocation snapshot automatically.</li>
+                <li>RAF uses the active percentages saved for the deposit date, with any rounding cent routed to Buffer when it is active.</li>
                 <li>The allocation shown here is the saved result for this deposit.</li>
                 <li>Use today&apos;s date in ISO format, for example {formatIsoDate(new Date().toISOString())}.</li>
               </ul>
             </Card>
-          ) : null}
+          )}
         </div>
       </section>
     </PageShell>

@@ -9,7 +9,12 @@ test('Dashboard Start Here onboarding is gated by fresh workspace activity and p
   assert.match(source, /Log income/);
   assert.match(source, /Track spending/);
   assert.match(source, /Review surplus/);
-  assert.match(source, /incomeCount === 0 && .*recentTransactions\.length === 0 && !startHereDismissed/);
+  assert.match(source, /function deriveDashboardNextStepState/);
+  assert.match(source, /incomeCount === 0 && recentTransactionCount === 0 && !startHereDismissed/);
+  assert.match(source, /nextStepState\?\.kind === "setup-incomplete"/);
+  assert.match(source, /activeMonthStatus === "closed"/);
+  assert.match(source, /nextStepState\?\.kind === "closed-current-month"/);
+  assert.match(source, /nextStepState\?\.kind === "income-transactions-open"/);
   assert.match(source, /raf:start-here-dismissed:\$\{workspaceId\}/);
   assert.match(source, /localStorage\.setItem\(onboardingDismissalKey\(workspaceId\), "true"\)/);
   assert.match(source, /to: "\/income\/new"/);
