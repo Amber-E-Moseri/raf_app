@@ -20,7 +20,7 @@ import { Input } from "../components/ui/Input";
 import { Table } from "../components/ui/Table";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useMonthWorkflow } from "../hooks/useMonthWorkflow";
-import { formatCurrency } from "../lib/format";
+import { Money } from "../components/ui/Money";
 import { validateFirstDayOfMonth, validateIsoDate } from "../lib/validation";
 import type { AllocationCategory, ApplyMonthlyReviewResponse, Debt, Goal, SurplusRecommendationsReport } from "../lib/types";
 
@@ -441,23 +441,23 @@ export function MonthlyReview() {
           <div className="grid gap-4 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               <p className="text-sm text-[var(--text-muted)]">Income total</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.incomeTotal)}</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.incomeTotal} /></p>
             </div>
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               <p className="text-sm text-[var(--text-muted)]">Expense total</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.expenseTotal)}</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.expenseTotal} /></p>
             </div>
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               <p className="text-sm text-[var(--text-muted)]">Debt payments</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.debtPaymentsTotal)}</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.debtPaymentsTotal} /></p>
             </div>
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               <p className="text-sm text-[var(--text-muted)]">Protected and goal contributions</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.protectedContributionsTotal)}</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.protectedContributionsTotal} /></p>
             </div>
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               <p className="text-sm text-[var(--text-muted)]">Remaining surplus or deficit</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{formatCurrency(monthWorkflow.data.closeSummary.remainingSurplusOrDeficit)}</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.remainingSurplusOrDeficit} /></p>
             </div>
             <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               <p className="text-sm text-[var(--text-muted)]">Unresolved imported transactions</p>
@@ -495,19 +495,19 @@ export function MonthlyReview() {
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Total Income</div>
-                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(preview.monthlySummary.totalIncome)}</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]"><Money value={preview.monthlySummary.totalIncome} /></div>
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Total Allocated</div>
-                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(preview.monthlySummary.totalAllocated)}</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]"><Money value={preview.monthlySummary.totalAllocated} /></div>
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Total Spent</div>
-                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(preview.monthlySummary.totalSpent)}</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]"><Money value={preview.monthlySummary.totalSpent} /></div>
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Month Result</div>
-                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(preview.monthlySummary.monthResult)}</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]"><Money value={preview.monthlySummary.monthResult} /></div>
                   </div>
                 </div>
               </div>
@@ -517,19 +517,19 @@ export function MonthlyReview() {
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Surplus Allocated to Goals</div>
-                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(preview.monthlySummary.surplusAllocatedToGoals)}</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]"><Money value={preview.monthlySummary.surplusAllocatedToGoals} /></div>
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Surplus Allocated to Debt</div>
-                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(preview.monthlySummary.surplusAllocatedToDebt)}</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]"><Money value={preview.monthlySummary.surplusAllocatedToDebt} /></div>
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Remaining Surplus</div>
-                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(preview.monthlySummary.remainingSurplus)}</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]"><Money value={preview.monthlySummary.remainingSurplus} /></div>
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-muted)]">Final Month Result</div>
-                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(preview.monthlySummary.finalMonthResult)}</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text-strong)]"><Money value={preview.monthlySummary.finalMonthResult} /></div>
                   </div>
                 </div>
               </div>
@@ -545,7 +545,7 @@ export function MonthlyReview() {
                     </div>
                   </div>
                   <Badge tone="warning">
-                    {formatCurrency(preview.overspendingImpact.totalImpact)} impact
+                    <Money value={preview.overspendingImpact.totalImpact} /> impact
                   </Badge>
                 </div>
                 <div className="mt-4 space-y-3">
@@ -565,20 +565,20 @@ export function MonthlyReview() {
                             {category.overused ? <Badge tone="warning">Overused</Badge> : null}
                           </div>
                           <div className="mt-1 text-[12px] text-[var(--text-muted)]">
-                            Allocated {formatCurrency(category.allocated)}
-                            {parseMoneyToCents(category.added) > 0 ? ` + Added ${formatCurrency(category.added)}` : ""}
+                            Allocated <Money value={category.allocated} />
+                            {parseMoneyToCents(category.added) > 0 ? <>{" + Added "}<Money value={category.added} /></> : null}
                             {" · "}
-                            Spent {formatCurrency(category.spent)}
+                            Spent <Money value={category.spent} />
                             {" · "}
-                            Goals {formatCurrency(category.goalContributions)}
+                            Goals <Money value={category.goalContributions} />
                             {" · "}
-                            Available {formatCurrency(category.available)}
+                            Available <Money value={category.available} />
                           </div>
                         </div>
                         {category.overused ? (
                           <div className="text-right">
                             <div className="text-[11px] uppercase tracking-[0.14em] text-amber-600">Overage</div>
-                            <div className="mt-1 text-base font-semibold text-amber-700">{formatCurrency(category.overageAmount)}</div>
+                            <div className="mt-1 text-base font-semibold text-amber-700"><Money value={category.overageAmount} /></div>
                           </div>
                         ) : null}
                       </div>
@@ -658,7 +658,7 @@ export function MonthlyReview() {
               <div className="flex items-center justify-between gap-4 rounded-2xl p-4" style={{ background: "var(--surface-plain)" }}>
                 <div>
                   <p className="text-sm text-[var(--text-muted)]">Surplus available</p>
-                  <p className="mt-1 text-2xl font-semibold text-[var(--text-strong)]">{formatCurrency(preview.netSurplus)}</p>
+                  <p className="mt-1 text-2xl font-semibold text-[var(--text-strong)]"><Money value={preview.netSurplus} /></p>
                   <p className="mt-1 text-[12px] text-[var(--text-muted)]">Edit the split if needed. Nothing applies until you close the month.</p>
                 </div>
                 <Badge tone={alertTone(preview.alertStatus)}>{preview.alertStatus}</Badge>
@@ -726,7 +726,7 @@ export function MonthlyReview() {
                           </div>
                         </div>
                         <div className="rounded-full border border-[var(--border-color)] px-3 py-1 text-[12px] font-medium text-[var(--text-muted)]">
-                          {formatCurrency(previewDistributions[distribution.slug] ?? "0.00")}
+                          <Money value={previewDistributions[distribution.slug] ?? "0.00"} />
                         </div>
                       </div>
 
@@ -955,7 +955,7 @@ export function MonthlyReview() {
           <div className="mt-4 grid gap-4 lg:grid-cols-[0.7fr,1fr]">
             <div className="rounded-2xl p-4" style={{ background: "var(--surface-plain)" }}>
               <p className="text-sm text-[var(--text-muted)]">Net surplus</p>
-              <p className="mt-1 text-2xl font-semibold text-[var(--text-strong)]">{formatCurrency(result.review.netSurplus)}</p>
+              <p className="mt-1 text-2xl font-semibold text-[var(--text-strong)]"><Money value={result.review.netSurplus} /></p>
               <div className="mt-3">
                 <Badge tone={alertTone(result.review.alertStatus)}>{result.review.alertStatus}</Badge>
               </div>
@@ -964,7 +964,7 @@ export function MonthlyReview() {
               {Object.entries(result.review.distributions).map(([key, amount]) => (
                 <tr key={key}>
                   <td className="px-4 py-3 text-sm font-medium text-[var(--text-strong)]">{key}</td>
-                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{formatCurrency(amount)}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]"><Money value={amount} /></td>
                 </tr>
               ))}
             </Table>

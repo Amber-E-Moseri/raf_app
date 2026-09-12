@@ -8,7 +8,7 @@ import { PageShell } from "../components/layout/PageShell";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatCurrency } from "../lib/format";
+import { Money } from "../components/ui/Money";
 import { formatMonthLabel } from "../lib/period";
 import type { AllocationCategory, DashboardReport, FinancialHealthReport } from "../lib/types";
 
@@ -184,12 +184,12 @@ export function Insights() {
                     <div className="min-w-0">
                       <div className="truncate text-[14px] font-semibold text-[var(--text-strong)]">{row.label}</div>
                       <div className="mt-1 text-[11px] text-[var(--text-muted)]">
-                        Spent {formatCurrency(row.spent.toFixed(2))} | Goals {formatCurrency(row.goals.toFixed(2))}
+                        Spent <Money value={row.spent.toFixed(2)} /> | Goals <Money value={row.goals.toFixed(2)} />
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-[11px] font-medium text-[var(--text-muted)]">YTD allocated</div>
-                      <div className="mt-1 text-[17px] font-semibold text-[var(--text-strong)]">{formatCurrency(row.allocated.toFixed(2))}</div>
+                      <div className="mt-1 text-[17px] font-semibold text-[var(--text-strong)]">{<Money value={row.allocated.toFixed(2)} />}</div>
                     </div>
                   </div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
@@ -211,15 +211,15 @@ export function Insights() {
         <div className="grid gap-3">
           <div className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
             <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Allocated</div>
-            <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">{formatCurrency(ytdTotalAllocated.toFixed(2))}</div>
+            <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">{<Money value={ytdTotalAllocated.toFixed(2)} />}</div>
           </div>
           <div className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
             <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Spent</div>
-            <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">{formatCurrency(ytdTotalSpent.toFixed(2))}</div>
+            <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">{<Money value={ytdTotalSpent.toFixed(2)} />}</div>
           </div>
           <div className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
             <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Goal funding</div>
-            <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">{formatCurrency(ytdGoalFunding.toFixed(2))}</div>
+            <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">{<Money value={ytdGoalFunding.toFixed(2)} />}</div>
           </div>
         </div>
       </Card>
