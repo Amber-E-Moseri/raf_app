@@ -11,6 +11,8 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+export const PRIVACY_MASK = "••••";
+
 export function formatCurrency(value: string | number | null | undefined): string {
   if (value == null || value === "") {
     return "$0.00";

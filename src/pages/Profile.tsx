@@ -23,7 +23,7 @@ import {
   syncGoalAchievements,
   writeGoalAchievements,
 } from "../lib/goalAchievements";
-import { formatCurrency } from "../lib/format";
+import { Money } from "../components/ui/Money";
 import type { AllocationCategory, Goal, GoalProgress } from "../lib/types";
 
 interface ProfileViewModel {
@@ -294,12 +294,12 @@ export function Profile() {
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
                   <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                     <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Target amount</div>
-                    <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{formatCurrency(selectedAchievement.goal.target_amount)}</div>
+                    <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{<Money value={selectedAchievement.goal.target_amount} />}</div>
                   </div>
                   <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                     <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress achieved</div>
                     <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">
-                      {formatCurrency(selectedAchievement.progress.current_amount)} / {formatCurrency(selectedAchievement.goal.target_amount)}
+                      {<Money value={selectedAchievement.progress.current_amount} />} / {<Money value={selectedAchievement.goal.target_amount} />}
                     </div>
                   </div>
                   <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
@@ -311,7 +311,7 @@ export function Profile() {
                             {milestone.label}
                           </span>
                           <span className={milestone.completed ? "text-emerald-600" : "text-[var(--text-muted)]"}>
-                            {milestone.completed ? "✓" : "○"}
+                            {milestone.completed ? "âœ“" : "â—‹"}
                           </span>
                         </div>
                       ))}

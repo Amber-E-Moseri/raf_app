@@ -1,6 +1,7 @@
 import { Badge } from "../ui/Badge";
 import { Card } from "../ui/Card";
-import { formatCurrency, formatPercentWithDigits } from "../../lib/format";
+import { formatPercentWithDigits } from "../../lib/format";
+import { Money } from "../ui/Money";
 import { formatMonthLabel } from "../../lib/period";
 import type { FinancialHealthReport } from "../../lib/types";
 
@@ -117,23 +118,22 @@ export function FinancialHealthIndicator({
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Income</p>
-            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(report.activeMonthIncome)}</p>
+            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{<Money value={report.activeMonthIncome} />}</p>
           </div>
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Debt payments</p>
-            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(report.monthlyDebtPayments)}</p>
+            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{<Money value={report.monthlyDebtPayments} />}</p>
           </div>
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Savings balance</p>
-            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(report.savingsBalance)}</p>
+            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{<Money value={report.savingsBalance} />}</p>
           </div>
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">Available savings</p>
-            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{formatCurrency(report.availableSavings)}</p>
+            <p className="financial-value mt-1 text-sm font-semibold text-[var(--text-primary)]">{<Money value={report.availableSavings} />}</p>
           </div>
         </div>
       </div>
     </Card>
   );
 }
-

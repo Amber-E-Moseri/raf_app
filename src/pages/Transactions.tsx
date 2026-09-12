@@ -37,7 +37,8 @@ import { MoneyInput } from "../components/ui/MoneyInput";
 import { Table } from "../components/ui/Table";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { DEFAULT_PAGE_SIZE } from "../lib/constants";
-import { formatCurrency, formatIsoDate } from "../lib/format";
+import { formatIsoDate } from "../lib/format";
+import { Money } from "../components/ui/Money";
 import { defaultReviewDateForMonth, getMonthKeyFromDate } from "../lib/period";
 import {
   normalizeMoneyInput,
@@ -1765,7 +1766,7 @@ export function Transactions() {
                             <div className="min-w-0 rounded-xl px-3 py-2 text-right lg:bg-transparent lg:px-0 lg:py-1" style={{ background: "var(--surface-plain)" }}>
                               <div className="text-[11px] font-semibold text-[var(--text-muted)] lg:hidden">Amount</div>
                               <div className={`text-sm font-semibold ${isInflow ? "text-emerald-700" : "text-rose-700"}`}>
-                                {formatCurrency(item.amount)}
+                                {<Money value={item.amount} />}
                               </div>
                             </div>
                             <div className="min-w-0 lg:pt-0.5">
@@ -2170,7 +2171,7 @@ export function Transactions() {
                                     <div>
                                       <div className="text-xs font-medium text-stone-500">Amount</div>
                                       <div className={`mt-1 text-sm font-semibold ${Number(item.amount) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                                        {formatCurrency(item.amount)}
+                                        {<Money value={item.amount} />}
                                       </div>
                                     </div>
                                     <div>
@@ -2348,7 +2349,7 @@ export function Transactions() {
                         <div className="text-[11px] text-[var(--text-muted)]">{typeSummary}</div>
                       </td>
                       <td className={`w-[88px] px-4 py-3 text-right text-sm font-bold ${amountClassName(transaction.direction)}`}>
-                        {formatCurrency(transaction.amount)}
+                        {<Money value={transaction.amount} />}
                       </td>
                       <td className="w-[110px] px-4 py-3 text-sm">
                         {transaction.isImportOnly ? (
@@ -2370,7 +2371,7 @@ export function Transactions() {
                               disabled={isDeletingTransaction === transaction.id}
                               onClick={() => void handleDeleteTransaction(transaction as Transaction)}
                             >
-                              {isDeletingTransaction === transaction.id ? "…" : "🗑"}
+                              {isDeletingTransaction === transaction.id ? "…" : "ðŸ—‘"}
                             </button>
                           </div>
                         )}

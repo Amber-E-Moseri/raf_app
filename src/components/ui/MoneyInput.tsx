@@ -1,4 +1,4 @@
-import { formatCurrency } from "../../lib/format";
+import { Money } from "./Money";
 import { normalizeMoneyInput } from "../../lib/validation";
 
 interface MoneyInputProps {
@@ -45,7 +45,7 @@ export function MoneyInput({
           }}
         />
       </div>
-      {normalized ? <span className="mt-2 block text-xs font-medium tracking-[0.01em] text-stone-500">Preview: {formatCurrency(normalized)}</span> : null}
+      {normalized ? <span className="mt-2 block text-xs font-medium tracking-[0.01em] text-stone-500">Preview: <Money value={normalized} /></span> : null}
       {error ? <span className="mt-2 block text-sm leading-6 text-rose-600">{error}</span> : null}
     </label>
   );

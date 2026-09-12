@@ -17,7 +17,8 @@ import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { Table } from "../components/ui/Table";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatCurrency, formatIsoDate } from "../lib/format";
+import { formatIsoDate } from "../lib/format";
+import { Money } from "../components/ui/Money";
 import { normalizeMoneyInput, validateIsoDate, validatePositiveMoney, validateRequiredText } from "../lib/validation";
 import type { AllocationCategory, IncomeCreateResponse } from "../lib/types";
 
@@ -194,7 +195,7 @@ export function AddIncome() {
                     <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{(Number(category.allocationPercent) * 100).toFixed(2)}%</td>
                     {success ? (
                       <td className="px-4 py-3 text-sm text-[var(--text-muted)]">
-                        {allocation ? formatCurrency(allocation.amount) : "Not allocated in this deposit"}
+                        {allocation ? <Money value={allocation.amount} /> : "Not allocated in this deposit"}
                       </td>
                     ) : null}
                     <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{category.isActive ? "Active" : "Inactive"}</td>
@@ -222,7 +223,7 @@ export function AddIncome() {
                     <div className="text-sm font-semibold text-[var(--text-strong)]">Record transactions</div>
                     <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Log spending so your allocations stay accurate.</div>
                   </div>
-                  <span className="shrink-0 text-[var(--primary-color)]">→</span>
+                  <span className="shrink-0 text-[var(--primary-color)]">â†’</span>
                 </Link>
                 <Link
                   to="/monthly-review"
@@ -232,7 +233,7 @@ export function AddIncome() {
                     <div className="text-sm font-semibold text-[var(--text-strong)]">Monthly Review</div>
                     <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Close the month and distribute surplus when ready.</div>
                   </div>
-                  <span className="shrink-0 text-[var(--primary-color)]">→</span>
+                  <span className="shrink-0 text-[var(--primary-color)]">â†’</span>
                 </Link>
               </div>
             </Card>

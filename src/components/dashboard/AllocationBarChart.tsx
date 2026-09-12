@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
-import { formatCurrency, formatPercentWithDigits } from "../../lib/format";
+import { formatPercentWithDigits } from "../../lib/format";
+import { Money } from "../ui/Money";
 import { Card } from "../ui/Card";
 import { EmptyState } from "../ui/EmptyState";
 
@@ -83,7 +84,7 @@ export function AllocationBarChart({ items, activeMonthLabel }: AllocationBarCha
                       <div className="h-3 w-3 shrink-0 rounded-full" style={{ background: barColor(index) }} />
                       <div className="min-w-0 flex-1 truncate text-[14px] font-semibold text-[var(--text-primary)]">{item.label}</div>
                       <div className="financial-value text-[14px] font-semibold tracking-tight text-[var(--text-primary)]">
-                        {formatCurrency(currentMonthAmount.toFixed(2))}
+                        {<Money value={currentMonthAmount.toFixed(2)} />}
                       </div>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]">
@@ -125,18 +126,18 @@ export function AllocationBarChart({ items, activeMonthLabel }: AllocationBarCha
                             {allocationPercent ?? "--"}
                           </div>
                           <div className="financial-value text-[18px] font-semibold tracking-tight text-[var(--text-primary)]">
-                            {formatCurrency(currentMonthAmount.toFixed(2))}
+                            {<Money value={currentMonthAmount.toFixed(2)} />}
                           </div>
                         </div>
                       </div>
                     </div>
 
                     <div className="pl-[24px] text-[11px] text-[var(--text-secondary)]">
-                      <span>Spent {formatCurrency(spent.toFixed(2))}</span>
+                      <span>Spent <Money value={spent.toFixed(2)} /></span>
                       <span>{" | "}</span>
-                      <span>Goals {formatCurrency(reserved.toFixed(2))}</span>
+                      <span>Goals <Money value={reserved.toFixed(2)} /></span>
                       <span>{" | "}</span>
-                      <span>Available {formatCurrency(available.toFixed(2))}</span>
+                      <span>Available <Money value={available.toFixed(2)} /></span>
                       {spent + reserved > currentMonthAmount && currentMonthAmount > 0 ? (
                         <>
                           <span>{" | "}</span>
@@ -152,7 +153,7 @@ export function AllocationBarChart({ items, activeMonthLabel }: AllocationBarCha
 
           <div className="mt-4 flex items-center justify-between border-t border-[var(--border-subtle)] pt-4 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--text-secondary)]">
             <span>{activeMonthLabel} | {validItems.length} categories</span>
-            <span>{formatCurrency(totalAllocated.toFixed(2))} allocated</span>
+            <span><Money value={totalAllocated.toFixed(2)} /> allocated</span>
           </div>
         </div>
       ) : (
