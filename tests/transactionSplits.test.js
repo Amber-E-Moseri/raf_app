@@ -376,7 +376,7 @@ describe('computeBucketBalancesSnapshot with splits', () => {
     const categoryLookupById = new Map([['cat-food', { id: 'cat-food', slug: 'food' }], ['cat-house', { id: 'cat-house', slug: 'household' }]]);
 
     const balances = computeBucketBalancesSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById });
-    const food = balances.find((b) => b.slug === 'food');
+    const food = balances.find((b) => b.bucket_id === 'cat-food');
     assert.equal(food.balance, '150.00'); // 200 - 50
   });
 
@@ -393,8 +393,8 @@ describe('computeBucketBalancesSnapshot with splits', () => {
     ]);
 
     const balances = computeBucketBalancesSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById, splitsByTransactionId });
-    const food = balances.find((b) => b.slug === 'food');
-    const house = balances.find((b) => b.slug === 'household');
+    const food = balances.find((b) => b.bucket_id === 'cat-food');
+    const house = balances.find((b) => b.bucket_id === 'cat-house');
     assert.equal(food.balance, '140.00');  // 200 - 60
     assert.equal(house.balance, '60.00');  // 100 - 40
   });
@@ -412,7 +412,7 @@ describe('computeBucketBalancesSnapshot with splits', () => {
     ]);
 
     const balances = computeBucketBalancesSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById, splitsByTransactionId });
-    const food = balances.find((b) => b.slug === 'food');
+    const food = balances.find((b) => b.bucket_id === 'cat-food');
     // Parent 100 must NOT be counted; only the split row for cat-food (60) is counted.
     assert.equal(food.balance, '140.00');  // 200 - 60 (not 200 - 100 - 60)
   });
@@ -434,8 +434,8 @@ describe('computeBucketBalancesSnapshot with splits', () => {
     ]);
 
     const balances = computeBucketBalancesSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById, splitsByTransactionId });
-    const food = balances.find((b) => b.slug === 'food');
-    const house = balances.find((b) => b.slug === 'household');
+    const food = balances.find((b) => b.bucket_id === 'cat-food');
+    const house = balances.find((b) => b.bucket_id === 'cat-house');
     assert.equal(food.balance, '140.00');  // 200 - (35 + 25)
     assert.equal(house.balance, '60.00');  // 100 - 40
     assert.equal(
@@ -460,8 +460,8 @@ describe('computeBucketBalancesSnapshot with splits', () => {
     ]);
 
     const balances = computeBucketBalancesSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById, splitsByTransactionId });
-    const food = balances.find((b) => b.slug === 'food');
-    const house = balances.find((b) => b.slug === 'household');
+    const food = balances.find((b) => b.bucket_id === 'cat-food');
+    const house = balances.find((b) => b.bucket_id === 'cat-house');
     assert.equal(food.balance, '140.00');   // 200 - 60
     assert.equal(house.balance, '30.00');   // 100 - 40 (split) - 30 (unsplit)
   });
@@ -475,7 +475,7 @@ describe('computeMonthlyBucketProgressSnapshot with splits', () => {
     const categoryLookupById = new Map([['cat-food', { id: 'cat-food', slug: 'food' }]]);
 
     const progress = computeMonthlyBucketProgressSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById });
-    const food = progress.find((b) => b.slug === 'food');
+    const food = progress.find((b) => b.bucket_id === 'cat-food');
     assert.equal(food.used_this_month, '50.00');
   });
 
@@ -492,8 +492,8 @@ describe('computeMonthlyBucketProgressSnapshot with splits', () => {
     ]);
 
     const progress = computeMonthlyBucketProgressSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById, splitsByTransactionId });
-    const food = progress.find((b) => b.slug === 'food');
-    const house = progress.find((b) => b.slug === 'household');
+    const food = progress.find((b) => b.bucket_id === 'cat-food');
+    const house = progress.find((b) => b.bucket_id === 'cat-house');
     assert.equal(food.used_this_month, '60.00');
     assert.equal(house.used_this_month, '40.00');
   });
@@ -511,7 +511,7 @@ describe('computeMonthlyBucketProgressSnapshot with splits', () => {
     ]);
 
     const progress = computeMonthlyBucketProgressSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById, splitsByTransactionId });
-    const food = progress.find((b) => b.slug === 'food');
+    const food = progress.find((b) => b.bucket_id === 'cat-food');
     // Only the split row (60) counts, not the parent 100.
     assert.equal(food.used_this_month, '60.00');
   });
@@ -524,7 +524,7 @@ describe('computeMonthlyBucketProgressSnapshot with splits', () => {
 
     // No splitsByTransactionId argument — default behavior unchanged.
     const progress = computeMonthlyBucketProgressSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById });
-    const food = progress.find((b) => b.slug === 'food');
+    const food = progress.find((b) => b.bucket_id === 'cat-food');
     assert.equal(food.used_this_month, '50.00');
   });
 });
@@ -628,9 +628,9 @@ describe('parent transaction edit semantics with splits', () => {
     const splitsByTransactionId = new Map([['txn-1', existingSplits]]);
 
     const balances = computeBucketBalancesSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById, splitsByTransactionId });
-    assert.equal(balances.find((b) => b.slug === 'other').balance, '200.00');
-    assert.equal(balances.find((b) => b.slug === 'food').balance, '140.00');
-    assert.equal(balances.find((b) => b.slug === 'household').balance, '160.00');
+    assert.equal(balances.find((b) => b.bucket_id === 'cat-other').balance, '200.00');
+    assert.equal(balances.find((b) => b.bucket_id === 'cat-food').balance, '140.00');
+    assert.equal(balances.find((b) => b.bucket_id === 'cat-house').balance, '160.00');
   });
 
   it('clearing splits restores parent category attribution', () => {
@@ -644,9 +644,9 @@ describe('parent transaction edit semantics with splits', () => {
     ]);
 
     const balances = computeBucketBalancesSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById });
-    assert.equal(balances.find((b) => b.slug === 'other').balance, '100.00');
-    assert.equal(balances.find((b) => b.slug === 'food').balance, '200.00');
-    assert.equal(balances.find((b) => b.slug === 'household').balance, '200.00');
+    assert.equal(balances.find((b) => b.bucket_id === 'cat-other').balance, '100.00');
+    assert.equal(balances.find((b) => b.bucket_id === 'cat-food').balance, '200.00');
+    assert.equal(balances.find((b) => b.bucket_id === 'cat-house').balance, '200.00');
   });
 
   it('deleting a parent transaction removes its splits', async () => {
