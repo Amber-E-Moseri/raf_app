@@ -42,6 +42,8 @@ const RAF_MIGRATIONS = [
   '20260910000005_tighten_bootstrap_insert_policies.sql',
   '20260910000006_owner_scoped_signup_bootstrap.sql',
   '20260910000008_debt_payment_pace_acknowledgements.sql',
+  '20260912000001_transaction_splits.sql',
+  '20260912000002_goal_funding_splits.sql',
 ];
 
 const migrationsDir = path.join(

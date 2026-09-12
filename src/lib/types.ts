@@ -392,6 +392,27 @@ export interface GoalListResponse {
   items: Goal[];
 }
 
+/**
+ * A single entry in a goal's funding history.
+ * type === 'transaction': whole transaction attributed to the goal.
+ * type === 'split': one split of a transaction attributed to the goal.
+ */
+export interface GoalFundingEntry {
+  id: string;
+  type: "transaction" | "split";
+  transaction_id: string;
+  split_id: string | null;
+  date: string;
+  description: string;
+  parent_description: string | null;
+  amount: string;
+  source: string;
+}
+
+export interface GoalFundingHistoryResponse {
+  items: GoalFundingEntry[];
+}
+
 export interface GoalCreateRequest {
   bucket_id: string;
   name: string;

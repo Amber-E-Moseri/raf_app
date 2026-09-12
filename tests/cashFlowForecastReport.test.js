@@ -60,6 +60,9 @@ function createDbDouble({
         async listUpcomingExpenses() {
           return [];
         },
+        async getAccountFreshnessContext() {
+          return { importBatches: [], acceptedReconciliations: [], unreviewedImportCount: 0 };
+        },
       });
     },
   };
