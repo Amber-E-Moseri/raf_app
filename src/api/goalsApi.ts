@@ -1,4 +1,4 @@
-import type { Goal, GoalCreateRequest, GoalListResponse, GoalUpdateRequest } from "../lib/types";
+import type { Goal, GoalCreateRequest, GoalFundingHistoryResponse, GoalListResponse, GoalUpdateRequest } from "../lib/types";
 import { deleteJson, getJson, postJson, putJson } from "./client";
 
 export function getGoals() {
@@ -15,4 +15,8 @@ export function updateGoal(goalId: string, input: GoalUpdateRequest) {
 
 export function deleteGoal(goalId: string) {
   return deleteJson<void>(`/goals/${goalId}`);
+}
+
+export function getGoalFundingHistory(goalId: string) {
+  return getJson<GoalFundingHistoryResponse>(`/goals/${goalId}/funding`);
 }
