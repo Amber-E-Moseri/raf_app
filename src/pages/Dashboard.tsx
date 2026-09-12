@@ -8,6 +8,7 @@ import { applyMonthlyReview } from "../api/monthlyReviewApi";
 import { getDashboardAggregateReport } from "../api/reportsApi";
 import { getTransactions } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
+import { FinancialAttentionAggregator, deriveAttentionItems } from "../components/dashboard/FinancialAttentionAggregator";
 import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
@@ -488,6 +489,18 @@ export function Dashboard() {
         </div>
       ) : null}
       {nextStepState?.kind === "month-reminder" ? <MonthReminderBanner monthKey={nextStepState.monthKey} /> : null}
+      {(nextStepState?.kind === "income-transactions-open" ||
+        nextStepState?.kind === "income-no-transactions" ||
+        nextStepState?.kind === "month-reminder") ? (
+        <FinancialAttentionAggregator
+          items={deriveAttentionItems({
+            unreviewedImportsCount:
+              nextStepState.kind === "month-reminder"
+                ? (workflowData.reminderMonth?.unresolvedImports ?? 0)
+                : workflowData.activeMonthStatus.unresolvedImports,
+          })}
+        />
+      ) : null}
       {nextStepState?.kind === "setup-incomplete" ? (
         <Card
           title="Start Here"
