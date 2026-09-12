@@ -8,6 +8,7 @@ import { initSentry, Sentry } from './lib/server/sentry.js';
 import { createApiRouter } from './lib/server/routerLoader.js';
 import { createServerDb } from './lib/server/db.js';
 import { checkReadiness } from './lib/server/readinessHandler.js';
+import { createFixedWindowRateLimiter } from './lib/server/rateLimit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,6 +65,22 @@ app.use((req, res, next) => {
 
   next();
 });
+
+const authRateLimitMax = Number.parseInt(process.env.RAF_AUTH_RATE_LIMIT_MAX ?? '20', 10);
+const authLoginRateLimiter = createFixedWindowRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: authRateLimitMax,
+  keyPrefix: 'auth-login',
+});
+
+const authSignupRateLimiter = createFixedWindowRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: authRateLimitMax,
+  keyPrefix: 'auth-signup',
+});
+
+app.use('/api/v1/auth/login', authLoginRateLimiter);
+app.use('/api/v1/auth/signup', authSignupRateLimiter);
 
 app.use(express.json());
 app.use(express.raw({
