@@ -83,6 +83,30 @@ export interface CategoryBaseline {
   confidence: ConfidenceLevel;
 }
 
+/** Per-account freshness info added by the report layer (step D). */
+export interface AccountFreshnessInfo {
+  accountId: string;
+  name: string;
+  accountType: string;
+  isLiquid: boolean;
+  balanceAsOf: string;
+  balanceReconciliationConfirmed: boolean;
+  balanceReconciliationDate: string | null;
+  latestImportAt: string | null;
+  activityDaysAgo: number | null;
+  activityIsStale: boolean;
+  balanceDisplay: string;
+  activityDisplay: string;
+}
+
+/** Emitted for every active liability account (step E). No amounts — conservative by design. */
+export interface CoverageGap {
+  accountId: string;
+  name: string;
+  accountType: string;
+  reason: "payment_coverage_unknown";
+}
+
 export interface CashFlowForecast {
   forecastPeriod: string;
   generatedAt: string;
@@ -103,6 +127,10 @@ export interface CashFlowForecast {
     upcomingExpensesCount: number;
     obligationCategoriesExcluded: string[];
     categoryBaselines: CategoryBaseline[];
+    // ── Confidence hardening (report layer) ──
+    accountBreakdown: AccountFreshnessInfo[];
+    coverageGaps: CoverageGap[];
+    pendingReviewCount: number;
   };
   projections: DayProjection[];
   summaryMetrics: {
@@ -122,6 +150,11 @@ export interface CashFlowForecast {
       daysWithShortfall: number;
       totalShortfall: string;
     };
+    // ── Confidence hardening (report layer) ──
+    headroom: string | null;
+    shortfall: string | null;
+    projectedLowDate: string;
+    firstShortfallDate: string | null;
   };
   pressurePoints: Array<{ date: string; reason: string; riskLevel: string }>;
 }
