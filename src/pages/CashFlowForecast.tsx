@@ -20,7 +20,7 @@ import { formatIsoDate } from "../lib/format";
 import { Money } from "../components/ui/Money";
 import { useMoneyFormat } from "../hooks/useMoneyFormat";
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Helpers â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const DAYS_OPTIONS: { label: string; value: ForecastDays }[] = [
   { label: "30 days", value: 30 },
@@ -59,7 +59,7 @@ function confidenceBadge(level: string) {
   );
 }
 
-// â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Sub-components â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function SummaryCard({
   label,
@@ -638,17 +638,17 @@ function HeadroomShortfallCard({ forecast }: { forecast: CashFlowForecast }) {
 
   if (shortfall !== null) {
     return (
-      <div className=”flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800/40 dark:bg-red-900/10”>
-        <span className=”mt-0.5 text-[16px] text-red-500”>⚠</span>
+      <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800/40 dark:bg-red-900/10">
+        <span className="mt-0.5 text-[16px] text-red-500">⚠</span>
         <div>
-          <p className=”text-[13px] font-semibold text-red-800 dark:text-red-300”>
+          <p className="text-[13px] font-semibold text-red-800 dark:text-red-300">
             Shortfall: {format(shortfall)} below savings floor
           </p>
-          <p className=”text-[12px] text-red-700 dark:text-red-400”>
+          <p className="text-[12px] text-red-700 dark:text-red-400">
             {firstShortfallDate
               ? `Your available margin is projected to fall ${format(shortfall)} below your savings floor, first on ${formatIsoDate(firstShortfallDate)}.`
               : `Your available margin is projected to fall ${format(shortfall)} below your savings floor.`}
-            {“ “}Review your bills and spending or add income to close the gap.
+            {" "}Review your bills and spending or add income to close the gap.
           </p>
         </div>
       </div>
@@ -657,11 +657,11 @@ function HeadroomShortfallCard({ forecast }: { forecast: CashFlowForecast }) {
 
   if (headroom !== null) {
     return (
-      <div className=”flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800/40 dark:bg-emerald-900/10”>
-        <span className=”text-[16px] text-emerald-500”>✓</span>
-        <p className=”text-[13px] text-emerald-800 dark:text-emerald-300”>
-          <span className=”font-semibold”>{format(headroom)} headroom</span> above savings floor at the tightest
-          projected point{projectedLowDate ? ` (${formatIsoDate(projectedLowDate)})` : “”}.
+      <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800/40 dark:bg-emerald-900/10">
+        <span className="text-[16px] text-emerald-500">✓</span>
+        <p className="text-[13px] text-emerald-800 dark:text-emerald-300">
+          <span className="font-semibold">{format(headroom)} headroom</span> above savings floor at the tightest
+          projected point{projectedLowDate ? ` (${formatIsoDate(projectedLowDate)})` : ""}.
         </p>
       </div>
     );
@@ -677,8 +677,8 @@ function LowPointExplainer({ forecast }: { forecast: CashFlowForecast }) {
   const { lowestProjectedBalance } = forecast.summaryMetrics;
   if (!projectedLowDate) return null;
   return (
-    <p className=”text-[12px] text-[var(--text-subtle)]”>
-      Lowest projected balance: <span className=”font-medium text-[var(--text-secondary)]”>{format(lowestProjectedBalance.amount)}</span>{“ “}
+    <p className="text-[12px] text-[var(--text-subtle)]">
+      Lowest projected balance: <span className="font-medium text-[var(--text-secondary)]">{format(lowestProjectedBalance.amount)}</span>{" "}
       on {formatIsoDate(projectedLowDate)}.
     </p>
   );
@@ -688,13 +688,13 @@ function LowPointExplainer({ forecast }: { forecast: CashFlowForecast }) {
 function PendingReviewWarning({ count }: { count: number }) {
   if (count === 0) return null;
   return (
-    <div className=”flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-900/10”>
-      <span className=”mt-0.5 text-[15px] text-amber-500”>⏳</span>
+    <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-900/10">
+      <span className="mt-0.5 text-[15px] text-amber-500">⏳</span>
       <div>
-        <p className=”text-[13px] font-semibold text-amber-800 dark:text-amber-300”>
-          {count} imported transaction{count === 1 ? “” : “s”} pending review
+        <p className="text-[13px] font-semibold text-amber-800 dark:text-amber-300">
+          {count} imported transaction{count === 1 ? "" : "s"} pending review
         </p>
-        <p className=”text-[12px] text-amber-700 dark:text-amber-400”>
+        <p className="text-[12px] text-amber-700 dark:text-amber-400">
           Unreviewed imports may affect the spending baseline. Review them to improve forecast accuracy.
         </p>
       </div>
@@ -706,20 +706,20 @@ function PendingReviewWarning({ count }: { count: number }) {
 function CoverageGapWarning({ gaps }: { gaps: CoverageGap[] }) {
   if (gaps.length === 0) return null;
   return (
-    <div className=”rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/40 dark:bg-amber-900/10”>
-      <p className=”mb-2 text-[13px] font-semibold text-amber-800 dark:text-amber-300”>
-        Payment coverage unknown for {gaps.length} account{gaps.length === 1 ? “” : “s”}
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/40 dark:bg-amber-900/10">
+      <p className="mb-2 text-[13px] font-semibold text-amber-800 dark:text-amber-300">
+        Payment coverage unknown for {gaps.length} account{gaps.length === 1 ? "" : "s"}
       </p>
-      <p className=”mb-2 text-[12px] text-amber-700 dark:text-amber-400”>
+      <p className="mb-2 text-[12px] text-amber-700 dark:text-amber-400">
         The following liability accounts have no scheduled payments in the forecast. Actual payments may reduce your
         available balance more than projected.
       </p>
-      <ul className=”space-y-1”>
+      <ul className="space-y-1">
         {gaps.map((g) => (
-          <li key={g.accountId} className=”flex items-center gap-2 text-[12px] text-amber-700 dark:text-amber-400”>
-            <span className=”font-medium”>{g.name || g.accountId}</span>
-            <span className=”text-amber-500”>·</span>
-            <span className=”capitalize”>{g.accountType.replace(/_/g, “ “)}</span>
+          <li key={g.accountId} className="flex items-center gap-2 text-[12px] text-amber-700 dark:text-amber-400">
+            <span className="font-medium">{g.name || g.accountId}</span>
+            <span className="text-amber-500">·</span>
+            <span className="capitalize">{g.accountType.replace(/_/g, " ")}</span>
           </li>
         ))}
       </ul>
@@ -734,33 +734,33 @@ function FreshnessPanel({ accounts }: { accounts: AccountFreshnessInfo[] }) {
   const allFresh = staleAccounts.length === 0;
 
   return (
-    <div className=”rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-5”>
-      <div className=”mb-3 flex items-center justify-between”>
-        <h3 className=”text-[13px] font-semibold uppercase tracking-wide text-[var(--text-subtle)]”>
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--text-subtle)]">
           Account Data Freshness
         </h3>
         {allFresh && (
-          <span className=”rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300”>
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
             All fresh
           </span>
         )}
       </div>
-      <div className=”divide-y divide-[var(--border)]”>
+      <div className="divide-y divide-[var(--border)]">
         {accounts.map((a) => (
-          <div key={a.accountId} className=”flex items-start justify-between gap-3 py-2.5 text-[12px]”>
-            <div className=”min-w-0 flex-1”>
-              <p className=”truncate font-medium text-[var(--text-primary)]”>
+          <div key={a.accountId} className="flex items-start justify-between gap-3 py-2.5 text-[12px]">
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-[var(--text-primary)]">
                 {a.name || a.accountId}
                 {a.isLiquid && (
-                  <span className=”ml-1.5 text-[10px] font-normal text-[var(--text-subtle)]”>liquid</span>
+                  <span className="ml-1.5 text-[10px] font-normal text-[var(--text-subtle)]">liquid</span>
                 )}
               </p>
-              <p className={`mt-0.5 text-[11px] ${a.activityIsStale ? “text-amber-600 dark:text-amber-400” : “text-[var(--text-subtle)]”}`}>
+              <p className={`mt-0.5 text-[11px] ${a.activityIsStale ? "text-amber-600 dark:text-amber-400" : "text-[var(--text-subtle)]"}`}>
                 {a.activityDisplay}
               </p>
             </div>
-            <div className=”text-right”>
-              <p className={`text-[11px] ${a.balanceReconciliationConfirmed ? “text-emerald-600 dark:text-emerald-400” : “text-[var(--text-subtle)]”}`}>
+            <div className="text-right">
+              <p className={`text-[11px] ${a.balanceReconciliationConfirmed ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--text-subtle)]"}`}>
                 {a.balanceDisplay}
               </p>
             </div>
@@ -780,23 +780,23 @@ function AccountCompositionPanel({ forecast }: { forecast: CashFlowForecast }) {
   const liabilities = accountBreakdown.filter((a) => !a.isLiquid);
 
   return (
-    <div className=”rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-5”>
-      <h3 className=”mb-3 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-subtle)]”>
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-5">
+      <h3 className="mb-3 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-subtle)]">
         Account Composition
       </h3>
       {liquid.length > 0 && (
-        <div className=”mb-3”>
-          <p className=”mb-1 text-[11px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400”>
+        <div className="mb-3">
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
             Liquid ({liquid.length})
           </p>
-          <div className=”flex flex-wrap gap-2”>
+          <div className="flex flex-wrap gap-2">
             {liquid.map((a) => (
               <span
                 key={a.accountId}
-                className=”rounded-full bg-emerald-50 px-2.5 py-0.5 text-[12px] text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300”
+                className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[12px] text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
               >
                 {a.name || a.accountId}
-                <span className=”ml-1 text-[10px] opacity-70”>({a.accountType})</span>
+                <span className="ml-1 text-[10px] opacity-70">({a.accountType})</span>
               </span>
             ))}
           </div>
@@ -804,17 +804,17 @@ function AccountCompositionPanel({ forecast }: { forecast: CashFlowForecast }) {
       )}
       {liabilities.length > 0 && (
         <div>
-          <p className=”mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--text-subtle)]”>
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--text-subtle)]">
             Liabilities / other ({liabilities.length})
           </p>
-          <div className=”flex flex-wrap gap-2”>
+          <div className="flex flex-wrap gap-2">
             {liabilities.map((a) => (
               <span
                 key={a.accountId}
-                className=”rounded-full bg-[var(--surface)] px-2.5 py-0.5 text-[12px] text-[var(--text-secondary)]”
+                className="rounded-full bg-[var(--surface)] px-2.5 py-0.5 text-[12px] text-[var(--text-secondary)]"
               >
                 {a.name || a.accountId}
-                <span className=”ml-1 text-[10px] opacity-70”>({a.accountType.replace(/_/g, “ “)})</span>
+                <span className="ml-1 text-[10px] opacity-70">({a.accountType.replace(/_/g, " ")})</span>
               </span>
             ))}
           </div>
@@ -824,7 +824,7 @@ function AccountCompositionPanel({ forecast }: { forecast: CashFlowForecast }) {
   );
 }
 
-// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Page â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function CashFlowForecast() {
   const format = useMoneyFormat();
