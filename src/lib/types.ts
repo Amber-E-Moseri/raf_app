@@ -417,6 +417,22 @@ export interface DashboardPeriod {
   surplusOrDeficit: string;
   savingsActual: string;
   alertStatus: "ok" | "elevated" | "risky";
+  explanations?: {
+    netSurplus: CalculationExplanation;
+  };
+}
+
+export interface CalculationExplanation {
+  label: string;
+  value: string;
+  components: Array<{
+    label: string;
+    value: string;
+    kind?: "add" | "subtract" | "neutral";
+  }>;
+  assumptions?: string[];
+  provenance?: string;
+  asOf?: string;
 }
 
 export interface BucketBalance {

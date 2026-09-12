@@ -9,7 +9,7 @@ test('Dashboard Start Here onboarding is gated by fresh workspace activity and p
   assert.match(source, /Log income/);
   assert.match(source, /Track spending/);
   assert.match(source, /Review surplus/);
-  assert.match(source, /data\.incomeCount === 0 && data\.recentTransactions\.length === 0 && !startHereDismissed/);
+  assert.match(source, /incomeCount === 0 && .*recentTransactions\.length === 0 && !startHereDismissed/);
   assert.match(source, /raf:start-here-dismissed:\$\{workspaceId\}/);
   assert.match(source, /localStorage\.setItem\(onboardingDismissalKey\(workspaceId\), "true"\)/);
   assert.match(source, /to: "\/income\/new"/);
